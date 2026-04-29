@@ -1,0 +1,8 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1777447568, "env": {"SHELL": "/bin/bash", "TERM": "screen"}}
+[0.009357, "o", "\r\n"]
+[0.010019, "o", "\u001b[36m$ python3 gen_keybox.py --verify\u001b[0m\r\n"]
+[0.512311, "o", "=== Verification: reproduce emulator keybox ===\r\nGenerated: 1c08735f63f484e1...0a305f4\r\nOriginal:  1c08735f63f484e1...0a305f4\r\n"]
+[0.512503, "o", "\u001b[32mMATCH: True\u001b[0m\r\nKeybox magic: b'kbox' (valid: True)\r\n"]
+[1.014845, "o", "\r\n\u001b[36m$ python3 gen_keybox.py --batch 5\u001b[0m\r\n"]
+[1.317179, "o", "  [0] device_id=WV_GEN_000000, device_key=[REDACTED], file=build/keyboxes/keybox_0000.dat\r\n  [1] device_id=WV_GEN_000001, device_key=[REDACTED], file=build/keyboxes/keybox_0001.dat\r\n"]
+[1.317429, "o", "  [2] device_id=WV_GEN_000002, device_key=[REDACTED], file=build/keyboxes/keybox_0002.dat\r\n  ...\r\n  [4] device_id=WV_GEN_000004, device_key=[REDACTED], file=build/keyboxes/keybox_0004.dat\r\n\r\nGenerated 5 keyboxes in build/keyboxes/\r\n"]

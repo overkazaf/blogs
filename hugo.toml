@@ -1,0 +1,88 @@
+baseURL = "https://overkazaf.github.io/blogs/"
+languageCode = "zh-cn"
+title = "+5 Security Research"
+theme = "PaperMod"
+
+[pagination]
+pagerSize = 10
+
+[params]
+env = "production"
+description = "DRM · 逆向工程 · 密码学"
+author = "+5"
+defaultTheme = "dark"
+ShowReadingTime = true
+ShowPostNavLinks = true
+ShowBreadCrumbs = true
+ShowCodeCopyButtons = true
+ShowShareButtons = true
+ShowToc = true
+TocOpen = true
+ShowWordCount = true
+
+[params.homeInfoParams]
+Title = "+5 Security Research"
+Content = "🔐 DRM 安全研究 · 逆向工程 · 白盒密码学"
+
+[[params.socialIcons]]
+name = "email"
+url = "mailto:overkazaf@gmail.com"
+
+[[params.socialIcons]]
+name = "github"
+url = "https://github.com/overkazaf"
+
+[[params.socialIcons]]
+name = "rss"
+url = "index.xml"
+
+[menu]
+[[menu.main]]
+identifier = "posts"
+name = "📝 文章"
+url = "/posts/"
+weight = 10
+
+[[menu.main]]
+identifier = "categories"
+name = "📂 分类"
+url = "/categories/"
+weight = 15
+
+[[menu.main]]
+identifier = "tags"
+name = "🏷️ 标签"
+url = "/tags/"
+weight = 20
+
+[[menu.main]]
+identifier = "archives"
+name = "📅 归档"
+url = "/archives/"
+weight = 25
+
+[[menu.main]]
+identifier = "search"
+name = "🔍 搜索"
+url = "/search/"
+weight = 30
+
+[[menu.main]]
+identifier = "about"
+name = "👤 关于"
+url = "/about/"
+weight = 40
+
+[markup]
+[markup.highlight]
+lineNos = true
+style = "dracula"
+[markup.goldmark.renderer]
+unsafe = true
+[markup.tableOfContents]
+endLevel = 4
+ordered = true
+startLevel = 2
+
+[outputs]
+home = ["HTML", "RSS", "JSON"]

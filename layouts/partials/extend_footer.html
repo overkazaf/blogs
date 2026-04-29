@@ -1,0 +1,20 @@
+<!-- Visitor counter display -->
+<div style="text-align:center; padding:12px 0; font-size:0.8em; color:#565f89;">
+  <span id="busuanzi_container_site_pv" style="display:inline">
+    本站总访问量 <span id="busuanzi_value_site_pv"></span> 次
+  </span>
+  &nbsp;·&nbsp;
+  <span id="busuanzi_container_site_uv" style="display:inline">
+    访客数 <span id="busuanzi_value_site_uv"></span> 人
+  </span>
+</div>
+
+<!-- Reading progress bar -->
+<script>
+window.addEventListener('scroll', function() {
+  var st = document.documentElement.scrollTop || document.body.scrollTop;
+  var sh = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+  var pct = sh > 0 ? (st / sh * 100) : 0;
+  document.documentElement.style.setProperty('--scroll', pct + '%');
+});
+</script>

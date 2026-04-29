@@ -1,0 +1,4 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1777446792, "env": {"SHELL": "/bin/bash", "TERM": "screen"}}
+[0.092595, "o", "  [0] device_id=WV_GEN_000000, device_key=302597d018a36d59a1fac667b519036d, file=build/keyboxes/keybox_0000.dat\r\n"]
+[0.093948, "o", "  [1] device_id=WV_GEN_000001, device_key=eaf2058dd272cf09a39eff0782cc475d, file=build/keyboxes/keybox_0001.dat\r\n  [2] device_id=WV_GEN_000002, device_key=620cf1a578cce43d9a8b254d0574a2cd, file=build/keyboxes/keybox_0002.dat\r\n  ...\r\n"]
+[0.094076, "o", "  [4] device_id=WV_GEN_000004, device_key=6456dd977f9d210ed080d162cc54d310, file=build/keyboxes/keybox_0004.dat\r\n\r\nGenerated 5 keyboxes in build/keyboxes/\r\n"]
