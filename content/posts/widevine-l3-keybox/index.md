@@ -438,15 +438,7 @@ Widevine L3 keybox 是 128 字节的二进制结构，经 AES-128-CBC（IV 全�
 | 目标二进制 | `libwvhidl.so` (CDM build 4464, 2018-04-20, x86)，文中部分段落沿用 Neodyme 术语称 `libwvdrmengine.so`（见 §3.1 说明） |
 | keybox 文件 | `ay64.dat`（128 字节 AES-CBC 加密的 keybox） |
 
-**关于 CDM build 4464 的覆盖范围**
-
-Build 4464（"L3 Library 4464"）是 2018 年 4 月编译的 Widevine L3 CDM，内部标识为 `android_generic_4464`，随 **Android 9 (API 28) 的 x86 模拟器镜像**（AOSP on IA Emulator）分发。需要明确以下几点：
-
-- **这不是消费级设备的 CDM**——build 4464 是 x86 架构的模拟器版本，不会出现在真实的 ARM 手机或平板上。真实设备使用的是同期但不同 build 号的 ARM 版 CDM，白盒 AES 密钥不同。
-- **本文提取的密钥仅对 build 4464 有效**——ROOT_KEY、derived_key、C_VALUE 是 build 级别的常量，不同 build 的值完全不同。本文的 `gen_keybox.py` 只能为 build 4464 生成有效的 keybox。
-- **build 4464 的吊销状态**——有公开资料称 Google 于 2021 年 12 月吊销了 `android_generic_4464`，但笔者在 2026 年 4 月的实验中，使用该 build 生成的 WVD 仍成功通过了 Netflix 的 licensedManifest 验证并提取到内容密钥。这说明吊销策略可能因平台而异、或存在部分恢复，具体机制未知。无论如何，Google 有能力随时吊销任何 CDM build 的凭证——这是 Widevine 安全模型的设计特性。
-- **方法论可迁移，密钥不可迁移**——DFA + TraceGraph 的攻击方法论适用于任何使用 T-table 实现的旧版 CDM build，但每个 build 需要独立提取密钥。
-- **Neodyme 和 widevine-l3-playground 项目使用的也是 build 4464**——这是 Widevine L3 安全研究的标准目标，因为它版本稳定、工具链成熟、且已被吊销（不存在"帮助绕过现行保护"的问题）。
+> 关于 CDM build 4464 的覆盖范围、吊销状态及密钥适用性，详见附录 D。
 
 **逆向分析工具**
 
@@ -1369,6 +1361,18 @@ Level 4 → YouTube Premium / HBO Max
 | `[msl-client]/MSL客户端脚本` | Netflix MSL 协议客户端，端到端验证工具 |
 | `docs/L3_KEYBOX_CRYPTO_REFERENCE.md` | 本次研究的密码学完整参考文档 |
 | `docs/VENDOR_KEY_RESEARCH_STATUS.md` | vendor_key 提取研究完整日志 |
+
+### D. CDM build 4464 覆盖范围与吊销状态
+
+Build 4464（"L3 Library 4464"）是 2018 年 4 月编译的 Widevine L3 CDM，内部标识为 `android_generic_4464`，随 **Android 9 (API 28) 的 x86 模拟器镜像**（AOSP on IA Emulator）分发。
+
+| 属性 | 说明 |
+|------|------|
+| **覆盖设备** | x86 架构的 Android 模拟器，**非消费级 ARM 设备**。真实手机/平板使用同期但不同 build 号的 ARM 版 CDM，白盒 AES 密钥不同 |
+| **密钥适用性** | ROOT_KEY、derived_key、C_VALUE 是 build 级别的常量。本文的 `gen_keybox.py` **仅对 build 4464 有效**，不同 build 需要独立提取 |
+| **吊销状态** | 有公开资料称 Google 于 2021 年 12 月吊销了 `android_generic_4464`，但笔者在 2026 年 4 月的实验中，该 build 生成的 WVD 仍成功通过了 Netflix licensedManifest 验证。吊销策略可能因平台而异，具体机制未知。Google 有能力随时吊销任何 CDM build 的凭证 |
+| **方法论迁移性** | DFA + TraceGraph 方法论适用于任何使用 T-table 实现的旧版 CDM build，但每个 build 需要独立提取密钥 |
+| **研究标准目标** | Neodyme 和 [widevine-l3-playground](https://github.com/AvalonsWanderer/widevine-l3-playground) 使用的也是 build 4464——版本稳定、工具链成熟、已被研究社区充分分析 |
 
 ---
 
