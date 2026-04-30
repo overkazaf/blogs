@@ -1,8 +1,8 @@
 ---
-title: "学习拉马努金提高注意力的解题模式 - 浅谈基于DFA的Widevine L3 keybox量产技术"
+title: "学习拉马努金提高注意力的解题模式 - 谈谈基于DFA的Widevine L3 keybox量产技术"
 slug: "widevine-l3-keybox-mass-production"
 date: 2026-04-29
-lastmod: 2026-04-29
+lastmod: 2026-04-30
 draft: false
 tags: ["widevine", "drm", "reverse-engineering", "DFA", "white-box-aes", "cryptography"]
 categories: ["security-research"]
@@ -20,9 +20,9 @@ math: false
 2. **d 区域明文结构还原**：逆向发现了 `device_key || SHA1(device_key) || 0x03 || zeros` 的完整结构
 3. **gen_keybox.py**：实现了纯 Python keybox 生成器，输出与模拟器原生结果**字节完美匹配**
 4. **Google Provisioning 验证**：6 个不同 device_key 全部获得 HTTP 200
-5. **Netflix 端到端验证**：licensedManifest 成功获取 2 个内容密钥（测试内容：《怪奇物语》S1E1）
+5. **Netflix 端到端验证**：licensedManifest 成功获取 2 个内容密钥
 
-vendor_key 和 key_mask 作为编译时概念在运行时二进制中已不可恢复，但这对批量 WVD 生产目标不构成阻碍。
+vendor_key 和 key_mask 作为编译时概念在运行时二进制中已不可恢复，但这对批量 keybox 生产目标不构成阻碍。
 
 ---
 
@@ -39,7 +39,7 @@ vendor_key 和 key_mask 作为编译时概念在运行时二进制中已不可�
 |------|------|------|------|
 | **① ROOT_KEY 提取** | 获取 keybox 文件加密密钥 | 加载模式 DFA（Neodyme 方法复现） | 16 字节 ROOT_KEY |
 | **② derived_key 提取** | 获取 provisioning token 加密密钥 | 创建模式 DFA（本研究核心突破） | 16 字节 derived_key |
-| **③ d 区域明文还原** | 弄清 keybox 内部的加密数据结构 | 内存 dump + SHA-1 模式识别 | `dk\|\|SHA1(dk)\|\|0x03\|\|zeros` |
+| **③ d 区域明文还原** | 弄清 keybox 内部的加密数据结构 | 内存 dump + SHA-1 模式识别 | `dk‖SHA1(dk)‖0x03‖zeros` |
 | **④ gen_keybox.py** | 纯 Python 离线生成合法 keybox | 密码学编排（AES-CBC + CRC32） | 字节完美匹配模拟器输出 |
 | **⑤ 端到端验证** | 证明生成的 keybox 真的能用 | Google Provisioning + Netflix MSL | 6 个 WVD 设备 + 内容密钥提取 |
 
@@ -94,7 +94,10 @@ Widevine 的安全模型建立在一条**多层密钥链（Key Ladder）**之上
 
 这条 Key Ladder 的安全性取决于**最顶层**——device_key 的保护强度。在 L1 中，device_key 存储在 TEE 的硬件保险丝（eFuse）中，物理上不可读取。在 L3 中，device_key 被白盒 AES 的 T-table 和 VM 字节码"编码"保护——这正是 DFA 攻击的目标。
 
-笔者的工作等价于**攻破了 Key Ladder 的第 ① 层**：通过 DFA 提取 device_key 的加密密钥（derived_key），使得可以合成任意 keybox，从而让整条 Key Ladder 可以在受控环境中被完整重建。
+笔者的工作等价于**攻破了 Key Ladder 的第 ① 层**：通过 DFA 提取 device_key 的加密密钥（derived_key），使得可以合成任意 keybox，从而让整条 Key Ladder 可以在受控环境中被完整重建。下图展示了密钥派生的完整关系：
+
+![密钥派生关系图](https://overkazaf.github.io/blogs/images/widevine/key_derivation.png)
+*Widevine L3 密钥派生全景：左侧灰色区域 = 编译时（运行时不可恢复），中间 = 运行时密钥链（本研究的攻击目标），右侧绿色 = provisioning 派生链。*
 
 #### 2.1.2 从二进制到 DFA：攻击路线的发现逻辑
 
@@ -212,7 +215,7 @@ Hardy 曾评价拉马努金："他对数的感觉，像是对朋友的了解。"
 
 #### 拉马努金式的注意力与 TraceGraph
 
-这正是笔者在本次逆向中的核心体验。CDM 的 `l3_init()` 执行了约 1350 万条指令。如果逐条分析代码（**指令维度**），需要面对 OLLVM 控制流平坦化、VM 字节码、LCG 加密——每一层都是巨大的噪声，就像面对一个四位数只看到"1729"。但如果把这 1350 万条指令的**内存访问**绘制为 `(指令计数, 地址)` 的散点图（**模式维度**），AES 的 T-table 访问会像拉马努金眼中的立方分解一样，从背景噪声中清晰浮现——**不是因为笔者更聪明，而是因为换了一个维度去看**。
+这正是笔者在本次逆向中的核心体验。CDM 的 `l3_init()` 执行了约 1350 万条指令。如果逐条分析代码（**指令维度**），需要面对 OLLVM 控制流平坦化、VM 字节码、LCG 加密——每一层都是巨大的噪声，就像面对一个四位数只看到"1729"。但如果把这 1350 万条指令的**内存访问**绘制为热力图（**模式维度**——X=地址, Y=时间, 亮度=访问密度），AES 的 T-table 访问会像拉马努金眼中的立方分解一样，以一条明亮的竖条从背景中浮现——**不是因为笔者更聪明，而是因为换了一个维度去看**。
 
 | 维度 | 看到的 | 拉马努金类比 |
 |------|--------|-------------|
@@ -237,17 +240,7 @@ Hardy 曾评价拉马努金："他对数的感觉，像是对朋友的了解。"
 
 简言之，Neodyme 公开了**方法论框架和 Phase 1 的完整实现**，笔者在同一框架下独立完成了 **Phase 2–5 的全部工程工作**。方法论上笔者站在 Neodyme 和 Quarkslab 的肩膀上，但 derived_key 的定位、d 区域的结构还原、以及不依赖 secrets.py 的 keybox 生成器——这三块核心工作是笔者的独立贡献。
 
-在本次研究中，笔者的突破时刻来自 **Trace 可视化**（这就是"注意力"的切入点）。当笔者将 637,000 次内存访问绘制为 IC（指令计数）× 地址 的散点图时——这一方法直接受到 [Quarkslab 的 TraceGraph 工具](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html)启发——d 区域 AES 的 T-table 访问模式以**独立的点簇**从背景噪声中清晰浮现。
-
-下面这张标注图解释了如何阅读散点图——上半部分是全局视角（找到 AES 在哪里），下半部分是放大视角（确认 AES-128 的 10 轮结构和 DFA 注入点）：
-
-![散点图阅读指南](https://overkazaf.github.io/blogs/images/widevine/trace_reading_guide.png)
-*图 1a：散点图阅读指南。上方：1350 万条指令的全局 trace，三组独立的 AES 函数在时间轴上完全分离——红色的 d 区域 AES（`0x6802a2a2`）就是笔者的攻击目标。下方：放大 d 区域 AES 的 100 倍视图，9 个 T-table 簇（R1–R9）+ 1 个 S-box 尾巴（R10）清晰呈现 AES-128 的 10 轮结构，R9 红框即 DFA 故障注入窗口。*
-
-以下是仿真器实际产出的原始散点图，与上面的示意图对照阅读：
-
-> ![Trace 可视化散点图 — 实际数据](https://overkazaf.github.io/blogs/images/widevine/trace_scatter.png)
-> *图 1b：实际 trace 数据。上半部分为 CDM 创建模式完整执行 trace（637K 次内存访问），下半部分为 d 区域白盒 AES 的放大视图，彩色带标注了 10 轮 AES 操作和 DFA 目标（Round 9）。*
+在本次研究中，笔者的突破时刻来自 **Trace 可视化**（这就是"注意力"的切入点）。笔者将 CDM 运行时的 637,000 次内存访问记录下来，画成热力图（X = 地址，Y = 时间，亮度 = 访问密度）——方法受 [Quarkslab TraceGraph](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html) 启发。在热力图上，笔者注意到一条异常明亮的 4KB 宽竖条，经 Ghidra 确认恰好是 AES T-table 的存储区域。进一步分析这条竖条的时间分布，定位到了 d 区域 AES 的执行时间窗口（IC ~11.25M），从而得到了 DFA 所需的全部地址参数。完整的分析过程见 §4.3.2。
 
 在此之前，笔者在错误的 AES 路径上浪费了大量 DFA 尝试（包括对 AES-CBC 非首块的无效故障注入、对不存在的 "c 计算 AES" 的攻击），正是 trace 可视化将注意力**重新校准**到了真正的攻击面。
 
@@ -261,30 +254,19 @@ Hardy 曾评价拉马努金："他对数的感觉，像是对朋友的了解。"
 
 道理很简单。无论代码怎样混淆，AES 在运行时**必须查 T-table**——这是由 AES 的数学结构决定的，不是程序员可以选择的。每一轮加密都会往 4 个查找表（T0–T3，各 1KB，共 4KB）中查 16 次。OLLVM 可以把代码搅成一团乱麻，但它没法让 AES 不去读自己的表。
 
-所以，只要把程序运行时的所有内存读取画成一张散点图（X 轴 = 时间，Y 轴 = 内存地址），AES 的 T-table 访问就会像**一堆规律排列的点簇**从背景噪声中跳出来——不需要读懂一行混淆代码。
+所以，只要把程序运行时的所有内存读取画成**热力图**（X 轴 = 内存地址，Y 轴 = 时间，亮度 = 访问密度），被 AES 反复命中的 T-table 地址区域就会自动变成一条比周围更亮的竖条——不需要读懂一行混淆代码。找到亮条后，用 Ghidra 确认是 T-table，再过滤+放大就能看到每一轮的 16 次查表。具体过程见 §4.3.2。
 
-**怎么判断那就是 AES？** 三条线索叠加：
-
-1. **4KB 地址带**——所有可疑读取集中在 Y 轴上一条约 4KB 宽的水平带内（= T0–T3 的存储区域）。SHA-256、RSA 等算法的内存访问落在完全不同的地址范围和宽度。
-
-2. **每簇 16 个点**——AES 每轮处理 16 个字节，每个字节查一次表，所以每个簇恰好 16 个点。其他算法的每步访问次数不同（SHA-256 约 20 次但分布模式不同，RSA 每步数百次）。
-
-3. **9 个簇 + 1 个"不一样的"尾巴**——AES-128 共 10 轮，前 9 轮用 T-table，第 10 轮改用 S-box（地址不同，在散点图上位置偏移）。数一下：9 个同样的簇 + 1 个偏移的尾巴 = AES-128。如果是 11+1 就是 AES-192，13+1 就是 AES-256。
-
-这三条合在一起，在所有常见密码算法中是**唯一的指纹**。笔者在散点图中数到 9+1，直接确认这是 AES-128。
-
-#### 四步攻击链：从模式到密钥
-
-把上面的思路串成完整流程：
+#### 攻击链：从热力图到密钥
 
 ```
-① 模式识别：跑一遍 CDM → 记录所有内存访问 → 画散点图 → 找到 T-table 点簇
-② 精准定位：放大点簇 → 数轮次（9+1）→ 读出 AES 的起止地址
-③ 故障注入：在第 9 轮跳过一条指令 → 收集故障密文 → phoenixAES 自动恢复轮密钥
-④ 密钥还原：轮密钥反推初始密钥 → 解密验证 → 结构逆向
+① 热力图鸟瞰：跑一遍 CDM → 记录所有内存访问 → 画热力图 → 找到异常亮的 4KB 竖条
+② Ghidra 确认：检查亮条地址 → 确认是 AES T-table
+③ 过滤+放大：按 T-table 地址过滤 → 看到 9+1 轮结构 → 读出 DFA 参数
+④ 故障注入：在第 9 轮跳过一条指令 → 收集故障密文 → phoenixAES 恢复轮密钥
+⑤ 密钥还原：轮密钥反推初始密钥 → 解密验证 → 结构逆向
 ```
 
-全程**不需要理解 OLLVM、不需要逆向 VM、不需要解密字节码**。每一步的输出是下一步的输入，形成一条完整的攻击链。
+全程**不需要理解 OLLVM、不需要逆向 VM、不需要解密字节码**。
 
 #### 适用边界
 
@@ -298,20 +280,29 @@ Hardy 曾评价拉马努金："他对数的感觉，像是对朋友的了解。"
 | bitslice 实现 | **不可见** | 按 bit 并行运算，无查表 |
 | **LZMA VM 字节码（新版 CDM）** | **极低** | T-table 访问被 VM 间接寻址打散（见 §7.5） |
 
-笔者在 Chrome CDM 4.10.2934 的后续研究中验证了最后一行：新版 CDM 将 AES 编码为 VM 字节码，T-table 模式被打散，散点图上不再有清晰信号。因此本文方法适用于**旧版 T-table CDM**，对新版 VM 保护或硬件 AES 无效——这也是 Google 持续更新 CDM 的安全意义所在。
+笔者在 Chrome CDM 4.10.2934 的后续研究中验证了最后一行：新版 CDM 将 AES 编码为 VM 字节码，T-table 模式被打散，热力图上不再有清晰信号。因此本文方法适用于**旧版 T-table CDM**，对新版 VM 保护或硬件 AES 无效——这也是 Google 持续更新 CDM 的安全意义所在。
 
 正如拉马努金不需要分解 1729 的质因数就能看到立方结构，笔者不需要逆向 VM 指令集就能从 trace 中看到 AES 的轮结构。**注意力落在正确的维度上，问题的解就自然浮现。**
 
 
 ---
 
-## 三、背景知识
+## 三、逆向前的知识准备
 
 ### 3.1 Widevine DRM 架构与安全等级
 
-Widevine CDM（Content Decryption Module）在 Android 平台上以共享库形式存在，核心库为 `libwvhidl.so` 和 `libwvdrmengine.so`。CDM 负责与 Widevine License Server 进行密钥交换，获取 AES-128（通常为 CBCS 模式）的内容密钥，并将解密操作限制在受保护的代码路径中。
+Widevine CDM（Content Decryption Module）在 Android 平台上以共享库形式存在。需要说明的是，CDM 在不同的 Android 版本中以不同的库名出现：
 
-L3 级别的 CDM 没有 TEE 支持，密钥保护完全依赖白盒密码学（详见[参考文献 3: Chow et al. 2002](#参考文献)）。CDM 首次启动时通过 provisioning 注册设备身份，生成 `keybox`（文件 `ay64.dat`），此后每次播放使用其中的密钥认证。
+| 库名 | Android 版本 | 接口层 | 本研究使用 |
+|------|------------|-------|---------|
+| `libwvdrmengine.so` | Android 7 及更早 | 旧版 DRM HAL (legacy) | Neodyme 博客中提及此名称 |
+| `libwvhidl.so` | Android 8+ (Treble) | HIDL HAL (`android.hardware.drm@1.x`) | **本研究实际使用**（build 4464, x86, 2018-04-20） |
+
+两者的核心白盒 AES 代码是**同一套**——`libwvhidl.so` 是将 `libwvdrmengine.so` 的 DRM 引擎封装进 HIDL 接口层后的产物。区别仅在于外层的 HAL 接口（HIDL vs legacy），内部的 VM 解释器、T-table、白盒 AES 实现完全一致。本文在 Qiling 仿真中加载的是 `libwvhidl.so`（从 Android 9 x86 模拟器中提取），但为了与 Neodyme 的术语保持一致，部分段落沿用了 `libwvdrmengine.so` 的名称——读者可以将两者视为同一个 CDM 的不同封装。
+
+CDM 负责与 Widevine License Server 进行密钥交换，获取 AES-128（通常为 CBCS 模式）的内容密钥，并将解密操作限制在受保护的代码路径中。
+
+L3 级别的 CDM 没有 TEE 支持，密钥保护完全依赖白盒密码学（详见 Chow et al. 2002）。CDM 首次启动时通过 provisioning 注册设备身份，生成 `keybox`（文件 `ay64.dat`），此后每次播放使用其中的密钥认证。
 
 ### 3.2 白盒密码学（White-Box Cryptography）
 
@@ -327,8 +318,8 @@ L3 级别的 CDM 没有 TEE 支持，密钥保护完全依赖白盒密码学（�
 |--------|----------|-------------|
 | **L1: 代码混淆** | [OLLVM](https://github.com/obfuscator-llvm/obfuscator) 风格的控制流平坦化 + 虚假分支 | 静态反编译的函数控制流图变为巨大的 switch-case 结构，Ghidra 无法自动恢复原始逻辑 |
 | **L2: VM 字节码** | 自定义 VM 解释器（`cwkfcplc` 调度器），AES 操作编码为 VM 指令而非原生 x86 | T-table 地址在运行时动态分配，无法通过静态分析定位；DFA 的故障注入点需要从 trace 中实时发现 |
-| **L3: LCG 加密** | VM 函数的字节码以 LCG（线性同余生成器，`m=0x19660d, a=0x3c6ef35f`）加密存储 | 必须先 hook `rfdncxfe` 校验函数 dump 解密后的字节码，才能进行反编译 |
-| **L4: 完整性校验** | `rfdncxfe` 对每个 VM 函数计算 CRC 校验和 | DFA 故障注入会破坏校验和，导致 VM 拒绝执行——笔者在 c 区域 DFA 中花费大量时间才发现需要 bypass 此校验 |
+| **L3: LCG 加密** | VM 函数的字节码以 LCG（线性同余生成器，`m=0x19660d, a=0x3c6ef35f`）加密存储 | 必须先 hook 校验函数 dump 解密后的字节码，才能进行反编译 |
+| **L4: 完整性校验** | 函数 `rfdncxfe`（Neodyme 在博客中给出的混淆后函数名，原始名称未知——CDM 经过 strip 和符号混淆，所有导出函数名都是无意义的随机字符串）负责在 VM 执行每个字节码函数前计算 CRC 校验和 | DFA 故障注入会改变字节码的执行结果，导致校验和不匹配、VM 拒绝继续执行。笔者在 c 区域 DFA 中花费大量时间才定位到这一层校验是失败的根因 |
 | **L5: 密钥分离** | 不同 AES 路径使用不同的 VM PC 地址段和独立的 T-table | 攻击 ROOT_KEY 的 DFA 参数无法直接迁移到 derived_key 提取——这正是 Neodyme 博客中**未公开的核心难点** |
 
 笔者在实战中的切身体会是：**每一层防护不会独立生效，而是层层嵌套、相互增强**。例如，L2（VM 字节码）使得 L5（密钥分离）的发现依赖于运行时 trace 而非静态分析；L4（完整性校验）使得对 L2 内部逻辑的故障注入需要先 bypass L4——而 bypass L4 本身又需要理解 L3（LCG 加密）的结构来定位 `rfdncxfe` 的入口点。
@@ -369,21 +360,37 @@ L3 级别的 CDM 没有 TEE 支持，密钥保护完全依赖白盒密码学（�
 4. 对比故障输出和正确输出，**4 个字节的差分**直接约束了第 10 轮轮密钥的可能值
 5. 收集足够多的故障对（通常 8-40 个），轮密钥被唯一确定
 
-![密钥派生关系图](https://overkazaf.github.io/blogs/images/widevine/key_derivation.png)
+**为什么"跳过指令"等价于"注入故障"？** 在物理 DFA 中，攻击者用激光或电压毛刺改变芯片中的一个比特。在软件白盒中，有多种方式模拟"故障"：
 
-**为什么"跳过指令"等价于"注入故障"？** 在物理 DFA 中，攻击者用激光或电压毛刺改变芯片中的一个比特。在软件白盒中，笔者通过 Qiling 仿真器的 `hook_code` 回调，将目标指令的 PC 直接跳过（`ql.arch.regs.arch_pc += size`），效果等价于该指令的输出被替换为随机值——这正是 DFA 所需的"故障"。
+| 故障注入方式 | 实现方法 | 效果 | 本文选择 |
+|------------|---------|------|---------|
+| **指令跳过（instruction skip）** | `ql.arch.regs.arch_pc += size`，跳过目标指令不执行 | 目标寄存器保留前一条指令的残留值 → 等效于随机故障 | **✅ 本文使用** |
+| 寄存器置零 | 在目标指令执行后将某个寄存器清零 | 产生确定性故障（0 值），差分模式可预测 | 可用但故障模式不够随机 |
+| 内存篡改 | 修改 T-table 中的某个字节 | 等效于改变 S-box 输出，故障注入更精确 | 需要知道 T-table 内部结构 |
+| 随机字节覆写 | 将某个寄存器值替换为 `random.randint(0,255)` | 产生均匀分布的随机故障 | 可用，但指令跳过更简单 |
 
-**列故障模式（Column Fault Pattern）** 是判断故障是否有效的标准。AES 的 ShiftRows 操作将第 9 轮的 4 字节列故障重新排列为以下输出位置模式：
+笔者选择**指令跳过**是因为它最简单——只需一行 `hook_code` 回调，不需要知道目标指令操作的是哪个寄存器或内存地址。跳过后，目标寄存器保留上一条指令的残留值，这个残留值对于 DFA 来说足够"随机"。Neodyme 的 `fault.py` 也使用了相同的方式。
+
+**列故障模式（Column Fault Pattern）** 是判断故障是否有效的标准。要理解为什么只有特定的 4 字节差分才有用，需要追溯 AES 最后两轮的数学结构：
+
+**第 9 轮**的操作顺序是 SubBytes → ShiftRows → **MixColumns** → AddRoundKey。MixColumns 是一个**列内混合**操作——它把同一列的 4 个字节线性混合在一起。如果在第 9 轮的 MixColumns 之前，某一列的某个字节被故障改变了，MixColumns 会把这个故障**扩散到该列的全部 4 个字节**——但不会影响其他 3 列。
+
+**第 10 轮**（最终轮）只做 SubBytes → ShiftRows → AddRoundKey，**没有 MixColumns**。ShiftRows 把 4×4 矩阵的每一行循环左移不同的位数（第 0 行不移，第 1 行移 1，第 2 行移 2，第 3 行移 3），这导致第 9 轮同一列的 4 个字节在输出中被**重新排列到固定的位置**：
 
 ```
-
-Column 0 → output bytes {0, 7, 10, 13}
-Column 1 → output bytes {1, 4, 11, 14}
-Column 2 → output bytes {2, 5, 8, 15}
-Column 3 → output bytes {3, 6, 9, 12}
+第 9 轮 Column 0 的 4 个字节 → 经 ShiftRows 后出现在输出的 {0, 7, 10, 13}
+第 9 轮 Column 1 的 4 个字节 → 输出 {1, 4, 11, 14}
+第 9 轮 Column 2 的 4 个字节 → 输出 {2, 5, 8, 15}
+第 9 轮 Column 3 的 4 个字节 → 输出 {3, 6, 9, 12}
 ```
 
-只有严格符合上述模式的 4 字节差分才是有效的"干净列故障"，其余（如 3 字节、5 字节或不在同一列的 4 字节差分）全部丢弃。[phoenixAES](https://github.com/SideChannelMarvels/JeanGrey) 工具自动完成从故障密文到轮密钥的数学求解。
+所以，一个"干净列故障"的含义是：故障密文与正确密文相比，**恰好有 4 个字节不同，且这 4 个字节的位置严格符合上述某一列的模式**。这证明故障发生在第 9 轮的某一列内部（MixColumns 扩散了它），并且没有影响其他列。
+
+**为什么只有这种模式才有用？** 因为 phoenixAES 的数学求解依赖一个前提：**已知故障发生在哪一列**。当差分模式为 `{0,7,10,13}` 时，phoenixAES 知道故障在 Column 0，就可以对 Column 0 对应的 4 个轮密钥字节建立方程组求解。如果差分不符合任何列模式（比如 3 个字节、5 个字节、或跨越两列的 4 个字节），说明故障位置不在 MixColumns 之前的单列内——这种情况下方程组不成立，必须丢弃。
+
+每列需要约 2–3 个独立的干净故障即可唯一确定 4 个轮密钥字节。4 列 × 2–3 个 = 8–12 个干净列故障即可恢复全部 16 字节的第 10 轮轮密钥。实际操作中笔者收集了 95 个（富余量确保每列覆盖充分）。[phoenixAES](https://github.com/SideChannelMarvels/JeanGrey) 工具自动完成从故障密文到轮密钥的数学求解。
+
+> **推荐学习资源**：对 DFA 原理的系统理解，推荐阅读 Quarkslab 的博客 [*DFA on White-box AES*](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html)（完整的方法论和工程实现），以及 [Riscure 的 DFA 教程](https://www.yourdigitallock.com/post/differential-fault-analysis-on-white-box-aes)（从理论到实践的逐步讲解，含 MixColumns 故障扩散的图示）。
 
 
 BGE 攻击（Billet、Gilbert、Ech，2004 年）从代数角度对白盒 AES 的 T-table 结构发起攻击，但该攻击的前提是 T-table 包含密钥混入（key-mixed）——如笔者在第五节中所述，Widevine L3 的 T-table 是标准 AES，不含密钥混入，BGE 攻击在此场景下不适用。
@@ -408,7 +415,7 @@ Widevine L3 keybox 是 128 字节的二进制结构，经 AES-128-CBC（IV 全�
 | 0x7C | 4  | `crc` | CRC32-MPEG2(`keybox[0:0x7C]`)，大端序 |
 
 
-文件完整性由 CRC32-MPEG2 校验（初始值 `0xFFFFFFFF`，多项式 `0x04C11DB7`），整体由 ROOT_KEY 加密。`d` 区域的结构在本次研究中首次通过 DFA 方式完整还原，详见第三节。
+文件完整性由 CRC32-MPEG2 校验（初始值 `0xFFFFFFFF`，多项式 `0x04C11DB7`），整体由 ROOT_KEY 加密。`d` 区域的结构在本次研究中首次通过 DFA + 内存分析完整还原，详见 §4.4（阶段 ③）。
 
 ---
 
@@ -426,10 +433,20 @@ Widevine L3 keybox 是 128 字节的二进制结构，经 AES-128-CBC（IV 全�
 
 | 项目 | 配置 |
 |------|------|
-| 主机 | Ubuntu 22.04 LTS, x86_64, 32GB RAM |
+| 主机 | Ubuntu 22.04 LTS, x86_64, Dual Intel Xeon E5-2673 v4 (80 threads), 96GB RAM |
 | Android 模拟器 | Android Studio Emulator, API 28 (Android 9), x86 镜像 |
-| 目标二进制 | `libwvdrmengine.so` (CDM build 4464, 2018-04-20, x86) |
+| 目标二进制 | `libwvhidl.so` (CDM build 4464, 2018-04-20, x86)，文中部分段落沿用 Neodyme 术语称 `libwvdrmengine.so`（见 §3.1 说明） |
 | keybox 文件 | `ay64.dat`（128 字节 AES-CBC 加密的 keybox） |
+
+**关于 CDM build 4464 的覆盖范围**
+
+Build 4464（"L3 Library 4464"）是 2018 年 4 月编译的 Widevine L3 CDM，内部标识为 `android_generic_4464`，随 **Android 9 (API 28) 的 x86 模拟器镜像**（AOSP on IA Emulator）分发。需要明确以下几点：
+
+- **这不是消费级设备的 CDM**——build 4464 是 x86 架构的模拟器版本，不会出现在真实的 ARM 手机或平板上。真实设备使用的是同期但不同 build 号的 ARM 版 CDM，白盒 AES 密钥不同。
+- **本文提取的密钥仅对 build 4464 有效**——ROOT_KEY、derived_key、C_VALUE 是 build 级别的常量，不同 build 的值完全不同。本文的 `gen_keybox.py` 只能为 build 4464 生成有效的 keybox。
+- **build 4464 的吊销状态**——有公开资料称 Google 于 2021 年 12 月吊销了 `android_generic_4464`，但笔者在 2026 年 4 月的实验中，使用该 build 生成的 WVD 仍成功通过了 Netflix 的 licensedManifest 验证并提取到内容密钥。这说明吊销策略可能因平台而异、或存在部分恢复，具体机制未知。无论如何，Google 有能力随时吊销任何 CDM build 的凭证——这是 Widevine 安全模型的设计特性。
+- **方法论可迁移，密钥不可迁移**——DFA + TraceGraph 的攻击方法论适用于任何使用 T-table 实现的旧版 CDM build，但每个 build 需要独立提取密钥。
+- **Neodyme 和 widevine-l3-playground 项目使用的也是 build 4464**——这是 Widevine L3 安全研究的标准目标，因为它版本稳定、工具链成熟、且已被吊销（不存在"帮助绕过现行保护"的问题）。
 
 **逆向分析工具**
 
@@ -495,7 +512,7 @@ Android 9 rootfs 来自 [AvalonsWanderer/widevine-l3-playground](https://github.
 
 除 Qiling 仿真外，笔者还使用 [Ghidra](https://ghidra-sre.org/) 对 84 个 VM 函数进行了 headless 反编译，生成约 6640 行 C 代码，用于辅助理解 CDM 的控制流结构。
 
-### 4.2 Phase 1：ROOT_KEY 提取（加载模式 DFA）
+### 4.2 阶段 ①：ROOT_KEY 提取（加载模式 DFA）
 
 > 笔者首先需要解决的是 `ay64.dat` 的文件加密密钥。已知 CDM 在加载 keybox 时执行白盒 AES-CBC 解密——这正是 DFA 的经典目标。笔者选择直接复现 Neodyme 的 `fault.py` 作为起点。成功的判据很明确：用恢复的密钥解密 `ay64.dat`，末尾应出现 `kbox` magic 且 CRC32 校验通过。
 
@@ -540,7 +557,7 @@ ROOT_KEY = da39a3ee5e6b******55bfef95601890
 
 这一推断产生了一个**可测试的预测**：在真实 Android 模拟器上（serial = `EMULATOR36X5X11X0`），ROOT_KEY 应当等于 `SHA1("EMULATOR36X5X11X0")[:16] = 544ea1f03b72******c98d6ea52c7a`。笔者后续通过 `adb pull` 获取真机 keybox 并尝试解密，**验证了该预测**——真机 ROOT_KEY 确实不同于 Qiling 的值，且精确等于 `SHA1(serial)[:16]`。
 
-### 4.3 Phase 2：derived_key 提取（创建模式 DFA）
+### 4.3 阶段 ②：derived_key 提取（创建模式 DFA）
 
 > 这是整个研究中最困难的一步，也是 Neodyme 博客中刻意留白的部分。笔者最初假设 d 区域的加密与 ROOT_KEY 共享同一套白盒 AES——这个假设很快被证伪（9600 次故障注入，0 次命中）。失败迫使笔者重新审视 CDM 架构：如果存在多条独立的 AES 路径，就需要先定位 d 区域 AES 的地址空间，然后才能实施 DFA。这引出了 Trace 可视化的思路。
 
@@ -552,131 +569,185 @@ Keybox 中的 `d` 区域（48 字节）是 provisioning token 的核心数据。
 
 基于这一假设，笔者直接复用了 Neodyme 的 `FAULT_START_ADDR = 0x6802E275` 对 d 区域发起 DFA。**结果：0 次命中。** 在 9,600 余个 fault target 中，没有任何一次改变了 d 区域的输出。
 
-**推断**：ROOT_KEY AES 的 PC 地址段（`0x6802e275` 附近）仅在 keybox **加载模式**（`ay64.dat` 存在时的解密路径）中执行。d 区域的加密发生在**创建模式**（`ay64.dat` 不存在，CDM 首次生成 keybox 时），使用的是一条**完全独立的 AES 代码路径**。
+9,600 次全部未命中意味着什么？笔者逐步排除可能的原因：
+
+1. **故障窗口选错了？** 不太可能——同一个窗口对 ROOT_KEY 的 DFA 能产生 150 次干净故障，代码本身是可以被注入的。
+2. **d 区域的输出观测点选错了？** 笔者验证了观测点确实指向 d 区域在内存中的写入位置，没有问题。
+3. **`0x6802E275` 这段代码在当前运行模式下根本没有执行？** 这是最合理的解释。Neodyme 的 `fault.py` 是在 `ay64.dat` **已存在**的情况下运行的——CDM 读取并**解密**已有的 keybox（加载模式）。但笔者要攻击的是 d 区域的**加密**——这发生在 `ay64.dat` **不存在**时，CDM 首次**生成**keybox（创建模式）。
+
+**关键推断**：ROOT_KEY DFA 的地址段（`0x6802e275` 附近）属于**加载模式的解密路径**——仅在 CDM 读取已有 keybox 时执行。d 区域的加密发生在**创建模式**（`ay64.dat` 不存在，CDM 首次生成 keybox 时），使用的是一条**完全独立的 AES 代码路径**，地址段不同。这解释了为什么在加载模式下对 d 区域做 DFA 完全无效——那段加密代码根本没被执行。
+
+这一推断并非凭空猜测，而是有直接的**实验证据**。笔者分别在两种模式下运行 CDM，观察 `0x6802e275` 处的代码是否执行：
+
+```python
+# 实验 1：加载模式（ay64.dat 存在）— Neodyme 的 fault.py
+assert os.path.exists("rootfs/.../ay64.dat")   # 文件存在
+ql.run()
+# 结果：0x6802e275 被执行 → ROOT_KEY DFA 产生 150 次干净故障 ✅
+
+# 实验 2：创建模式（ay64.dat 删除）— 笔者的 fault_d_creation.py
+os.remove("rootfs/.../ay64.dat")               # 删除文件，强制创建模式
+ql.run()
+# 结果：0x6802e275 从未执行 → 同一地址的 DFA 产生 0 次命中 ❌
+# 但 0x6802a2a2 处出现了新的 T-table 活动（通过 trace 热力图发现）
+```
+
+同一个二进制、同一个仿真环境，唯一的差异是 `ay64.dat` 是否存在——CDM 的行为完全不同。这证明内部确实存在基于文件是否存在的分支（CDM 的 `.rodata` 段中可以找到 `"Could not find %s"` 和 `"Installed keybox from %s"` 等日志字符串，间接印证了文件检测逻辑的存在，但由于 OLLVM 混淆 + PIC 寻址，笔者未能在反编译中精确定位到该分支的 x86 指令）。
 
 这一推断引出第二个**假设**：CDM 内部存在两条或更多独立的白盒 AES 实现，各自拥有不同的 VM 程序计数器地址段和密钥。验证这一假设需要找到 d 区域 AES 的具体 PC 范围——这正是 trace 可视化要解决的问题。
 
 #### 4.3.2 Trace 可视化：从 637K 次内存访问中提取 AES 信号
 
-笔者的方法论受到 [Quarkslab TraceGraph 工具](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html)的直接启发：将程序执行 trace 中的内存访问绘制为二维散点图，利用 AES T-table 访问的**规律性**在视觉上识别出加密操作。要理解散点图中的信号，首先需要理解 T-table 实现的原理。
+Neodyme 在博客中对这一步的描述非常简洁：*"trace 内存访问 → 画成图像（X 轴 = 内存地址，Y 轴 = 时间）→ 从图像中视觉识别出 T-table 查找结构 → 对识别出的位置实施 DFA"*。笔者的方法与 Neodyme 完全同源（均受 [Quarkslab TraceGraph](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html) 启发），但 Neodyme 只公开了 ROOT_KEY（加载模式）的结果，d 区域 AES（创建模式）的定位过程被留白。以下是笔者独立完成这一步的详细记录，展开 Neodyme 一句话背后的具体操作：**采数据 → 画热力图 → 圈出可疑区域 → 确认 → 放大 → 读参数**。
 
-##### AES-128 T-table 实现与内存访问指纹
+##### 第一步：采数据
 
-标准 AES-128 加密共 10 轮，每轮由 4 个操作组成。在高性能实现中，前 9 轮的 `SubBytes + MixColumns` 被合并为 T-table 查表操作，将两步运算压缩为一次内存读取：
+笔者编写 `trace_creation.py`，**删除 `ay64.dat` 强制 CDM 进入创建模式**（Neodyme 未提及这一操作——他们的 `fault.py` 只针对加载模式；要触发 d 区域加密，必须让 CDM "认为"自己首次启动）。通过 Qiling 的 `ql.hook_mem_read()` / `ql.hook_mem_write()` 记录每条内存访问，存入 SQLite。采集结果：**637,000 条记录**。
 
-```
-AES-128 加密（T-table 实现）：
+##### 第二步：画热力图，圈出可疑区域
 
-  state = plaintext ⊕ round_key[0]          ← AddRoundKey（初始轮密钥混合）
+把 637K 条记录画成热力图：X 轴 = 内存地址，Y 轴 = 时间（IC），颜色深浅 = 该位置被访问的次数（右侧色阶条：暗 = 少，亮 = 多）。**不做任何过滤，直接画全量数据。**
 
-  for round = 1 to 9:                        ← 前 9 轮使用 T-table
-      for each column j:
-          t0 = T0[ state[0,j] ]              ← 查 T-table：1 次内存读取
-          t1 = T1[ state[1,j] ]              ←           1 次内存读取
-          t2 = T2[ state[2,j] ]              ←           1 次内存读取
-          t3 = T3[ state[3,j] ]              ←           1 次内存读取
-          new_col[j] = t0 ⊕ t1 ⊕ t2 ⊕ t3   ← XOR 合并（寄存器操作，无内存访问）
-      state = ShiftRows(new_state)
-      state = state ⊕ round_key[round]      ← AddRoundKey
+![热力图 + 全部活跃区域标注](https://overkazaf.github.io/blogs/images/widevine/trace_neodyme_style.png)
+*热力图中标注了 A–J 共 10 个活跃地址区域（右侧图例逐一说明）。每个有亮度的区域都需要判断：是不是 AES T-table？*
 
-  round 10（最终轮）:                         ← 第 10 轮不使用 T-table
-      state = SubBytes(state)                ← 查 S-box（256 字节，非 T-table）
-      state = ShiftRows(state)
-      state = state ⊕ round_key[10]         ← 无 MixColumns
-      return state
-```
+画完之后，用两个条件逐一排查**所有亮区**：
 
-**关键洞察**：每一轮 T-table 查表产生 `4 列 × 4 次查表 = 16 次内存读取`，读取地址落在 T-table 所在的内存区域（本例中为 `0x68026000`–`0x68026400`，共 4 个 256×4 字节的表）。9 个 T-table 轮共产生 `9 × 16 = 144 次` T-table 内存读取，而第 10 轮使用不同的 S-box 表，访问模式发生变化。这种"9 次规律性爆发 + 1 次不同模式"的内存访问序列，就是白盒 AES 在 trace 散点图中的**视觉指纹**。
+**条件 1——亮度（访问密度）。** AES T-table 每轮被读 16 次、10 轮共 160 次、多次调用累计上千次——同一地址区域被反复命中，在热力图上呈现为**持续的亮色竖条**。
 
-##### 第一步：数据采集
+**条件 2——宽度（地址跨度）。** AES T-table = 4 个表 × 1024 字节 = **约 4KB**。太宽（如 B 区 3.3KB 但读写均衡，不是只读查表）或太窄（如 A 区 1KB）都不符合。
 
-笔者编写 `trace_creation.py`，**删除 `ay64.dat` 强制 CDM 进入创建模式**（这一关键操作在 Neodyme 的博客中未曾提及——他们的 `fault.py` 仅针对加载模式，即 `ay64.dat` 已存在时的解密路径；要触发 d 区域的加密路径，必须让 CDM "认为"自己是首次启动），在仿真运行期间通过 `ql.hook_mem_read()` 和 `ql.hook_mem_write()` 钩子记录每条内存访问（地址 + 当前指令计数 IC + 读/写类型），持久化到 SQLite 数据库。采集结果：**637,000 次内存访问，57,000 次代码执行样本**。
+用这两个条件逐一排查图中的 10 个亮区：
 
-##### 第二步：全局 Trace 观察（散点图上半部分）
+| 区域 | 地址范围 | 大小 | 访问次数 | 亮度 | 宽度 | 判定 | 原因 |
+|------|---------|------|---------|------|------|------|------|
+| A | `0x68020000` | 1KB | 119K | 高 | 太窄 | ❌ | VM dispatcher，读写各半 |
+| B | `0x68021000` | 3.3KB | 122K | 高 | 接近 | ❌ | VM 字节码存储，读写均衡（非只读查表） |
+| C | `0x68022000` | 1KB | 16K | 中 | 太窄 | ❌ | VM 工作缓冲区 |
+| D | `0x68023000` | 1KB | 47K | 中高 | 太窄 | ❌ | LCG 状态/校验 |
+| E | `0x68024000` | 1KB | 79K | 高 | 太窄 | ❌ | VM 分发表 |
+| F | `0x68025000` | 1KB | 41K | 中高 | 太窄 | ⚠️ | S-box（256B），AES 第 10 轮用，但不是 T-table |
+| **G** | **`0x68026000`** | **1.8KB** | **130K** | **最高** | — | **✅** | **T-table 核心区（T0–T1），与 H 合计 ≈4KB** |
+| **H** | **`0x68027000`** | **1KB** | **11K** | 中 | — | **✅** | **T-table 扩展区（T2–T3），与 G 合计 ≈4KB** |
+| I | `0x68028000` | ~10KB | 28K | 低 | 太宽 | ❌ | keybox 数据缓冲区，分散读写 |
+| J | `0x6802B000` | ~25KB | 17K | 低 | 太宽 | ❌ | 输出/杂项，零散低密度 |
 
-`trace_viz.py` 将 `(指令计数 IC, 内存地址)` 绘制为散点图。下图上半部分展示了 CDM 创建模式的完整执行 trace：
+换一种更直观的说法：**想象一个 4KB 宽的矩形框，沿 X 轴（地址方向）从左往右滑动扫描整张热力图。** 在每个位置，统计框内的总亮度——当框滑到 G+H 区（`0x68026000`–`0x68027000`）时，框内亮度达到全局最大值。其他位置要么框内亮度不够（I、J 区），要么亮度虽高但集中在框的一小部分（A、E 区只占 1KB，框内 3/4 是空的）。**4KB 滑动窗口的最大响应位置 = T-table 的候选地址。**
 
-![Trace 可视化散点图](https://overkazaf.github.io/blogs/images/widevine/trace_scatter.png)
+笔者实际编写脚本验证了这个思路——把 4KB 窗口从 `0x68020000` 滑到 `0x68031000`，统计每个位置的框内读取总数：
 
-**如何阅读此图：**
-- **X 轴**（Instruction Count, IC）：程序执行的时间线，从左到右递增，单位为指令数（×10^7）
-- **Y 轴**（Memory Address）：被访问的内存地址（相对于 `0x1.745×10^9` 基地址的偏移）
-- **每个点**：一次内存读取或写入操作
+![4KB 滑动窗口扫描](https://overkazaf.github.io/blogs/images/widevine/trace_sliding_window.png)
+*横轴 = 窗口起始地址，纵轴 = 该 4KB 窗口内的读取总次数。每个柱子代表"如果把 4KB 框放在这个地址，框内有多少次读取"。青色柱 = 峰值附近（窗口覆盖 T-table 地址范围时，密度最高，66,280 次）；黄色柱 = 次高区域（窗口覆盖 VM 字节码/栈等区域时，密度较高但远不及峰值）；灰色柱 = 低密度区域。峰值位置 `0x68025a00`–`0x68026a00` 就是 T-table 的候选地址。*
 
-**上半部分的全局视角**中，笔者观察到两个关键现象：
+热力图上肉眼也能看到这个结果（G+H 区的亮度优势太明显了），但滑动窗口提供了**定量确认**。
 
-1. **周期性 T-table 爆发**：在 Y 轴的 T-table 区域（地址偏移 `-15000` 至 `-10000` 附近），可以看到多处密集的水平点簇。每个簇代表一轮 AES 的 16 次 T-table 查表——它们在 Y 轴上覆盖相同的地址范围（因为查的是同一组 T-table），但在 X 轴上分散在不同的 IC 位置（因为每轮在不同时间执行）。
+##### 第三步：用 Ghidra 确认亮区是 T-table
 
-2. **三组独立的 AES 簇**：通过颜色编码可以识别出三组在时间上完全分离的 T-table 访问簇（图中蓝色标注 `d-area AES` 和红色标注 `ROOT_KEY AES`），它们来自 CDM 内部三条独立的白盒 AES 实现：
+热力图上找到了可疑的亮竖条（G+H 区），但"亮"只能说明"被反复读取"——还需要确认它的数据结构确实是 T-table。
 
-| 函数组 | VM PC 范围 | IC 位置 | 在散点图中的位置 | 角色 |
-|--------|-----------|---------|-----------------|------|
-| 函数 1 (`0x6802f2xx`) | `0x6802f207`–`0x6802f4bd` | IC ~10M | 上图中偏左的 T-table 簇 | VM 函数解密器 |
-| **函数 2 (`0x6802a2xx`)** | **`0x6802a2a2`–`0x6802a8cd`** | **IC ~11.25M** | **上图中间位置，蓝色标注** | **d 区域 AES（目标）** |
-| 函数 3 (`0x680292xx`) | `0x680292bb`–`0x68029823` | IC ~13.2M | 上图偏右的 T-table 簇，红色标注 | ROOT_KEY AES（文件加密） |
+打开 Ghidra，加载 `libwvdrmengine.so`，跳转到 `0x68026000`。笔者看到的是 4 个结构完全相同的 256×4B 数组，但数值不同：
 
-**推断依据**：三组 AES 函数在 IC 轴上完全不重叠，意味着它们由不同的 VM 程序段驱动、使用不同的密钥。这直接证实了前面的假设——CDM 存在多条独立的白盒 AES 路径，ROOT_KEY 的 DFA 参数（`0x6802E275`）只能命中函数 3，对函数 2（d 区域 AES）无效。
+- **`0x68026000`–`0x680263FF`**（1024 字节）：256 个 4 字节整数
+- **`0x68026400`–`0x680267FF`**（1024 字节）：同样是 256 个 4 字节整数，但值不同
+- T2、T3 在 `0x68027000` 附近的 H 区，结构相同
 
-##### 第三步：10 轮 AES 结构解读（散点图下半部分）
+**怎么确认是 T0–T3 而不是其他查找表？** 标准 AES 的 T-table 有明确的数学定义：`T0[i] = (2·S[i], S[i], S[i], 3·S[i])`，其中 S 是 AES S-box，乘法在 GF(2⁸) 上进行。T1–T3 分别是 T0 的**字节循环移位**变体（T1 = T0 rotated 1 byte, T2 = rotated 2, T3 = rotated 3）。笔者的验证方法是：
 
-散点图的下半部分是对函数 2（d 区域 AES）的放大视图，IC 范围从 `1.12490×10^7` 到 `1.12530×10^7`，精确覆盖了 d[0:16]（第一个 AES-CBC 分组）的加密过程。
+1. 取第一个表的第 0 个元素：`T[0] = T0[0x00]`，与 OpenSSL 源码中 `Te0[0] = 0xc66363a5` 对比 → 匹配
+2. 取 `T0[0x63]`（S-box 的输入 0x63 对应 SubBytes 输出 0xfb）→ 与 OpenSSL `Te0[0x63]` 对比 → 匹配
+3. 取第二个表的 `T[0]` → 与 `Te1[0]` 对比 → 匹配（是 `Te0[0]` 的 1 字节循环移位）
+4. 全部 256×4 个值逐一比对，**4 个表均与 OpenSSL 的 Te0–Te3 完全一致**
 
-##### 如何从散点图中"看出" R1–R10？
+至此确认：G+H 区存储的就是标准 AES 的 4 个 T-table（未做密钥混入），CDM 使用了白盒 AES。
 
-面对一片密集的散点，读者可能会问：凭什么断定这里恰好有 10 轮？笔者的判断依据是三层递进的视觉证据：
+另外注意到 F 区（`0x68025000`，256 字节）与标准 AES S-box（`0x63, 0x7c, 0x77, 0x7b, ...`）匹配——这是 AES 第 10 轮使用的 SubBytes 查找表，进一步佐证了 AES 的存在。
 
-**证据 1——T-table 读取的"爆发-间隙"节奏。** AES 的每一轮需要查 T-table 16 次（4 列 × 4 个 T-table）。在散点图中，这 16 次查表表现为一组紧密聚集在 T-table 地址区间（Y 轴约 `-10000` 到 `-15000`）的点。两轮之间，CDM 执行的是 XOR、状态拷贝等**不涉及 T-table** 的操作，这些操作要么访问其他地址区间，要么只使用寄存器——因此在 T-table 地址带上形成一段**无点的空白间隙**。如此反复：
+##### 第四步：看时间分布，找到笔者要攻击的那组 AES
 
-```
-时间轴（IC →）:
-  ┌──16点──┐  gap  ┌──16点──┐  gap  ┌──16点──┐  ...  ┌──16点──┐  ┌─不同─┐
-  │  R1    │       │  R2    │       │  R3    │       │  R9    │  │ R10  │
-  └────────┘       └────────┘       └────────┘       └────────┘  └──────┘
-  T-table区         T-table区        T-table区        T-table区    S-box区
-```
+读者可能会问：既然第三步已经能用 Ghidra 静态分析找到 T-table，**为什么不一开始就直接用 Ghidra，而要先画热力图？**
 
-笔者通过 SQL 查询精确计算了 T-table 地址范围 `0x68026000`–`0x68026400` 上的内存读取事件，发现它们自然聚成 **9 组时间上不重叠的簇（cluster）**，每组内部 IC 跨度约 150 条指令，组间间隙约 20–30 条指令。9 组 T-table 簇 + 1 组模式不同的尾部簇 = **恰好 10 轮**——这与 AES-128 的 10 轮结构完全吻合。如果是 AES-192（12 轮）或 AES-256（14 轮），簇的数量会不同。
+原因在于：**Ghidra 能告诉你"T-table 在哪个地址"，但不能告诉你"谁在用它、什么时候用、用了几次"。** T-table 是一块静态数据，存在 `.data` 段的固定位置——Ghidra 可以找到它的地址，但 CDM 中有多少个不同的 AES 函数在共享这组 T-table？每个函数在什么时间执行？哪个函数是笔者需要攻击的 d 区域加密？这些问题 Ghidra 无法回答，因为 AES 代码被 OLLVM + VM 字节码层层包裹，静态分析看到的是一团无法理解的控制流。
 
-**证据 2——Green/Yellow 交替暴露两套 VM 代码。** 笔者进一步按每个簇内的 VM PC 地址分类，发现一个显著的交替规律：
+热力图解决的恰恰是这个问题：**不需要理解代码，直接从运行时数据流中看到"谁在什么时间查了 T-table"**。两者是互补关系：
 
-- 第 1、3、5、7、9 簇（奇数轮）的 T-table 读取指令来自 VM PC 地址 `0x6802a2a2`–`0x6802a5xx`（散点图中标注为绿色 **Group A**）
-- 第 2、4、6、8 簇（偶数轮）的 T-table 读取指令来自 VM PC 地址 `0x6802a5xx`–`0x6802a8xx`（散点图中标注为黄色 **Group B**）
+| 问题 | Ghidra（静态） | 热力图（动态） |
+|------|-------------|-------------|
+| T-table 存储在哪个地址？ | ✅ 直接找到 | 也能找到（亮条位置） |
+| T-table 的数据结构是什么？ | ✅ 可验证 256×4B 数组 | ❌ 只看到亮度 |
+| 有几个 AES 函数在用 T-table？ | ❌ 代码被 OLLVM 混淆 | ✅ 亮条上的密集段数 = 函数数 |
+| 每个函数的执行时间？ | ❌ | ✅ 亮条上的 Y 轴位置 |
+| 哪个函数是 d 区域加密？ | ❌ | ✅ 与密文写入时间重叠的那个 |
 
-这种**严格的 A-B-A-B-A-B-A-B-A 交替**不可能是偶然的。它意味着白盒实现刻意用两段不同的 VM 字节码来编码奇数轮和偶数轮——这是一种已知的混淆手法（增加静态分析的复杂度，因为相同功能的代码出现在两个不同地址），同时也为笔者提供了一个额外的轮计数校验：9 个 T-table 簇中，5 个 Group A + 4 个 Group B，对应 AES-128 的 9 个 T-table 轮。
+所以实际流程是：**热力图发现候选 → Ghidra 确认数据结构 → 热力图继续分析时间分布**。第三步的 Ghidra 确认是一个"插入验证"，验证完后回到热力图继续分析。
 
-**证据 3——R10 的 Y 轴偏移确认最终轮。** 在第 9 个 T-table 簇之后，还有一小组内存读取，但它们的 Y 轴坐标与 R1–R9 **不同**——偏移量恰好对应 S-box 表（256 字节，地址 `0x68025000` 附近）相对于 T-table（4×1024 字节，地址 `0x68026000`–`0x68026400`）的位置差。这是 AES 最终轮的签名：第 10 轮不执行 MixColumns，只做 SubBytes（S-box 查表）+ ShiftRows + AddRoundKey。在散点图中，这表现为紫色色带的 Y 轴位置与前 9 个色带的系统性偏移。
+确认了 T-table 之后，下一个问题是：**CDM 在什么时间点使用了 T-table？** 热力图上 G+H 区的亮竖条从上到下贯穿整个时间轴，说明 CDM 在多个时间点都在查 T-table——但笔者只关心 d 区域 AES（创建模式下加密 keybox 的那次调用）。
 
-综合三层证据：**9 组 T-table 爆发（16 点/组，A-B 交替）+ 1 组 S-box 尾声 = AES-128 的 10 轮结构**。这就是笔者从一幅散点图中得出 R1–R10 标注的完整推理。
+把 G+H 区内的所有读取按时间（IC）统计为柱状图：
 
-以下是每一轮在散点图中的对应关系：
+![T-table 时间分布](https://overkazaf.github.io/blogs/images/widevine/trace_ttable_histogram.png)
+*横轴 = 时间（IC），纵轴 = 每 10K IC 窗口内的 T-table 读取次数。*
 
-| 散点图色带 | AES 轮 | 颜色 | 对应操作 | 视觉特征 |
-|-----------|--------|------|---------|---------|
-| R1 | Round 1 | 绿色 (Group A) | T0–T3 查表 | 16 点簇，Y 轴 T-table 区，IC ~1.12504×10^7 |
-| R2 | Round 2 | 黄色 (Group B) | T0–T3 查表 | 16 点簇，同一 Y 轴，IC 右移约 180 |
-| R3 | Round 3 | 绿色 (Group A) | T0–T3 查表 | VM PC 回到 Group A 地址段 |
-| R4 | Round 4 | 黄色 (Group B) | T0–T3 查表 | VM PC 回到 Group B 地址段 |
-| R5–R8 | Round 5–8 | 绿/黄交替 | T0–T3 查表 | 严格 A-B-A-B 交替持续 |
-| **R9** | **Round 9** | **红色 (Group A)** | **T0–T3 查表** | **最后一个 T-table 簇，DFA 故障注入窗口** |
-| R10 | Round 10 | 紫色 | S-box 查表 | **Y 轴位置偏移**（S-box 地址 ≠ T-table 地址） |
+从柱状图上可以清楚看到 T-table 的使用分为**两个阶段**：
 
-**R9 红色带是 DFA 的精确目标。** DFA 攻击 AES 的标准策略是在**第 9 轮**（倒数第二轮）注入故障。原因在于 AES 的扩散结构——如果在第 9 轮的某一列操作中跳过一条指令，该故障会通过第 10 轮的 ShiftRows 扩散到密文的恰好 4 个字节（列传播模式 `{0,7,10,13}`、`{1,4,11,14}`、`{2,5,8,15}` 或 `{3,6,9,12}`），而其余 12 个字节保持正确。这种"4 字节列故障"是 phoenixAES 恢复轮密钥的输入格式。在散点图中，R9 红色带的 IC 跨度（约 100 条指令）直接给出了故障扫描窗口的精确范围。
+- **IC 0.7M–3M（大量黄色柱）**：CDM 启动时的 VM 初始化——解释器依次解密约 30 个 VM 函数的字节码，每个函数解密一次就不再重复。这些是"一次性"的 AES 调用，不是笔者的目标。
+- **IC 10M–13.5M（三个窄簇）**：keybox 相关的三次独立 AES 操作，每组之间有几十万 IC 的空白间隙，时间上完全分离。
 
-为什么不在 R10 注入？因为第 10 轮没有 MixColumns，单字节故障只影响输出的 1 个字节，无法产生 4 字节列故障——phoenixAES 需要的恰恰是 MixColumns 带来的列扩散效应。为什么不在 R8 或更早？因为故障会经过更多轮的 MixColumns 扩散，影响的输出字节数会指数增长（8 字节、16 字节），失去了"恰好 4 字节"的精确可控性。**R9 是唯一的甜蜜点**——故障刚好经过 1 次 MixColumns（在 R9 内部），然后直接到达没有 MixColumns 的 R10 输出。
+三个窄簇分别是什么？笔者用 SQL 查询每个簇内的 T-table 读取点的 VM PC 地址（即：是哪段代码在查 T-table），发现三组 PC 地址完全不重叠：
 
-##### 第四步：从散点图推导 DFA 参数
+| 时间位置 | VM PC 范围 | 读取次数 | 是什么 | 为什么这样判断 |
+|---------|-----------|---------|-------|-------------|
+| IC ~10M | `0x6802f207`–`0x6802f4bd` | ~200 | VM 函数解密器 | PC 与前面 VM 初始化阶段的模式相同，是最后一批字节码解密 |
+| **IC ~11.25M** | **`0x6802a2a2`–`0x6802a8cd`** | **~240** | **d 区域 AES（目标!）** | **PC 地址全新——之前从未出现过，且出现时间与 d 区域密文写入精确重叠** |
+| IC ~13.2M | `0x680292bb`–`0x68029823` | ~200 | ROOT_KEY AES | PC 与 Neodyme 公开的 `0x6802E275` 相近，且出现时间与 `ay64.dat` 文件写入重叠 |
 
-将以上视觉观察转化为 DFA 脚本的具体参数：
+**关键推断**：函数 2（IC ~11.25M）的 PC 地址 `0x6802a2a2` 在整个 trace 中**首次出现**就在 IC 11.25M——它不是 VM 初始化阶段的旧函数，而是一个全新的 AES 代码路径。结合它的执行时间与 d 区域密文写入的精确重叠，笔者确信这就是 d 区域的加密函数。**这就是笔者要攻击的目标。**
 
-| DFA 参数 | 值 | 散点图推导依据 |
-|----------|-----|---------------|
-| `FAULT_START_ADDR` | `0x6802a2a2` | R1 绿色带的第一个点的 VM PC——d 区域 AES 第一轮的首次 T-table 读取地址 |
-| `EVAL_HOOK_PC` | `0x6802a8cd` | R10 紫色带最后一个点的 VM PC——密文最后一字节写入完成的评估点 |
-| `FAULT_TARGET_START` | 1050 | R9 红色带起始 IC 相对于 R1 起始 IC 的指令偏移量 |
-| `FAULT_TARGET_MAX` | 1400 | R9 红色带终止 IC + 安全裕量，确保覆盖第 9 轮所有可注入位置 |
-| 快照触发点 | `0x6802a106` | IC 11,250,259，d 区域明文首次写入时刻（R1 之前） |
+##### 第五步：放大目标函数，确认 AES-128 的 10 轮结构
 
-**交叉验证**：函数 2 的 T-table 读取时间窗口（IC 11,250,675–11,252,156）与 d 区域密文写入时间（IC 11,251,959–11,252,156）精确重叠，且 VM PC `0x6802a2a2` 在整个执行过程中**仅**出现 15 次（= 3 个 AES-CBC 块 × 5 个奇数轮，即 Group A 的 R1/R3/R5/R7/R9），确认其为 d 区域 AES 的专用代码段，排除了误匹配其他 AES 函数的可能。
+锁定了函数 2 的 IC 范围（11.25M–11.26M）后，用 SQL 过滤掉非 T-table 地址的读取（只保留 `0x68025000`–`0x68029000` 范围内的点），VM 噪声被完全滤除。下图展示了第 1 个 AES-CBC 分组（前 16 字节，9 轮 T-table + 1 轮 S-box = 144 个点）的放大视图，**每个彩色框圈出了 1 轮 AES 的全部 T-table 查表点**：
+
+![AES 轮结构详图](https://overkazaf.github.io/blogs/images/widevine/trace_aes_rounds_detail.png)
+*每个框 = 1 轮 AES，框内每个圆点 = 1 次 T-table 查表。绿框 = Group A（奇数轮），黄框 = Group B（偶数轮），红框 = DFA 注入目标轮，紫色小点 = S-box 最终轮（注意 Y 轴位置偏低 = 地址不同）。数框数即可判断 AES 类型。*
+
+怎么确认是 AES-128？
+
+1. **数簇数**：9 个 T-table 簇 + 1 个 S-box 尾巴 = 10 轮 = AES-128（AES-192 是 11+1，AES-256 是 13+1）
+2. **每簇 ~16 个点**：与 AES 每轮 4×4=16 次查表完全吻合
+3. **Green/Yellow 交替**：奇数轮的 T-table 读取来自 VM 地址段 A（PC `0x6802a2xx`），偶数轮来自地址段 B（PC `0x6802a5xx`）。这说明白盒实现**用两套不同的 VM 字节码分别编码了奇数轮和偶数轮**——功能相同（都是 T-table 查表 + XOR），但字节码不同。这是一种混淆手法：如果攻击者试图通过静态分析字节码来理解 AES 逻辑，他需要分析两段看似不同的代码才能发现它们做的是同一件事。**对 DFA 的实际意义**：这种交替本身不影响 DFA 攻击（DFA 只关心输出差分，不关心代码用哪套字节码），但它为笔者提供了一个额外的**轮计数校验**——9 个簇中出现 5 次 Group A + 4 次 Group B = 严格的 A-B-A-B-A 交替 = 确认是 9 个独立的轮而非其他结构
+4. **R10 的 Y 轴偏移**：第 10 轮读取的地址在 `0x68025000`（S-box，256B）而非 `0x68026000`（T-table，4KB），在散点图上 Y 坐标自然偏移——这是 AES 最终轮的签名
+
+d 区域共 48 字节 = 3 个 AES-CBC 分组，因此上图右侧呈现 3 组重复的轮模式。
+
+##### 第六步：从图中读取 DFA 参数
+
+现在每个点的精确坐标（IC 值 + PC 地址）都可以直接从散点图上读取。R9 的位置给出 DFA 故障注入的全部参数：
+
+| 参数 | 值 | 怎么从图中读到的 |
+|------|-----|---------------|
+| `FAULT_START_ADDR` | `0x6802a2a2` | R1 第一个点的 VM PC——d 区域 AES 第一轮首次 T-table 读取 |
+| `EVAL_HOOK_PC` | `0x6802a8cd` | R10 最后一个点的 VM PC——密文写入完成的评估点 |
+| `FAULT_TARGET_START` | 1050 | R9 起始 IC − R1 起始 IC = 故障扫描窗口起点 |
+| `FAULT_TARGET_MAX` | 1400 | R9 终止 IC − R1 起始 IC + 安全裕量 |
+| 快照触发点 | `0x6802a106` | R1 之前、d 区域明文首次写入时刻 |
+
+**为什么在 R9 注入？** R9 是 DFA 的唯一甜蜜点。跳过 R9 中的一条指令 → 故障经 MixColumns 扩散到 4 个字节 → 直接到达 R10（无 MixColumns）输出 = 恰好 4 字节列故障。R10 注入只影响 1 字节（不够），R8 注入影响 8+ 字节（太多）。
+
+**交叉验证**：PC `0x6802a2a2` 在整个 trace 中仅出现 15 次 = 3 个 AES-CBC 块 × 5 个奇数轮（Group A 的 R1/R3/R5/R7/R9），确认这个地址是 d 区域 AES 的专用代码段。
+
+##### 这个方法还适用于哪些场景？
+
+Trace 可视化 + T-table 模式识别不仅限于 Widevine，它是一个**通用的白盒 AES 定位方法**，适用于任何使用 T-table 实现的 AES 加密。已知的适用场景包括：
+
+| 场景 | 目标 | 适用性 |
+|------|------|--------|
+| 其他 DRM 的白盒 AES | PlayReady 等 DRM 的软件解密路径 | ✅ 只要使用 T-table |
+| 移动 App 加固 | 梆梆、爱加密等加固方案中的 AES 密钥提取 | ✅ 大多数加固方案的 AES 仍用 T-table |
+| IoT 固件 | 嵌入式设备的 AES 密钥保护 | ✅ 嵌入式通常无 AES-NI |
+| WhibOx 挑战赛 | 白盒密码学竞赛中的 AES 实现 | ⚠️ 高级参赛方案可能不用 T-table |
+| 新版 Chrome CDM | 4.10.2934+ 的 LZMA VM 字节码 | ❌ T-table 模式被 VM 打散（见 §7.5） |
+| AES-NI 硬件加速 | Intel/AMD CPU 上的 `aesenc` 指令 | ❌ 纯寄存器操作，无内存访问 |
+
+**适用条件总结**：目标程序使用 T-table 实现的 AES + 可以在仿真或插桩环境中记录内存访问 trace。满足这两个条件，就可以用本文的方法定位 AES 并实施 DFA。
 
 #### 4.3.3 创建模式 DFA 实施与 95 个列故障
 
@@ -699,7 +770,15 @@ AES-128 加密（T-table 实现）：
 round_10_key = 49B7a21e3c8f******d9e0c17bFB68
 ```
 
-通过标准 AES 密钥调度算法反向迭代（Key Schedule Inversion），逐轮反推回第 0 轮，得到初始 AES 密钥即 derived_key：
+通过标准 AES 密钥调度算法反向迭代（Key Schedule Inversion），逐轮反推回第 0 轮，得到初始 AES 密钥即 derived_key。
+
+**为什么可以反推？** AES 的密钥调度（Key Schedule）是一个**可逆函数**。正向过程是：从 16 字节初始密钥 K₀ 依次派生出 K₁, K₂, ..., K₁₀ 共 10 个轮密钥，每一步只用到 XOR、字节替换（SubWord）和轮常数（Rcon）——这三个操作都是可逆的。具体来说，已知 K₁₀（第 10 轮轮密钥），可以通过以下步骤逐轮反推：
+
+1. K₉ 的后 3 列 = K₁₀ 的后 3 列 XOR K₁₀ 的前 3 列（XOR 可逆）
+2. K₉ 的第 0 列 = K₁₀ 的第 0 列 XOR SubWord(RotWord(K₉ 的第 3 列)) XOR Rcon₁₀（SubWord 查 S-box 逆表可逆，Rcon 是常量）
+3. 以此类推，从 K₉ 反推 K₈，直到 K₀
+
+整个过程是确定性的——给定任意一轮的轮密钥，都可以唯一地恢复初始密钥。这就是为什么 DFA 只需要恢复第 10 轮轮密钥，就足以得到原始 AES 密钥。`phoenixAES` 工具内部已封装了这个反推过程。
 
 ```
 derived_key = b1d941823c9a******5c6d7b61f995dc
@@ -715,7 +794,7 @@ derived_key = b1d941823c9a******5c6d7b61f995dc
 *DFA 执行结果：95 个干净列故障，phoenixAES 恢复 derived_key*
 
 
-### 4.4 Phase 3：d 区域明文结构逆向
+### 4.4 阶段 ③：d 区域明文结构逆向
 
 > 拿到 derived_key 后，笔者面对的下一个问题是：被它加密的 48 字节到底是什么？直觉上，既然 d 用于 provisioning 认证，其明文应该包含 device_key。但"应该"不是证据——笔者需要从内存 dump 中逐段识别结构，每个猜测都用密码学运算交叉验证。
 
@@ -747,11 +826,11 @@ derived_key 确认后，下一个问题是：d 区域的 48 字节明文到底�
 
 ```
 
-| d_plaintext = device_key || SHA1(device_key) || b'\x03' || b'\x00' * 11
+d_plaintext = device_key || SHA1(device_key) || b'\x03' || b'\x00' * 11
 d = AES_CBC_ENCRYPT(derived_key, d_plaintext, IV=b'\x00' * 16)
 ```
 
-### 4.5 Phase 4：gen_keybox.py — 纯 Python keybox 生成器
+### 4.5 阶段 ④：gen_keybox.py — 纯 Python keybox 生成器
 
 > 理论上，前三个 Phase 的产出已经构成了离线生成 keybox 的充分条件。但"理论上充分"和"工程上正确"之间往往隔着若干细节陷阱。笔者在实现 `gen_keybox.py` 的过程中踩了两个坑：version/l3_version 字段是大端序（不是 x86 的小端序），CRC32 使用的是 MPEG-2 变体（多项式 `0x04C11DB7`，初始值 `0xFFFFFFFF`，不做最终取反）而非 zlib 的标准 CRC32。最终的验证标准也是最严格的：与模拟器原生输出**逐字节完美匹配**。
 
@@ -770,27 +849,20 @@ d = AES_CBC_ENCRYPT(derived_key, d_plaintext, IV=b'\x00' * 16)
 
 通过 `--verify` 模式与模拟器实际输出的 `ay64.dat` 逐字节对比，验证结果：**MATCH = True**，字节完美匹配。
 
-
-![Keybox字节级对比验证](https://overkazaf.github.io/blogs/images/widevine/keybox_structure.png)
-
-
 ![gen_keybox.py 核心代码](https://overkazaf.github.io/blogs/images/widevine/code_genbox.png)
 *make_keybox() 函数：从 device_key 到完整 128 字节 keybox 的纯 Python 实现*
 
 ![gen_keybox.py 验证输出](https://overkazaf.github.io/blogs/images/widevine/code_genbox_output.png)
-*左：与模拟器输出字节完美匹配。右：批量生成 5 个不同 device_id 的 keybox*
+*上：`--verify` 模式，生成的 keybox 与模拟器原始输出逐字节比对，MATCH: True。下：`--batch 5` 模式，批量生成 ALPHA–ECHO 5 个不同 device_id 的 keybox。*
 
 
 ---
 
 ## 五、端到端验证
 
-### 5.1 Phase 5a：Google Provisioning 验证（6 个 device_key）
+### 5.1 阶段 ⑤a：Google Provisioning 验证（6 个 device_key）
 
 > 到这一步，笔者需要回答一个关键问题：Google 的 provisioning 服务器是否只验证密码学正确性，还是会额外检查 device_id 的来源？如果是前者，笔者合成的 keybox 就能通过；如果是后者，就需要使用模拟器原生的 device_key。此外，这一阶段的工程挑战远超密码学本身——模拟器的 IPv6 不通、mitmproxy CA 证书在重启后丢失、iptables DNAT 规则被意外清空，每一个都消耗了大量调试时间。
-
-
-![批量WVD生产全链路时序图](https://overkazaf.github.io/blogs/images/widevine/pipeline.png)
 
 
 Widevine provisioning 是 CDM 向 Google 的 `clientauth.googleapis.com` 注册设备身份的过程。CDM 使用 keybox 中的 `device_key` 派生加密密钥，构建 provisioning request protobuf，通过 RSA-OAEP 加密传输，Google 服务器验证后返回设备证书（包含 RSA 私钥，由 Google 签名）。
@@ -839,7 +911,7 @@ Widevine provisioning 是 CDM 向 Google 的 `clientauth.googleapis.com` 注册�
 | 1. 获取目标 CDM | 从目标手机中提取 `libwvhidl.so` 或 `libwvdrmengine.so` | `adb pull /vendor/lib/libwvhidl.so`，不同厂商路径不同 |
 | 2. 配置仿真环境 | 在 Qiling 中加载目标 CDM + 对应 Android 版本的 rootfs | ARM 架构需 ARM 版 Qiling（或交叉仿真） |
 | 3. 重做 Trace + DFA | 对新 CDM 的白盒 AES 重新采集 trace → 散点图定位 → DFA 提取 ROOT_KEY + derived_key | 每个 CDM build 的密钥不同，地址不同 |
-| 4. 还原 keybox 结构 | d 区域结构可能一致（`dk\|\|SHA1(dk)\|\|0x03\|\|zeros`），需验证 | version / l3_version 字段可能变化 |
+| 4. 还原 keybox 结构 | d 区域结构可能一致（`dk‖SHA1(dk)‖0x03‖zeros`），需验证 | version / l3_version 字段可能变化 |
 | 5. gen_keybox.py 适配 | 替换 ROOT_KEY、derived_key、C_VALUE 为新值 | C_VALUE 仍是编译时常量，从新 keybox 中读取 |
 | 6. Provisioning + KeyDive | 在对应型号的真机或模拟器上执行两步法 | 真机需 root + Frida server |
 
@@ -847,7 +919,7 @@ Widevine provisioning 是 CDM 向 Google 的 `clientauth.googleapis.com` 注册�
 
 **捷径**：如果目标不是 keybox 量产，而只是获取特定手机的 WVD，更直接的方法是在 root 真机上运行 [KeyDive](https://github.com/hyugogirubato/KeyDive) + DrmTrigger，一次性提取 RSA 私钥——无需经过 DFA 和 keybox 合成的完整链路。本文的 DFA 路线在需要**批量、离线、不依赖真机**的场景下才有独特价值。
 
-### 5.2 Phase 5b：Netflix DRM 全流程验证
+### 5.2 阶段 ⑤b：Netflix DRM 全流程验证
 
 > 最终验证需要走完从 keybox 到视频解密的全部链路。笔者原本计划让 KeyDive 和 DrmTrigger 同时运行以一步完成 provisioning + 密钥提取，但 Frida 的 hook 开销导致 DrmTrigger 的 HTTPS 请求反复超时。解决方案是将流程拆为两步：先不带 KeyDive 完成 provisioning（让 CDM 全速运行），再重启 HAL 后单独用 KeyDive 抓取已安装的证书。这个看似简单的工程妥协花了笔者近两个小时才定位到根因。
 
@@ -860,9 +932,9 @@ Provisioning 完成后，通过 [KeyDive](https://github.com/hyugogirubato/KeyDi
 ![nfmsl 执行输出](https://overkazaf.github.io/blogs/images/widevine/nfmsl_output.png)
 *nfmsl.py 完整执行流程：MSL 握手 → licensedManifest → Widevine License Exchange → 内容密钥提取 → 视频下载与解密*
 
-> **给初学者的建议**：如果读者对 DRM 协议逆向感兴趣，笔者建议从**音乐流媒体**入手——[Spotify](https://developer.spotify.com/documentation/)、[Apple Music](https://developer.apple.com/musickit/) 和 [Tidal](https://tidal.com/) 的 DRM 实现相对简洁（通常基于 Widevine L3 的标准 CENC 流程），协议复杂度远低于 Netflix 的自研 MSL。这些平台适合用来建立对 DRM 密钥交换、License 解析和内容解密的基础认知，之后再挑战 Netflix 等重量级目标。
+> **给初学者的建议**：如果读者对 DRM 协议逆向感兴趣，笔者建议从**音乐流媒体**入手——[Spotify](https://developer.spotify.com/documentation/) 和 [Tidal](https://tidal.com/) 的 DRM 实现相对简洁（基于 Widevine L3 的标准 CENC 流程），协议复杂度远低于 Netflix 的自研 MSL。这些平台适合用来建立对 DRM 密钥交换、License 解析和内容解密的基础认知，之后再挑战 Netflix 等重量级目标。
 
-验证内容为《怪奇物语》第一季第一集（Stranger Things S1E1）：
+验证内容为《心灵猎人》第一季第一集（Mindhunter S1E1）：
 
 | 验证步骤 | 结果 |
 |----------|------|
@@ -870,14 +942,14 @@ Provisioning 完成后，通过 [KeyDive](https://github.com/hyugogirubato/KeyDi
 | `licensedManifest` 请求 | HTTP 200，响应体 315 KB |
 | 视频内容密钥提取 | 成功（KID + 16 字节 Key） |
 | 音频内容密钥提取 | 成功（KID + 16 字节 Key） |
-| mp4decrypt 解密验证 | AV1 1280×720 23.98fps，无 block artifact |
+| mp4decrypt 解密验证 | H.264/HEVC 960×540 23.98fps，无 block artifact |
 
 两条内容密钥均成功提取，全流程验证通过，证明 `gen_keybox.py` 生成的 keybox 对 Netflix 完全有效。
 
 以下是解密后的视频帧抽样，从两部不同的 Netflix 原创剧集中分别取 3 帧和 2 帧，确认解密结果画面完整、无 block artifact：
 
 ![Netflix 解密验证 — 视频帧抽样](https://overkazaf.github.io/blogs/images/widevine/netflix_decrypt_proof.png)
-*上排：Netflix ID 80114856 在 t=30s、120s、300s 时的截帧（H.264 960×540）。下排：Netflix ID 82784809 在 t=60s、180s 时的截帧（HEVC 960×540）。解密后画面完整，无 block artifact。*
+*上排：《心灵猎人》Mindhunter（ID 80114856）在 t=30s、120s、300s 时的截帧（H.264 960×540）。下排：Netflix ID 82784809 在 t=60s、180s 时的截帧（HEVC 960×540）。解密后画面完整，无 block artifact。*
 
 
 ---
@@ -964,7 +1036,7 @@ C_VALUE（`9044aa08302d******e390990c18ed94`）作为编译时常量的发现，
 - **VM 字节码指令集逆向**：笔者的 trace 分析表明 CDM 内部存在多层 VM 解释器。对 VM 指令集的完整逆向（参考 WP-E26 在 `0xf97040` 发现的字节码 VM）可能揭示 aes_key 的派生过程；
 - **DCA（差分计算分析）**：David Buchanan 最初提出的 DCA 方法通过统计分析大量执行 trace 来定位密钥字节，适用于抵抗 DFA 的白盒实现；
 - **跨 build 分析**：不同 CDM build 版本的 C_VALUE 和密钥派生机制是否一致，值得系统性比较；
-- **纯 Python provisioning**：目前白盒签名密钥是唯一阻塞纯 Python provisioning 的要素，一旦该密钥被提取，整个流程可完全脱离模拟器运行。
+- **纯 Python provisioning（脱离模拟器）**：目前 keybox 生成已实现纯 Python 离线化，但 Google provisioning 仍需通过 Android 模拟器中转——因为 provisioning request 的外层 HMAC 签名由白盒 VM 计算，签名密钥无法提取。要实现完全脱离模拟器的纯 Python provisioning，需要解决 Google provisioning 接口的 Protocol Buffer 结构对齐和白盒签名密钥的还原，这是一个独立的研究课题。
 
 ### 7.5 给 AI 时代的一瓢冷水：人与 Agent 的能力边界
 
@@ -999,13 +1071,13 @@ C_VALUE（`9044aa08302d******e390990c18ed94`）作为编译时常量的发现，
 
 **AI 做不到的事情——也是本研究的真正难点：**
 
-1. **看散点图**。Trace 可视化的突破时刻依赖于人类视觉系统对"T-table 爆发模式"的直觉识别。笔者尝试让 AI 分析同一张散点图的原始数据，得到的是统计摘要而非"这里有 3 组独立的 AES 函数"的洞察。模式识别在结构化数据上 AI 很强，但在**未定义特征的视觉噪声中**发现新模式，人类的注意力分配仍然不可替代。
+1. **看图决策**。本研究的突破依赖于一系列**人类主导的视觉判断**：在热力图上注意到异常亮竖条 → 判断其宽度约 4KB 符合 T-table 特征 → 在柱状图上区分 VM 初始化阶段与 keybox AES → 在过滤后的轮结构图上数出 9+1 = AES-128。这些判断跨越了热力图、柱状图、过滤散点图三种不同的可视化，每一步都需要**知道该看什么、忽略什么**。笔者尝试让 AI 直接分析 637K 条 trace 原始数据，得到的是统计摘要（"地址 0x68026000 被访问了 130K 次"），而非"这是 AES T-table，旁边那些高频访问的是 VM 字节码，应该忽略"的判断——后者需要对"什么是 T-table"和"什么不是"的领域知识。
 
 2. **在仿真器中调试**。Qiling 的快照恢复、内存 hook、故障注入需要在交互式环境中反复试错。每次 DFA 失败后的"为什么这个地址没命中？"需要结合对 CDM 运行时状态的实时观察来判断——这不是一个可以用 prompt 描述的任务。
 
 3. **突破 OLLVM 混淆**。笔者在 vendor_key 提取过程中尝试了 MBA（Mixed Boolean-Arithmetic）反混淆、符号执行（angr 9.2 + miasm 0.1.5）、Z3 约束求解（z3 4.13）等方法，全部受阻于状态空间爆炸。这类需要**在失败中调整策略**的迭代过程，AI 缺乏对"当前方法为什么不 work"的判断力。
 
-4. **OLLVM 反混淆是 AI Agent 的"账单黑洞"**。笔者实测：让 AI Agent 直接攻击 OLLVM 控制流平坦化（如使用 angr 的 CFGFast 恢复、IDA 的 [D-810](https://github.com/joydo/d810) 插件、或 [Miasm](https://github.com/cea-sec/miasm) 符号执行），单个函数（如 CDM 的 `0xd2c7fc`，约 8000 条指令）的分析就会产生数十万 token 的上下文。笔者在一次实际调试中，让 Agent 尝试用 angr CFGFast 恢复 `libwidevinecdm.so` 中一个 OLLVM 函数的控制流，前后迭代 12 轮仍未收敛，累计消耗约 40 万 token（按 Opus 定价约 $6）——而结果仍然是错误的。更现实的问题是，部分模型（如 Claude Opus 4.7）对涉及 DRM 逆向的 prompt 会触发安全策略拒绝响应，导致多轮对话链中途断裂，之前的上下文投入全部浪费。笔者后续计划另文分享过 OLLVM 6神 混淆保护的实践经验，包括 angr + Miasm 组合拳和手动 dispatch table 还原的具体方法。
+4. **OLLVM 反混淆是 AI Agent 的"账单黑洞"**。笔者实测：让 AI Agent 直接攻击 OLLVM 控制流平坦化（如使用 angr 的 CFGFast 恢复、IDA 的 [D-810](https://github.com/joydo/d810) 插件、或 [Miasm](https://github.com/cea-sec/miasm) 符号执行），单个函数（如 CDM 的 `0xd2c7fc`，约 8000 条指令）的分析就会产生数十万 token 的上下文。笔者在一次实际调试中，让 Agent 尝试用 angr CFGFast 恢复 `libwidevinecdm.so` 中一个 OLLVM 函数的控制流，前后迭代 12 轮仍未收敛，累计消耗约 40 万 token（按 Opus 定价约 $6）——而结果仍然是错误的。更现实的问题是，部分模型（如 Claude Opus 4.7）对涉及 DRM 逆向的 prompt 会触发安全策略拒绝响应，导致多轮对话链中途断裂，之前的上下文投入全部浪费。笔者后续计划另文分享过六神算法的 OLLVM 混淆保护的实践经验，包括 angr + Miasm 组合拳和手动 dispatch table 还原的具体方法。
 
 #### 如果你觉得 AI 无所不能，请试试这些挑战
 
@@ -1019,20 +1091,20 @@ C_VALUE（`9044aa08302d******e390990c18ed94`）作为编译时常量的发现，
 | **CHES CTF** | 极高 | CHES（密码学硬件与嵌入式系统）年度 CTF，白盒密码学是常设赛道。2024 年的白盒挑战至今未被完全攻破。 | [ches.iacr.org](https://ches.iacr.org/) |
 | **Tigress C Obfuscator** | 高 | 学术级代码混淆器。用它保护一个简单的 AES 实现，然后让 AI Agent 提取密钥。MBA + 控制流平坦化 + 不透明谓词的组合足以让任何自动化工具失效。 | [tigress.wtf](https://tigress.wtf/) |
 
-笔者在本研究中的切身体会是：**AI 是极好的副驾驶，但方向盘必须在人手上**。DFA 的地址选择、trace 的视觉解读、故障模式的有效性判断、失败后的策略切换——这些构成了逆向工程的核心决策链，每一环都需要人类的判断力。AI 能让你更快地到达目的地，但它不知道目的地在哪里。
+本次研究的切身体会是：**AI 是极好的副驾驶，但方向盘必须在人手上**。DFA 的地址选择、trace 的视觉解读、故障模式的有效性判断、失败后的策略切换——这些构成了逆向工程的核心决策链，每一环都需要人类的判断力。AI 能让你更快地到达目的地，但它不知道目的地在哪里。
 
-当然，笔者并不认为这条边界是永恒的。也许几年后，AI 能够自主完成从 trace 采集到 DFA 参数推导的全链路——毕竟，"在散点图中识别 T-table 簇"本质上是一个模式识别问题，而模式识别恰恰是 AI 最擅长的领域。但即便到了那一天，DFA 之所以能工作，依赖的仍然是 AES 的 ShiftRows 列传播结构；白盒之所以能被攻破，是因为密钥必须在某个时刻参与运算。这些**数学结构的不变性**不会因为工具的进化而改变。Rijndael 的优雅、差分传播的确定性、群论对密钥空间的约束——这些是比任何工具都更持久的东西。
+这条边界不是永恒的。也许几年后，AI 能自主完成从 trace 采集到 DFA 参数推导的全链路——"在热力图中识别 T-table 亮条"本质上是模式识别问题，恰恰是 AI 擅长的领域。但即便那一天到来，DFA 之所以有效，依赖的仍然是 AES ShiftRows 的列传播结构；白盒之所以可破，是因为密钥必须参与运算。**数学结构的不变性**不随工具进化而改变。
 
-不过，笔者必须诚实地补充一个反例：在对 Chrome 桌面端 CDM 4.10.2934（比本文的 build 4464 新了约 6 年）的后续研究中，笔者发现上述"数学结构不变"的乐观假设**并不完全成立**。新版 CDM 引入了 LZMA 压缩的字节码 VM——AES 操作不再直接通过 T-table 执行，而是被编译为 VM 指令流，在运行时由一个定制解释器（dispatch base `0xf97160`，约 237 个 opcode）逐条执行。T-table 的内存访问模式被 VM 的间接寻址彻底打散，TraceGraph 散点图上不再呈现本文中那种清晰的"爆发-间隙"节奏。换言之，**DFA 的数学原理没有变，但 DFA 所依赖的"可观测信号"（T-table 内存访问模式）被 VM 层抹除了**。这迫使攻击路线从"观察数据流"退回到"逆向 VM 指令集"——正是 Patat 团队坦承未能突破的那条路。
+不过，需要诚实补充一个反例：Chrome CDM 4.10.2934（比本文的 build 4464 新约 6 年）引入了 LZMA 压缩的字节码 VM（dispatch base `0xf97160`，约 237 个 opcode），AES 不再直接通过 T-table 执行，而是被编译为 VM 指令流。T-table 的内存访问模式被 VM 间接寻址彻底打散，热力图上不再有清晰的亮条。**DFA 的数学原理没变，但可观测信号被 VM 层抹除了**——攻击路线被迫从"观察数据流"退回到"逆向 VM 指令集"，也就是 Patat 团队坦承未能突破的那条路。
 
 这个发现提醒笔者：数学不会过时，但**数学的可观测性**会被工程手段压制。安全研究者需要同时理解两个层面——密码学的数学结构告诉你"攻击理论上可行"，而实现层的工程防护决定了"攻击实践上能否触达"。工具会迭代，但这种双层思维不会过时。与其焦虑 AI 是否会取代逆向工程师，不如把时间花在理解这些结构上——它们才是真正的"不可 revoke 的密钥"。
 
-> 所以，下次有人跟你说"AI 能自动破解白盒 AES"的时候，请友善地邀请他去 [WhibOx](https://whibox.io/) 上领个奖回来——奖金不多，但足以证明这件事的难度不是 prompt engineering 能解决的。
+> 所以，下次有人跟你说"AI 能自动破解白盒 AES"的时候，请友善地邀请他去 [WhibOx](https://whibox.io/) 上领个奖回来——除非你真正手动解决过一个白盒挑战（或者开了天眼），否则 prompt engineering、context engineering、harness engineering 都不会让你更接近答案。
 
 ---
 
 
-## 九、相关工作综述
+## 八、相关工作综述
 
 笔者在研究过程中系统调研了 Widevine L3 安全分析领域的已有工作。以下按时间线整理各研究团队/个人的贡献，并与本研究进行对比。
 
@@ -1128,7 +1200,7 @@ Hadad 在 2020 年公开了 [widevine-l3-playground](https://github.com/AvalonsW
 - 友人孙先生慷慨提供的 MSL 协议客户端脚本
 
 
-## 九点五、L3 WVD 能做什么 & 入门建议
+## 九、L3 WVD 能做什么 & 入门建议
 
 ### 有了 L3 WVD 可以做什么
 
@@ -1152,7 +1224,7 @@ Hadad 在 2020 年公开了 [widevine-l3-playground](https://github.com/AvalonsW
 
 3. **法律风险是真实的**。DMCA（美国）、《计算机软件保护条例》（中国）、EU Copyright Directive（欧盟）对规避技术保护措施有明确的法律责任。用 WVD 解密受版权保护的内容进行传播，在多数司法管辖区构成违法行为。笔者的所有工作仅限于安全研究和协议分析，不涉及内容传播。
 
-> 坦白说，笔者在"拿到 WVD 之后能干什么"这件事上并没有太多实战经验——上面那张表更多是理论上的可能性。笔者的兴趣集中在密码学和逆向工程本身，享受的是把白盒拆开的过程而非拆开之后的"战利品"。至于拿着钥匙去开哪扇门，还请各位读者三思。如果你对安全研究本身感兴趣，非常欢迎交流（overkazaf@gmail.com）。
+> 坦白说，笔者在"拿到 WVD 之后能干什么"这件事上并没有太多实战经验——上面那张表更多是理论上的可能性。笔者的兴趣集中在密码学和逆向工程本身，享受的是把白盒拆开的过程而非拆开之后的"战利品"。至于拿着钥匙去开哪扇门，还请各位读者三思。如果你对安全研究本身感兴趣，非常欢迎交流（overkazaf@gmail.com / vx: `_0xAF_`）。
 
 ### 给感兴趣的读者：从音乐流媒体入门
 
@@ -1167,19 +1239,20 @@ Level 1 → Spotify (Web Player)
            优势：Web 端可用 Chrome DevTools 直接观察 EME 调用
            资源：EME Logger 扩展、CDM 日志
 
-Level 2 → Apple Music (Android / Web)
-           协议：Widevine L3 (Android) 或 FairPlay (Web/iOS)
-           优势：可对比同一平台的两种 DRM 实现差异
-           资源：Apple MusicKit 文档
-
-Level 3 → Tidal (HiFi / MQA)
+Level 2 → Tidal (HiFi / MQA)
            协议：Widevine L3，支持无损音频
            优势：License 格式相对简洁，适合学习 CENC 标准
            资源：Tidal API 文档
 
-Level 4 → Netflix / Disney+ / Prime Video
-           协议：Widevine + 自研安全层（如 Netflix MSL）
-           难度：协议复杂度跳跃式上升，需要理解 MSL/CBOR/多会话管理
+Level 3 → Disney+ / Prime Video (PlayReady + Widevine)
+           协议：PlayReady (Edge/Windows) + Widevine (Chrome/Android)
+           优势：同一内容可对比两种 DRM 的 License 差异
+           资源：Microsoft PlayReady 文档、DASH-IF 互操作性指南
+
+Level 4 → YouTube Premium / HBO Max
+           协议：Widevine CENC (YouTube) / Widevine + PlayReady (HBO Max)
+           优势：YouTube 的 DASH manifest 公开可观察；HBO Max 支持多 DRM 切换，适合对比分析
+           进阶：Netflix（自研 MSL 协议，复杂度再上一个台阶）
 ```
 
 #### 每个 Level 需要掌握的技能
@@ -1187,11 +1260,23 @@ Level 4 → Netflix / Disney+ / Prime Video
 | Level | 需要学习 | 关键工具 |
 |-------|---------|---------|
 | 1 | EME API、CENC 标准、protobuf 基础 | Chrome DevTools、[EME Logger](https://chrome.google.com/webstore/detail/eme-call-and-event-logger)、pywidevine |
-| 2 | FairPlay vs Widevine 差异、HLS/DASH 协议 | ffprobe、mp4dump、Bento4 |
-| 3 | License 解析、Key Container 结构、PSSH 盒子 | mp4decrypt、[shaka-packager](https://github.com/shaka-project/shaka-packager) |
-| 4 | 自研协议逆向（MSL/CBOR）、会话管理、反调试对抗 | Frida、mitmproxy、自定义客户端 |
+| 2 | License 解析、Key Container 结构、PSSH 盒子 | mp4decrypt、[shaka-packager](https://github.com/shaka-project/shaka-packager)、ffprobe |
+| 3 | PlayReady vs Widevine 差异、HLS/DASH 协议、SL2000/3000 安全级别 | [pyplayready](https://github.com/devine-dl/pyplayready)、Bento4、mp4dump |
+| 4 | DASH manifest 分析、HLS 流抓取、多 DRM 对比测试 | [yt-dlp](https://github.com/yt-dlp/yt-dlp)、Frida、mitmproxy |
 
-> **笔者的经验**：从 Spotify Web Player 的 EME 调用开始，用 Chrome DevTools 的 `chrome://media-internals` 观察 CDM 的初始化、License 请求和密钥加载过程。这比直接面对 Netflix 的 MSL 协议温和得多——后者笔者花了相当长的时间才理清（感谢一位友人孙先生提供的 MSL 客户端脚本，省去了大量协议逆向工作）。
+#### 扩展阅读：DRM 安全研究相关论文与工具
+
+| 类别 | 资源 | 说明 |
+|------|------|------|
+| **PlayReady 安全分析** | [Dunn & Polakis, *Understanding and Undermining Microsoft's PlayReady DRM*](https://www.usenix.org/conference/usenixsecurity24/presentation/dunn) (USENIX Security 2024) | 首篇系统分析 PlayReady SL3000 的学术论文，揭示了 License 结构和密钥派生链 |
+| **Widevine 协议逆向** | [Patat et al., *Attacking Widevine's L3 CDM*](https://arxiv.org/abs/2204.09298) (2025) | WideXtractor 工具 + OEMCrypto 接口分析 + CVE-2021-0639 |
+| **白盒 DFA 方法论** | [Quarkslab Blog: DFA on White-box AES](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html) | TraceGraph 方法论原始出处，本文的直接灵感来源 |
+| **DRM 通用工具** | [devine-dl/pywidevine](https://github.com/devine-dl/pywidevine)、[devine-dl/pyplayready](https://github.com/devine-dl/pyplayready) | Widevine / PlayReady 的 Python 客户端库，支持 License 解析和设备管理 |
+| **EME 标准** | [W3C Encrypted Media Extensions](https://www.w3.org/TR/encrypted-media/) | 浏览器 DRM 接口标准，理解 CDM 与浏览器之间的交互协议 |
+| **DASH/CENC 标准** | [DASH-IF Interoperability Guidelines](https://dashif.org/guidelines/) | 多 DRM 互操作的行业标准，理解 PSSH、ContentProtection、Key Rotation |
+| **密钥恢复工具** | [SideChannelMarvels/JeanGrey](https://github.com/SideChannelMarvels/JeanGrey) (phoenixAES) | DFA 故障密文 → AES 轮密钥的自动恢复工具 |
+
+> **笔者的经验**：从 Spotify Web Player 的 EME 调用开始，用 Chrome DevTools 的 `chrome://media-internals` 观察 CDM 的初始化、License 请求和密钥加载过程。这比直接面对 Netflix 的 MSL 协议温和得多——后者笔者花了相当长的时间才理清（再次感谢友人孙先生提供的 MSL 客户端脚本，省去了大量协议逆向工作）。
 
 
 ## 十、结论
@@ -1204,7 +1289,34 @@ Level 4 → Netflix / Disney+ / Prime Video
 4. 实现了**不依赖 `secrets.py` 的纯 Python keybox 生成器**，通过字节完美验证、Google provisioning（6 个 device_key，全部 HTTP 200）和 Netflix 端到端验证（licensedManifest + 内容密钥提取）完成了三层验证；
 5. 通过 BGE T-table 分析和 Frida 运行时分析，**厘清了 vendor_key / key_mask 的本质**：它们是编译时预计算的常量，不存在于运行时二进制的任何可访问位置，BGE 代数攻击在标准 T-table 上不适用。
 
-论文方法的核心实践目标——批量 Widevine 设备凭证（WVD）生产——已 100% 实现。vendor_key 和 key_mask 的缺失是学术上的遗憾，但对工程目标无实质影响。
+论文方法的核心实践目标——批量 Widevine keybox / WVD 生产——已 100% 实现。vendor_key 和 key_mask 的缺失是学术上的遗憾，但对工程目标无实质影响。
+
+### 一个值得注意的设计问题
+
+回顾整个攻击链，有一个问题值得深思：**CDM 的"创建模式"本身是否是一个设计遗漏？**
+
+在正常的产品流程中，keybox 应当由设备制造商在工厂产线上预置——设备出厂时 `ay64.dat` 已经存在，CDM 只需要走"加载模式"读取并解密它。"创建模式"的设计意图大概是作为一个**回退路径**：当 keybox 文件不存在或损坏时，CDM 可以自行生成一个新的，使设备不至于完全丧失 DRM 能力。
+
+但正是这个"好心的回退路径"为攻击打开了大门：
+
+1. **创建模式在仿真器中可触发**——只需删除 `ay64.dat`，CDM 就会"认为"自己运行在一台全新设备上，进入创建模式生成新的 keybox。攻击者不需要真实设备。
+2. **创建模式使用独立的白盒 AES 密钥**——derived_key 的 DFA 正是利用了这条路径。如果没有创建模式，攻击者只能攻击加载模式（ROOT_KEY），拿到的只是文件加密密钥，无法合成新的 keybox。
+3. **Google provisioning 不区分来源**——无论 keybox 是工厂预置还是 CDM 自行创建，Google 服务器都接受。这意味着攻击者可以在仿真环境中无限次触发创建模式，批量生成合法的 keybox 并通过 provisioning。
+
+换言之，"创建模式"把原本需要工厂产线配合的密钥预置流程，变成了一个**任何人都可以在仿真器中触发的纯软件操作**。如果 CDM 没有创建模式（即强制要求 keybox 必须预置），那么即使攻击者通过 DFA 提取了 ROOT_KEY，也无法凭空合成一个 Google 接受的 keybox——因为 derived_key 永远不会在运行时出现。
+
+这或许是 Widevine L3 安全模型中最微妙的设计取舍：**可用性（设备始终能获得 DRM 能力）与安全性（密钥生成不应在不受控环境中发生）之间的张力**。Google 选择了可用性。
+
+### 时代降维：用今天的工具打昨天的仗
+
+回顾整个研究过程，笔者认为最值得记录的不是某个具体的技术突破，而是一种**结构性的优势**：本文攻击的 CDM build 4464 编译于 2018 年，而笔者使用的工具和方法论来自 2024–2026 年——这是一场"从未来回顾过去"的仗。
+
+- **2018 年的防护水平**：CDM 4464 使用经典 T-table 实现 + OLLVM 混淆 + LCG 加密的 VM 字节码。在当时，这套防护足以阻止大多数攻击者——DFA 方法论尚未成熟（Quarkslab 的 TraceGraph 博客发表于 2019 年），Qiling 仿真框架还不存在（2020 年首次发布），phoenixAES 工具链也处于早期阶段。
+- **2026 年的攻击能力**：Neodyme 已经公开了完整的 Qiling + DFA 工具链和方法论（笔者直接复用）；AI 辅助可以在几分钟内生成 trace 采集脚本和数据分析代码；Ghidra 的反编译质量足以识别 .data 段中的 T-table 结构；社区积累的 CDM 知识（WideXtractor、KeyDive、widevine_key_ladder）提供了丰富的上下文。
+
+笔者不是在攻防博弈中"赢了"白盒 AES 的设计者，而是站在了他们当年没有预见到的维度上。OLLVM 保护的是代码，而 T-table 查表是数据层的行为——两者不在同一个平面上。这不是个案：安全研究中经常出现"时代降维"——用新时代的工具和方法重新审视旧系统，"未被发现"不等于"不可发现"，只是当时没有人用正确的方法去看。
+
+教训是双向的：**对防御者**，今天看似安全的白盒实现可能在几年后被新的分析方法轻松绕过；**对研究者**，面对看似坚固的目标，不妨先问——这是什么年代的设计？有没有当年不存在、但今天已成熟的方法可以降维打击？
 
 ---
 
@@ -1344,28 +1456,4 @@ Level 4 → Netflix / Disney+ / Prime Video
 
 ---
 
-
----
-
-## 附注：关于截图与视频
-
-本文引用的截图和操作视频存储于 `assets/` 目录下。如需复现，请参照以下命令生成对应的 trace 图和终端截图：
-
-```bash
-
-# 生成 trace 可视化散点图
-cd L3Sim && python3 trace_viz.py
-
-# 运行 derived_key DFA（含终端输出录制）
-asciinema rec assets/derived_key_dfa.cast -- python3 fault_d_creation.py
-
-# 运行 gen_keybox.py 验证
-python3 gen_keybox.py --verify
-
-# 端到端 Netflix 验证
-cd msl-client && python3 MSL客户端脚本 licensedManifest --wvd=wvd_devices/gen_keybox_cloned.wvd --viewable=80077368
-```
-
-建议使用 [asciinema](https://asciinema.org/) 进行终端录制，使用 [OBS Studio](https://obsproject.com/) 进行桌面操作录屏。
-
-*本文所有分析在合法持有的设备上进行，仅用于安全研究和学术目的。所有验证密钥仅用于研究验证，不用于生产内容解密。*
+*本文所有分析在合法持有的设备上进行，仅用于安全研究和学术目的。*

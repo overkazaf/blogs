@@ -10,6 +10,7 @@ pagerSize = 10
 env = "production"
 description = "DRM · 逆向工程 · 密码学"
 author = "+5"
+license = '[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)'
 defaultTheme = "dark"
 ShowReadingTime = true
 ShowPostNavLinks = true
