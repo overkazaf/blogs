@@ -56,13 +56,13 @@ vendor_key 和 key_mask 作为编译时概念在运行时二进制中已不可�
 
 | 平台 | 付费订阅用户 | DRM 方案 | 数据来源 |
 |------|------------|---------|------|
-| ![Netflix](https://img.shields.io/badge/Netflix-E50914?style=flat&logo=netflix&logoColor=white) **Netflix** | **3.01 亿**（[2024 Q4 财报](https://ir.netflix.net/)） | Widevine (Android/Chrome) + FairPlay (iOS/Safari) | 2024 Q4 财报 |
-| ![Disney+](https://img.shields.io/badge/Disney+-002244?style=flat&logo=disney&logoColor=white) **Disney+** | **1.24 亿**（[2024 Q4 财报](https://thewaltdisneycompany.com/investor-relations/)） | Widevine + FairPlay + PlayReady | 2024 Q4 财报 |
-| ![Prime Video](https://img.shields.io/badge/Prime_Video-00A8E1?style=flat&logo=amazon-prime-video&logoColor=white) **Amazon Prime Video** | **2.00 亿+**（[估算](https://press.aboutamazon.com/)） | Widevine + PlayReady + FairPlay | 2024 年估算 |
-| ![YouTube](https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white) **YouTube Premium** | **1.00 亿+**（[2024 估算](https://blog.youtube/)） | Widevine (CENC) | 2024 年估算 |
-| ![Spotify](https://img.shields.io/badge/Spotify-1DB954?style=flat&logo=spotify&logoColor=white) **Spotify** | **2.63 亿**（[2024 Q4](https://newsroom.spotify.com/)） | Widevine (部分) + 自有加密 | 2024 Q4 财报 |
-| ![Apple TV+](https://img.shields.io/badge/Apple_TV+-000000?style=flat&logo=apple&logoColor=white) **Apple TV+** | **4500 万+**（[估算](https://www.apple.com/apple-tv-plus/)） | FairPlay | 2024 年估算 |
-| ![HBO Max](https://img.shields.io/badge/Max-002BE7?style=flat&logo=hbo&logoColor=white) **Max (HBO)** | **1.10 亿**（[2024 Q4](https://ir.wbd.com/)） | Widevine + PlayReady + FairPlay | 2024 Q4 财报 |
+| ![Netflix](https://img.shields.io/badge/Netflix-E50914?style=flat&logo=netflix&logoColor=white) **Netflix** | **3.02 亿**（2025 Q1 起停止披露季度用户数） | Widevine (Android/Chrome) + FairPlay (iOS/Safari) | [Variety 2025 Q1](https://variety.com/2025/tv/news/netflix-q1-2025-earnings-financial-results-subscriber-counts-1236371830/) |
+| ![Disney+](https://img.shields.io/badge/Disney+-002244?style=flat&logo=disney&logoColor=white) **Disney+** | **1.25 亿**（2025 Q1，环比下降 70 万） | Widevine + FairPlay + PlayReady | [FastCompany 2025 Q1](https://www.fastcompany.com/91273357/disney-plus-subscriber-decline-price-hikes-earnings-q1-2025) |
+| ![Prime Video](https://img.shields.io/badge/Prime_Video-00A8E1?style=flat&logo=amazon-prime-video&logoColor=white) **Amazon Prime Video** | **2.00 亿+**（全球，含 Prime 会员捆绑） | Widevine + PlayReady + FairPlay | [MediaPost 2025](https://www.mediapost.com/publications/article/408037/) |
+| ![YouTube](https://img.shields.io/badge/YouTube-FF0000?style=flat&logo=youtube&logoColor=white) **YouTube Premium** | **1.25 亿**（含 Music + Premium） | Widevine (CENC) | [Variety 2025.03](https://variety.com/2025/digital/news/youtube-125-million-music-premium-subscribers-lite-tier-1236328177/) |
+| ![Spotify](https://img.shields.io/badge/Spotify-1DB954?style=flat&logo=spotify&logoColor=white) **Spotify** | **2.68 亿**（2025 Q1，同比 +12%） | Widevine (部分) + 自有加密 | [Variety 2025 Q1](https://variety.com/2025/digital/news/spotify-q1-2025-earnings-results-subscribers-1236381023/) |
+| ![Apple TV+](https://img.shields.io/badge/Apple_TV+-000000?style=flat&logo=apple&logoColor=white) **Apple TV+** | **4500 万+**（Apple 未披露官方数据） | FairPlay | [9to5Mac 2025.10](https://9to5mac.com/2025/10/14/eddy-cue-says-apple-tv-has-significantly-more-subscribers-than-analysts-estimate/) |
+| ![HBO Max](https://img.shields.io/badge/Max-002BE7?style=flat&logo=hbo&logoColor=white) **Max (HBO)** | **1.22 亿**（2025 Q1，同比 +22%） | Widevine + PlayReady + FairPlay | [Hollywood Reporter 2025 Q1](https://www.hollywoodreporter.com/business/business-news/warner-bros-discovery-q1-2025-earnings-streaming-growth-1236210369/) |
 
 > **Widevine 的市场覆盖**：上述 7 个平台中有 **6 个使用 Widevine** 作为主要或辅助 DRM。Google 官方数据显示 Widevine 部署在超过 **50 亿台设备**上。全球 OTT 市场规模预计于 2028 年达到 [1390 亿美元](https://www.fortunebusinessinsights.com/ott-market-106787)（Fortune Business Insights）。
 
