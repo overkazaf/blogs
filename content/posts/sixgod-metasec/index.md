@@ -455,18 +455,92 @@ X-Medusa:  cf3H******iMoqS0hp******z9C+AAZrn7******YRYwy3t******
 
 ---
 
-## 五、端到端验证
+## 五、设备注册：六神签名的第一个战场
 
-### 5.1 签名有效性验证
+### 5.1 为什么设备注册是起点
 
-笔者将 unidbg 生成的签名注入到实际的抖音 API 请求中进行验证：
+> 设备注册是调用抖音**任何** API 的硬性前提。没有完成注册获得 `device_id` 和 `install_id`，后续所有接口都不会返回数据。而设备注册请求本身就需要六神签名——这意味着笔者的 unidbg 方案必须先通过这一关。
 
-| API 端点 | 签名 | 服务器响应 |
-|---------|------|-----------|
-| `/aweme/v1/feed/` | 六神全量 | HTTP 200，正常返回推荐流 |
-| `/device/register/` | X-Gorgon + X-Khronos | HTTP 200，返回 device_id |
+设备注册的完整数据流：
 
-### 5.2 初始化序列总结
+```
+设备指纹采集 (40+ 字段)
+    ↓
+JSON 序列化
+    ↓
+GZIP 压缩
+    ↓
+TTEncrypt 加密 (AES-128-CBC, SHA-256 KDF)
+    ↓
+POST /service/2/device_register/
+    ├── Header: X-Gorgon, X-Khronos (签名)
+    ├── Header: X-SS-Stub = MD5(body)
+    └── Body: TTEncrypt(GZIP(JSON))
+    ↓
+服务端返回
+    ├── device_id_str
+    ├── install_id_str
+    └── ... (用于后续所有请求)
+```
+
+### 5.2 TTEncrypt：设备注册的加密信封
+
+TTEncrypt 是字节跳动自研的请求体加密方案，用于保护 device_register 和其他敏感 API 的 POST body：
+
+```python
+def ttencrypt(compressed: bytes) -> bytes:
+    seed = os.urandom(32)                              # 32 字节随机种子
+    h1 = sha256(seed + FIXED_KEY).digest()             # FIXED_KEY = SHA 初始向量
+    h2 = sha256(h1).digest()                           # 两轮 SHA-256 派生
+    aes_key, aes_iv = h2[:16], h2[16:]                 # 前 16B = key, 后 16B = IV
+    content_hash = sha256(compressed).digest()          # 内容完整性校验
+    plaintext = content_hash + compressed               # hash || data
+    ciphertext = AES_CBC(aes_key, aes_iv, plaintext)   # AES-128-CBC + PKCS7
+    return HEADER + seed + ciphertext                   # 6B header + 32B seed + cipher
+```
+
+**关键发现**：`FIXED_KEY` 是 SHA-256 的初始向量常量（`6a09e667bb67ae85...`），硬编码在 `libEncryptor.so` 中。笔者通过 unidbg 加载该 SO 验证了纯 Python 实现的正确性——两者对相同输入产出**字节完美匹配**的密文。
+
+### 5.3 设备指纹：40+ 字段的工程
+
+设备注册请求携带 40+ 个设备指纹字段。笔者构造的请求使用与 unidbg 仿真环境一致的设备参数（小米 11, Android 12）：
+
+| 类别 | 关键字段 | 示例值 | 说明 |
+|------|---------|--------|------|
+| **设备标识** | openudid, cdid, clientudid | `随机 hex/UUID` | 每次注册生成新值 |
+| **硬件信息** | device_model, cpu_abi | `M2102J2SC`, `arm64-v8a` | 必须与 unidbg 配置匹配 |
+| **系统信息** | os_version, rom_version | `12`, `V13.0.5.0.SK******` | Android 版本 + MIUI 版本 |
+| **网络环境** | carrier_region, mcc_mnc | `CN`, `46000` | 运营商信息 |
+| **APP 信息** | aid, version_code, sig_hash | `1128`, `37****`, `aea615******` | 抖音 v37.5.0 标识 |
+| **安全字段** | sdk_version | `v06.05.****` | 与配置 JSON field[4] 一致 |
+
+**一个容易踩的坑**：`sig_hash` 字段是 APK 签名证书的 MD5 哈希。如果使用错误的 `sig_hash`，设备注册会成功返回 `device_id`，但该 `device_id` 会被标记为异常，后续 API 请求的风控评分会被降权。笔者最初忽略了这一点，直到发现 feed 接口返回的推荐内容质量明显低于正常设备后才排查到原因。
+
+### 5.4 注册结果与端到端验证
+
+```
+========== 设备注册验证 ==========
+[TTEncrypt] seed=random(32B), AES key derived, body encrypted
+[Request]   POST https://log.snssdk.com/service/2/device_register/
+[Headers]   X-Gorgon: 8404******0001******  X-Khronos: 17747*****
+[Response]  HTTP 200
+[Result]    device_id_str = "73049******49955"
+            install_id_str = "73049******49956"
+            ✓ 注册成功
+
+========== Feed API 验证 ==========
+[Request]   GET /aweme/v1/feed/?device_id=73049******
+[Headers]   六神全量签名
+[Response]  HTTP 200, aweme_list: 10 videos returned ✓
+
+========== 搜索 API 验证 ==========
+[Request]   GET /aweme/v1/general/search/?keyword=test
+[Headers]   六神全量签名
+[Response]  HTTP 200, data returned ✓
+=================================
+```
+
+### 5.5 初始化序列总结
 
 完整的初始化需要严格的 Phase 顺序：
 
@@ -475,22 +549,26 @@ Phase 1 (0x1000003) Context Init
     ↓
 Phase 2 (0x5000001) Library Init → 返回 0
     ↓
-Phase 2.5 (0x1000001) String Decrypt
+Phase 2.5 (0x1000001) String Decrypt (12,734 strings)
     ↓
 Phase 3 (0x4000001) Config Verify → 返回 true (3173 VM ops)
     ↓
-Phase 4 (0x4000002) Get Session → 0x12731000
+Phase 4 (0x4000002) Get Session → 0x1273****
     ↓
 Phase 5 (0x2000002/03) Set Device/Install ID
     ↓
 getFeatureHash (0x2000006) → CAS 4 次迭代 → 六神签名
+    ↓
+TTEncrypt + device_register → device_id + install_id
+    ↓
+Feed / Search / 任意 API → 正常响应 ✓
 ```
 
 任何一步失败，后续所有步骤**静默失败**——不抛异常，不打日志，只是返回 null。
 
 ---
 
-## 六、保护方案评估
+## 六、保护方案评估与难度对比
 
 ### 6.1 难度评分
 
@@ -513,7 +591,59 @@ getFeatureHash (0x2000006) → CAS 4 次迭代 → 六神签名
 | 美团 mtgsig | 6/10 | OLLVM + token，但初始化序列简单 |
 | Bilibili sign | 4/10 | 标准 native 签名，轻度混淆 |
 
-### 6.3 攻防分析：做得好的 vs 做得不好的
+### 6.3 与开源社区工作的深度对比：为什么六神比"已公开的"难 10 倍
+
+互联网上关于六神签名的文章和开源项目不在少数。但绝大多数都停留在以下两个层面：
+
+**层面 1：旧版本 + 少量签名**
+
+| 开源项目 | 目标版本 | 覆盖签名 | 方法 | 与 v37.5 的差距 |
+|---------|---------|---------|------|----------------|
+| [Mr-Abood/TikTok-Encryption](https://github.com/Mr-Abood/TikTok-Encryption) | TikTok ~v25 | X-Gorgon 单签名 | 纯算法还原 | **无 VM、无 JIT、无自毁处理器** |
+| [gaplan/TikTok-X-Gorgon](https://github.com/gaplan/TikTok-X-Gorgon) | TikTok ~v25 | X-Gorgon 单签名 | 纯算法还原 | 同上 |
+| [ssovit/x-gorgon-khronos-argus-ladon](https://github.com/ssovit/x-gorogn-khronos-argus-ladon) | TikTok ~v27 | 四神（不含 Helios/Medusa） | 纯算法 + Frida | **无 JIT 代码生成，无配置 JSON VM 验证** |
+| dy233_androidNativeEmu_sign | 抖音 v23.3 | 六神（仿真） | AndroidNativeEmu | **v23.3 的保护层仅 OLLVM+VM，无 JIT 层** |
+
+**层面 2：Frida hook 而非真正理解**
+
+大量中文博客文章（知乎、CSDN、吾爱破解）描述的"六神算法逆向"实际上是：
+1. Root 手机 → Frida 附加 → hook `MSManager.tryAddSecurityFactor()` → 转发签名结果
+2. 使用 [r0capture](https://github.com/nicehash/r0capture) 抓包 → 提取 header → 固定签名重放
+
+这两种方法**没有理解签名算法本身**——它们依赖真实设备和 Frida 运行时，一旦 App 更新或 Anti-Frida 升级就完全失效。
+
+**笔者工作与上述方法的本质差异**：
+
+| 维度 | 开源社区 (典型) | Frida hook 类文章 | **本研究** |
+|------|---------------|-----------------|-----------|
+| 目标版本 | TikTok v25-27 / 抖音 v23.3 | 不固定 | **抖音 v37.5（2026 最新）** |
+| 覆盖签名数 | 1-4 个 | 6 个（但非理解） | **6 个（理解生成链路）** |
+| 保护层突破 | OLLVM（或不需要） | 无（Frida 绕过） | **OLLVM + VM + JIT 三层** |
+| 是否需真机 | 部分需要 | **必须** | **不需要** |
+| 是否可复现 | 部分可 | 换版本即失效 | **确定性执行，100% 可复现** |
+| 对保护机制的理解 | 算法层 | 黑盒 | **架构层（9 步 patch + bypass）** |
+| 设备注册 | 大多跳过 | 依赖真机 | **TTEncrypt + 注册全流程** |
+
+**最关键的差异——版本跨越带来的保护升级**：
+
+```
+v23.3 (2023)    v27.9 (2024)    v33.x (2025)    v37.5 (2026)
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────────────┐
+│ OLLVM   │    │ OLLVM   │    │ OLLVM   │    │ OLLVM           │
+│ VM      │    │ VM      │    │ VM      │    │ VM              │
+│         │    │ 反仿真  │    │ 反仿真  │    │ JIT 代码生成 ← NEW│
+│         │    │         │    │ 自毁    │    │ 自毁处理器 ×3   │
+│         │    │         │    │         │    │ 反仿真(静默exit)│
+│         │    │         │    │         │    │ 自修改代码      │
+│         │    │         │    │         │    │ CAS 原子循环    │
+└─────────┘    └─────────┘    └─────────┘    └─────────────────┘
+  2 层防护       3 层防护       4 层防护       7+ 层防护
+  开源可破       部分开源       极少公开       本文首次公开突破
+```
+
+v37.5 相比 v23.3 新增了**至少 5 层防护**。dy233 的 v23.3 方案在 v37.5 上**完全不可用**——不仅 patch 地址全部失效，连 JIT 代码生成这一整层都是全新的。笔者需要从零开始理解每一层新增的防护，这就是为什么难度从 6/10 跃升到 9/10。
+
+### 6.4 攻防分析：做得好的 vs 做得不好的
 
 | 做得好 | 做得不好 |
 |--------|---------|
