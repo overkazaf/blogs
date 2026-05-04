@@ -1,0 +1,55 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam sequenceParticipantBackgroundColor #f1f5f9
+skinparam sequenceParticipantBorderColor #3b82f6
+skinparam sequenceArrowColor #3b82f6
+skinparam sequenceArrowThickness 2
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+title I/O Throughput: Why /dev/shm is Essential for High-Speed Capture
+
+participant "CDM\nDecryptAndDecode" as CDM
+participant "hook.so\nwrite()" as HOOK
+participant "SSD\n~500 MB/s" as SSD
+participant "/dev/shm\n10-20 GB/s" as SHM
+
+== 1x playback (24fps, ~66 MB/s) ==
+CDM -> HOOK : 2.77 MB YUV frame
+HOOK -> SSD : write()
+note right of SSD : OK (66 << 500)
+HOOK -> SHM : write()
+note right of SHM : OK
+
+== 2x playback (48fps, ~133 MB/s) ==
+CDM -> HOOK : 2.77 MB x 48fps
+HOOK -> SSD : OK (133 << 500)
+HOOK -> SHM : OK
+
+== 4x playback (96fps, ~266 MB/s) ==
+CDM -> HOOK : 2.77 MB x 96fps
+HOOK -> SSD : marginal (266/500 = 53%)
+note right of SSD #fef3c7 : Approaching limit...
+HOOK -> SHM : OK
+
+== 8x playback (192fps, 553 MB/s) ==
+CDM -> HOOK : 2.77 MB x 192fps
+HOOK ->x SSD : BLOCKS! (553 > 500)
+note right of SSD #fecaca
+  write() blocks
+  CDM stalls
+  Chrome ABR downgrades
+  720p -> 432p
+end note
+HOOK -> SHM : OK (553 << 10000)
+note right of SHM #dcfce7
+  RAM-backed tmpfs
+  Hook never blocks
+  CDM full speed
+  720p maintained!
+end note
+
+@enduml

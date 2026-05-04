@@ -1,0 +1,50 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam sequenceParticipantBackgroundColor #f1f5f9
+skinparam sequenceParticipantBorderColor #3b82f6
+skinparam sequenceArrowColor #3b82f6
+skinparam sequenceArrowThickness 2
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+title Multi-Resolution Segment Encoder Pipeline
+
+participant "cdm_yuv_meta.tsv\n(4217 entries)" as META
+participant "encode_segments.py" as ENC
+participant "ffmpeg\n(per segment)" as FF
+participant "Output" as OUT
+
+META -> ENC : Read frame metadata
+note right of ENC
+  Group by (stride_y, stride_uv)
+  = unique resolution identifier
+end note
+
+ENC -> ENC : Detect 3 segments
+
+== Segment 1: frames 0-1203 (1280x720) ==
+ENC -> FF : pipe:0 stdin (seek into YUV file)
+note right of FF
+  ffmpeg -f rawvideo
+  -pix_fmt yuv420p10le
+  -s 1280x720 -r 24
+  -c:v libx264 -crf 18
+end note
+FF -> OUT : seg_1_1280x720.mp4 (89.4 MB)
+
+== Segment 2: frames 1204-2292 (1056x540) ==
+ENC -> FF : pipe:0 stdin
+FF -> OUT : seg_2_1056x540.mp4 (41.7 MB)
+
+== Segment 3: frames 2293-4216 (768x432) ==
+ENC -> FF : pipe:0 stdin
+FF -> OUT : seg_3_768x432.mp4 (52.1 MB)
+
+== Concatenation ==
+ENC -> FF : concat filter + scale to 1280x720
+FF -> OUT : netflix_full.mp4 (247 MB, 12:33)
+
+@enduml

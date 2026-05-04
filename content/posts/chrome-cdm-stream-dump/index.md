@@ -248,23 +248,141 @@ frame_bytes = off_v + stride_v * (height / 2);
 // 1280x720 P010: 2,764,800 bytes/frame
 ```
 
-### 5.4 /dev/shm：RAM 缓冲解决吞吐瓶颈
+### 5.4 加速捕获的三大关键技术
 
-8x 播放速率下，720p 10-bit YUV 的写入吞吐需求约 **553 MB/s**——接近消费级 SSD 的极限。`/dev/shm`（tmpfs，纯内存）可以提供 10-20 GB/s，hook 永远不会因 I/O 阻塞。
+> 流捕获在概念上很简单——hook 一个函数，写入文件。但要在**实际可用的速度**下完成捕获，需要解决三个相互关联的工程问题：(1) 如何让视频以 8 倍速播放而不被 Netflix 重置；(2) 如何在 553 MB/s 的写入吞吐下不拖慢 CDM；(3) 如何处理 Netflix ABR 在高倍速下的分辨率切换。这三个问题分别对应三项关键技术。
 
-代价：受 RAM 容量限制（96GB 主机约可缓存 30 分钟原始 YUV）。
+#### 5.4.1 CDP 持久注入：对抗 Netflix 的 playbackRate 重置
 
-### 5.5 CDP 持久 JS 注入
+**问题**：`HTMLMediaElement.playbackRate` 可以加速视频播放，但 Netflix 的 Player JS 会在多种事件（暂停/恢复、SPA 导航、错误恢复）下将其重置为 1.0。简单的 `video.playbackRate = 8` 只能维持几秒。
 
-Netflix 的 SPA 在内部导航时会重置 `playbackRate`。通过 `Page.addScriptToEvaluateOnNewDocument` 注册持久脚本：
+**解决方案**：通过 Chrome DevTools Protocol（CDP）注册**持久脚本**，用 `Object.defineProperty` 劫持 `playbackRate` 的 setter：
 
 ```javascript
 const proto = HTMLMediaElement.prototype;
 const origDesc = Object.getOwnPropertyDescriptor(proto, 'playbackRate');
+let actual = TARGET;
 Object.defineProperty(proto, 'playbackRate', {
-    get: () => TARGET_RATE,
-    set: (v) => { origDesc.set.call(this, TARGET_RATE); }
+    get: () => actual,
+    set: (v) => {
+        actual = TARGET;
+        origDesc.set.call(this, TARGET);  // 无论 Netflix 设什么值，实际都是 TARGET
+    }
 });
+// 兜底：每 500ms 检查并重新应用（防止 Netflix 替换 <video> 元素）
+setInterval(() => {
+    document.querySelectorAll('video').forEach(v => {
+        origDesc.set.call(v, TARGET);
+    });
+}, 500);
+```
+
+**关键技术点**：
+
+| 技术 | 为什么需要 | 不用会怎样 |
+|------|---------|---------|
+| `Page.addScriptToEvaluateOnNewDocument` | Netflix SPA 内部导航会销毁当前 document | `Runtime.evaluate` 注入的代码在导航后丢失 |
+| `Object.defineProperty` setter 劫持 | Netflix 主动调用 `video.playbackRate = 1` | 简单赋值会被 Netflix 覆盖 |
+| `setInterval` 兜底 | Netflix 可能替换整个 `<video>` 元素 | 新元素上的 playbackRate 未被劫持 |
+| Manifest profile injection | 请求更高画质的 stream | 默认可能给低画质流 |
+
+![playbackRate 劫持流程](https://overkazaf.github.io/blogs/images/cdm-dump/playback_hijack.png)
+*CDP 持久注入 vs Netflix SPA 的对抗流程。hijack_js 在每次 SPA 导航后自动重新执行，Netflix 的 playbackRate 重置被全部拦截。*
+
+Netflix 还会通过 `XMLHttpRequest.send` 和 `window.fetch` 发送 manifest 请求，其中包含 `profiles: [...]` 数组。笔者同时 hook 了这两个 API，在请求体中注入高画质 profile 标识：
+
+```javascript
+// hook fetch
+const origFetch = window.fetch;
+window.fetch = function(url, opts) {
+    if (opts && opts.body && opts.body.includes('"profiles"')) {
+        let json = JSON.parse(opts.body);
+        json.profiles.push('h264mpl40-dash-playready-prk-qc');
+        opts.body = JSON.stringify(json);
+    }
+    return origFetch.call(this, url, opts);
+};
+```
+
+这**确实**影响了 Netflix 返回的 manifest（观察到 AV1 with `prk` flag），但**并未**解锁 1080p——因为 license server 在密码学层面验证 CDM 安全级别，L3 客户端只能获得 720p 密钥。
+
+#### 5.4.2 /dev/shm：RAM 缓冲解决吞吐瓶颈
+
+**问题**：每帧 1280×720 YUV420P10 = 2.77 MB。8x 播放速率下 hook 的 `write()` 吞吐需求约 **553 MB/s**——超过消费级 SSD 的顺序写入上限（~500 MB/s）。如果 hook 在 I/O 上阻塞，CDM 处理速度会下降，Chrome 检测到 buffer 消耗变慢就会触发 ABR 降级，分辨率从 720p 掉到 432p。
+
+**解决方案**：将 YUV 输出写入 `/dev/shm`（Linux 的 tmpfs 挂载点），这是一个完全基于 RAM 的文件系统，吞吐量 10-20 GB/s，hook 的 `write()` 调用**永远不会阻塞**。
+
+![I/O 吞吐对比](https://overkazaf.github.io/blogs/images/cdm-dump/shm_throughput.png)
+*不同播放速率下的 I/O 吞吐需求对比。SSD 在 8x 速率下成为瓶颈（553 > 500 MB/s），导致 CDM 阻塞和 ABR 降级；/dev/shm 的 RAM 吞吐远超需求，hook 永不阻塞。*
+
+| 播放速率 | 有效帧率 | 吞吐需求 | SSD 结果 | /dev/shm 结果 |
+|---------|---------|---------|---------|-------------|
+| 1x | 24 fps | 66 MB/s | OK | OK |
+| 2x | 48 fps | 133 MB/s | OK | OK |
+| 4x | 96 fps | 266 MB/s | 边缘（53%） | OK |
+| **8x** | **192 fps** | **553 MB/s** | **阻塞！ABR 降级** | **OK** |
+
+**代价**：`/dev/shm` 受物理 RAM 限制。在 96GB 主机上约可缓存 30 分钟原始 YUV。实际操作中，每次捕获 5-10 分钟，编码后释放 RAM，再继续下一段。
+
+**一个隐含的设计考量**：为什么不用 `mmap` + `MAP_ANONYMOUS`？因为 hook 运行在 CDM 进程内部，而编码器是外部进程。需要一个**跨进程可见**的缓冲区——`/dev/shm` 的文件语义天然支持这一点。
+
+#### 5.4.3 多分辨率段编码：处理 ABR 分辨率切换
+
+**问题**：即使使用了 `/dev/shm`，Netflix 的 ABR 仍然会根据网络状况在播放过程中**切换分辨率**。在笔者的 2x 测试中，12 分钟内观察到 4 次分辨率切换：
+
+```
+1280×720 (40s) → 1056×540 (45s) → 768×432 (42s) → 640×342 (471s)
+```
+
+ffmpeg 无法处理维度动态变化的原始 YUV 流——必须将不同分辨率的段分别编码，再拼接。
+
+**解决方案**：hook 在每帧写入 YUV 的同时，将帧的元数据（时间戳、格式、stride、offset）写入 `/tmp/cdm_yuv_meta.tsv`：
+
+```
+1714000100  17  0  1843200  2304000  2560  1280  1280
+1714000141  17  0  1843200  2304000  2560  1280  1280
+1714000183  17  0  921600   1152000  2112  1056  1056   ← 分辨率切换！
+```
+
+编码器脚本读取 TSV，按 `(stride_y, stride_uv)` 分组（这对值唯一标识分辨率+格式），对每组独立编码：
+
+![多分辨率段编码管线](https://overkazaf.github.io/blogs/images/cdm-dump/encoder_pipeline.png)
+*编码器读取元数据 TSV，检测分辨率分段边界，为每段独立启动 ffmpeg（通过 pipe:0 stdin 直接从 YUV 文件对应偏移读取），最后 concat 拼接并统一缩放到 1280×720。*
+
+**关键优化——`pipe:0` 而非临时文件**：每个 segment 是大 YUV 文件中的一个连续切片。编码器通过 `Popen(ffmpeg, stdin=PIPE)` + `seek()` + `read()` 将字节直接管道传输给 ffmpeg，避免了拷贝临时文件的额外 I/O：
+
+```python
+proc = subprocess.Popen(
+    ['ffmpeg', '-f', 'rawvideo', '-pix_fmt', 'yuv420p10le',
+     '-s', f'{width}x{height}', '-r', '24', '-i', 'pipe:0',
+     '-c:v', 'libx264', '-crf', '18', output_path],
+    stdin=subprocess.PIPE
+)
+with open(yuv_path, 'rb') as f:
+    f.seek(segment_start_offset)
+    while bytes_remaining > 0:
+        chunk = f.read(min(65536, bytes_remaining))
+        proc.stdin.write(chunk)
+        bytes_remaining -= len(chunk)
+proc.stdin.close()
+proc.wait()
+```
+
+#### 5.4.4 三项技术的协同效果
+
+| 技术 | 解决的问题 | 没有它会怎样 |
+|------|---------|---------|
+| CDP playbackRate 劫持 | Netflix 重置播放速度 | 8x 被重置为 1x，捕获一小时需一小时 |
+| /dev/shm RAM 缓冲 | I/O 吞吐瓶颈 | SSD 阻塞 → CDM 变慢 → ABR 降级到 432p |
+| 多分辨率段编码 | ABR 分辨率切换 | ffmpeg 报错退出（维度不匹配） |
+
+**缺一不可**。三项技术组合后的最终效果：
+
+```
+捕获速率: 8x (1小时内容 → 8分钟壁钟时间)
+分辨率:   1280×720 稳定（/dev/shm 无阻塞，ABR 不降级）
+输出:     H.264 MP4，CRF 18 高画质
+限制:     受 RAM 容量约束（96GB ≈ 30 分钟原始 YUV）
 ```
 
 ### 5.6 端到端验证

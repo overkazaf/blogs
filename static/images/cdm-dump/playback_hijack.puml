@@ -1,0 +1,46 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam sequenceParticipantBackgroundColor #f1f5f9
+skinparam sequenceParticipantBorderColor #3b82f6
+skinparam sequenceParticipantFontStyle bold
+skinparam sequenceArrowColor #3b82f6
+skinparam sequenceArrowThickness 2
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+title playbackRate Hijack: Netflix SPA vs CDP Persistent Injection
+
+participant "CDP\nOrchestrator" as CDP
+participant "Chrome\nDevTools" as DT
+participant "Netflix\nPlayer JS" as NF
+participant "HTMLMedia\nElement" as HME
+
+CDP -> DT : Page.addScriptToEvaluateOnNewDocument(hijack_js)
+note right of DT
+  Registered BEFORE any page script
+  Survives SPA internal navigation
+end note
+
+DT -> HME : Object.defineProperty(prototype, 'playbackRate', {...})
+note right of HME #dcfce7
+  Original setter captured
+  All writes redirected to TARGET
+end note
+
+NF -> HME : video.playbackRate = 1
+note right of HME : Intercepted!
+HME -> HME : origDesc.set.call(this, TARGET=8)
+note right of HME #dcfce7: Actual rate = 8x
+
+NF -> NF : Internal SPA navigation
+NF -> HME : new <video> element created
+DT -> HME : hijack_js re-executes (persistent)
+note right of HME #dcfce7: Rate control survives navigation
+
+NF -> HME : video.playbackRate = 1 (again)
+HME -> HME : Still redirected to TARGET=8
+
+@enduml
