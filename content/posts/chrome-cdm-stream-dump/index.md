@@ -448,7 +448,7 @@ Input #0, mov,mp4, from 'dump/segment_1_1280x720.mp4':
 | Tomer Hadad | 2020 | Chrome Windows CDM | 白盒 RSA 代数简化 | 成功（RSA，DMCA 下架） |
 | Patat et al. | 2022 | Android L3 | OEMCrypto hook | 部分成功（CVE-2021-0639） |
 | **笔者 (L3 keybox)** | 2026.04 | Android build 4464 | DFA + Trace 可视化 | **成功** |
-| **笔者 (本文)** | 2026.04 | Chrome 4.10.2934 | 13 种方法 + vtable hook | **密钥：失败 / 流：成功** |
+| **笔者 (本文)** | 2026.05 | Chrome 4.10.2934 | 13 种方法 + vtable hook | **密钥：失败 / 流：成功** |
 
 **关键差距**：Buchanan 和 Hadad 攻击的是 2019-2020 年的旧版 CDM。Google 在此后持续升级白盒 AES 实现，从 T-table 迁移到完全虚拟化的软件白盒。笔者的 13 次失败是对**当前版本**安全强度的实证验证。
 
