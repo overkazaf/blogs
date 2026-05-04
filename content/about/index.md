@@ -37,4 +37,8 @@ C/C++, Go, JavaScript, Python, Java
 📧 overkazaf@gmail.com
 💬 WeChat: `_0xAF_` (please mention your purpose when adding)
 
-> All research published on this site is strictly for academic and security research purposes.
+### Disclaimer
+
+All research published on this site is strictly for **academic and security research purposes**. No functional exploit code, working keys, or usable tools are provided. Case studies are presented solely to illustrate reverse engineering methodology and cryptographic analysis techniques.
+
+If any content on this site raises concerns regarding intellectual property or infringes on your rights, please contact me at overkazaf@gmail.com — I will promptly revise or remove the material in question.
