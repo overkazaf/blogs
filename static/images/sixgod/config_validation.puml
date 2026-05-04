@@ -1,58 +1,67 @@
 @startuml
-skinparam backgroundColor #1a1b26
-skinparam defaultFontColor #c0caf5
-skinparam activityBackgroundColor #24283b
-skinparam activityBorderColor #7aa2f7
-skinparam activityDiamondBackgroundColor #2d3149
-skinparam activityDiamondBorderColor #e0af68
-skinparam arrowColor #7aa2f7
 
-title Phase 3 配置 JSON 验证���策树
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam activityBackgroundColor #f1f5f9
+skinparam activityBorderColor #3b82f6
+skinparam activityDiamondBackgroundColor #fefce8
+skinparam activityDiamondBorderColor #ca8a04
+skinparam activityDiamondFontColor #854d0e
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+
+title <font size=16><b>Phase 3 配置 JSON 验证决策树</b></font>
 
 start
-:Phase 3 接��� JSON[17];
 
-if (field[0] appId == "1128"?) then (yes)
+:Phase 3 接收 JSON[17];
+
+if (field[0] appId\n== "1128" ?) then (yes)
 else (no)
-  #f7768e:ms_config.cc:41 → exit(1);
+  #fecaca:ms_config.cc:41\n**exit(1)**;
   stop
 endif
 
-if (field[2] altAppId == "1128"?) then (yes)
+if (field[2] altAppId\n== "1128" ?) then (yes)
 else (no)
-  #f7768e:VM 静默失败;
+  #fecaca:VM 静默失败;
   stop
 endif
 
-if (field[4] sdkVersion?) then
-  if (== "v06.05.40-dy" ?) then (Java层值 ✓)
-    #9ece6a:通过;
-  else (native值 "v04.09.09.07-bugfix" ✗)
-    #ff9e64:ms_config.h:254\nVM 无限循环;
+if (field[4]\nsdkVersion ?) then
+  if (== "v06.05.****"\n(Java层值) ?) then (<font color=#16a34a><b>Correct</b></font>)
+    #dcfce7:通过 ✓;
+  else (<font color=#dc2626>native值</font>)
+    #fef3c7:ms_config.h:254\n**VM 无限循环**;
     stop
   endif
 endif
 
-if (field[10] aid == "1128"?) then (yes)
+if (field[10] aid\n== "1128" ?) then (yes)
 else (no)
-  #f7768e:VM 拒绝;
+  #fecaca:VM 拒绝;
   stop
 endif
 
-if (field[12] versionCode == "370500"?) then (yes)
+if (field[12] versionCode\n== "37****" ?) then (yes)
 else (no)
-  #f7768e:静默失败;
+  #fecaca:静默失败;
   stop
 endif
 
-if (field[16][1] == field[4] ?) then (yes)
+if (field[16][1]\n== field[4] ?) then (yes)
 else (no)
-  #f7768e:不一致 → 失败;
+  #fecaca:不一致 -> 失败;
   stop
 endif
 
-#9ece6a:VM 执行 3173 条指令;
-#9ece6a:返回 Boolean.TRUE;
+#dcfce7:VM 执行 3173 条指令;
+#dcfce7:**返回 Boolean.TRUE** ✓;
 :Phase 4 返回 session handle;
 stop
 

@@ -1,18 +1,22 @@
 @startuml
-skinparam backgroundColor #1a1b26
-skinparam defaultFontColor #c0caf5
-skinparam rectangleBackgroundColor #24283b
-skinparam rectangleBorderColor #7aa2f7
-skinparam arrowColor #7aa2f7
-skinparam noteBackgroundColor #2d3149
-skinparam noteBorderColor #e0af68
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam rectangleBackgroundColor #f1f5f9
+skinparam rectangleBorderColor #94a3b8
+skinparam arrowColor #3b82f6
 
-title 攻击路线对比
+title <font size=16><b>攻击路线对比</b></font>
 
-rectangle "Route A: 纯算法还原\n需逆向 OLLVM + 提取密钥\n工作量 > 2个月  ✗" as A
-rectangle "Route B: Frida Hook\n需 Root 设备 + Anti-Frida 绕过\n静默 exit(0) 绕过 hook  ✗" as B
-rectangle "**Route C: unidbg 仿真** ✓\n无需真机, 确定性执行\n深度可观测, 2个周末完成\n代价: 补全 50+ JNI 回调" as C #1a3a2a
+rectangle "<font size=14><b>Route A: 纯算法还原</b></font>\n逆向 OLLVM -> 提取密钥 -> Python 重写\n\n<font color=#dc2626>✗ OLLVM 使静态分析极难</font>\n<font color=#dc2626>✗ 密钥嵌入 VM 字节码</font>\n<font color=#dc2626>✗ 工作量 > 2 个月</font>" as A #fef2f2
+
+rectangle "<font size=14><b>Route B: Frida Hook</b></font>\n真机 hook 签名函数, RPC 转发\n\n<font color=#dc2626>✗ 需要 Root 设备</font>\n<font color=#dc2626>✗ Anti-Frida / 静默 exit(0)</font>\n<font color=#dc2626>✗ 版本更新即失效</font>" as B #fef2f2
+
+rectangle "<font size=14><b>Route C: unidbg 仿真  ✓ CHOSEN</b></font>\nJVM 加载 SO, 补全 JNI, 签名输出\n\n<font color=#16a34a>✓ 无需真机, 确定性执行</font>\n<font color=#16a34a>✓ 深度可观测 (trace 每条指令)</font>\n<font color=#16a34a>✓ 2 个周末完成</font>\n<font color=#ca8a04>⚠ 需补全 50+ JNI 回调</font>" as C #f0fdf4
 
 A -[hidden]down- B
 B -[hidden]down- C
+
 @enduml

@@ -1,78 +1,86 @@
 @startuml
-skinparam backgroundColor #1a1b26
-skinparam defaultFontColor #c0caf5
-skinparam sequenceArrowColor #7aa2f7
-skinparam sequenceLifeLineBorderColor #565f89
-skinparam sequenceParticipantBackgroundColor #24283b
-skinparam sequenceParticipantBorderColor #7aa2f7
-skinparam noteBorderColor #e0af68
-skinparam noteBackgroundColor #2d3149
-skinparam sequenceGroupBackgroundColor #1f2335
-skinparam sequenceGroupBorderColor #bb9af7
-skinparam sequenceDividerBackgroundColor #1f2335
 
-title 抖音 MetaSec 六神签名初始化序列
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam sequenceArrowThickness 2
+skinparam sequenceArrowColor #3b82f6
+skinparam sequenceLifeLineBorderColor #94a3b8
+skinparam sequenceParticipantBackgroundColor #f1f5f9
+skinparam sequenceParticipantBorderColor #3b82f6
+skinparam sequenceParticipantFontStyle bold
+skinparam sequenceGroupBackgroundColor #fefce8
+skinparam sequenceGroupBorderColor #ca8a04
+skinparam sequenceGroupFontColor #854d0e
+skinparam sequenceDividerBackgroundColor #f0f9ff
+skinparam sequenceDividerBorderColor #3b82f6
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+skinparam noteFontColor #78350f
 
-participant "Java Layer" as J #24283b
-participant "JNI Bridge\nSO+0x271938" as JNI #24283b
-participant "OLLVM Dispatcher\nSO+0x173ec4" as OLL #24283b
-participant "Custom VM\nSO+0x1702a8" as VM #24283b
-participant "JIT Engine\n0x1254xxxx" as JIT #24283b
 
-== Phase 1: Context Init (0x1000003) ==
-J -> JNI : m.a(0x1000003, 0, 0, null, context)
-JNI -> OLL : dispatch(cmd=0x1000003)
-OLL --> J : getPackageName(), getFilesDir()...
+title <font size=16><b>MetaSec 六神签名初始化序列</b></font>
+
+participant "Java Layer" as J
+participant "JNI Bridge\nSO+0x271938" as JNI
+participant "OLLVM\n调度器" as OLL
+participant "Custom\nVM" as VM
+participant "JIT\nEngine" as JIT
+
+== <font color=#3b82f6>Phase 1: Context Init</font> (0x1000003) ==
+J -> JNI : m.a(0x1000003, ctx)
+JNI -> OLL : dispatch
+OLL --> J : getPackageName(), getFilesDir()
 OLL --> JNI : OK
-JNI --> J : null (success)
+JNI --> J : success
 
-== Phase 2: Library Init (0x5000001) ==
-J -> JNI : m.a(0x5000001, 0, 0, null, configArray)
-JNI -> OLL : dispatch(cmd=0x5000001)
-note right of OLL #2d3149
-  检查环境变量
-  28d7fdd5673611...=a7
-  缺失 → silent exit(0)
+== <font color=#3b82f6>Phase 2: Library Init</font> (0x5000001) ==
+J -> JNI : m.a(0x5000001, configArray)
+JNI -> OLL : dispatch
+note right of OLL #fff3cd
+  <font color=#856404><b>Gate:</b> env var
+  28d7fdd5...=a7
+  Missing -> exit(0)</font>
 end note
-OLL -> JIT : 生成可执行代码 (~360KB)
-JIT --> OLL : code at 0x12540000
+OLL -> JIT : generate code (~360KB)
+JIT --> OLL : 0x12540000
 OLL --> JNI : return 0
 JNI --> J : Integer(0)
 
-== Phase 2.5: String Decrypt (0x1000001) ==
-J -> JNI : m.a(0x1000001, ...)
-note right of JNI #2d3149
-  解密 12,734 个
-  加密字符串
-end note
-JNI --> J : decrypted string
+== <font color=#3b82f6>Phase 2.5: String Decrypt</font> (0x1000001) ==
+J -> JNI : decrypt
+note right of JNI : 12,734 encrypted strings
+JNI --> J : decrypted
 
-== Phase 3: Config Verify (0x4000001) ==
-J -> JNI : m.a(0x4000001, 0, 0, jsonConfig, null)
+== <font color=#16a34a><b>Phase 3: Config Verify</b></font> (0x4000001) ==
+J -> JNI : m.a(0x4000001, jsonConfig)
 JNI -> VM : execute bytecode
-note right of VM #9ece6a
-  ★ 核心突破点
-  验证 17 个 JSON 字段
-  field[4] = "v06.05.40-dy"
-  (Java层值, 非native值)
+note right of VM #dcfce7
+  <font color=#166534><b>Core Breakthrough</b>
+  Validate 17 JSON fields
+  field[4] = Java static value
+  NOT native decrypted value</font>
 end note
-VM --> JNI : 3173 ops → Boolean.TRUE
-JNI --> J : true
+VM --> JNI : 3173 ops -> TRUE
+JNI --> J : Boolean.TRUE
 
-== Phase 4: Get Session (0x4000002) ==
-J -> JNI : m.a(0x4000002, 0, 0, null, null)
+== <font color=#3b82f6>Phase 4: Get Session</font> (0x4000002) ==
+J -> JNI : m.a(0x4000002)
 JNI -> OLL : dispatch
 OLL --> JNI : Long(0x1273****)
 JNI --> J : session handle
 
-== Phase 6: getFeatureHash (0x2000006) ==
-J -> JNI : m.a(0x2000006, 0, handle, url, body)
-JNI -> JIT : CAS computation loop
-note right of JIT #2d3149
-  ldaxrh/stxrh 原子操作
-  4 次迭代收敛
+== <font color=#7c3aed><b>Phase 6: getFeatureHash</b></font> (0x2000006) ==
+J -> JNI : m.a(0x2000006, handle, url, body)
+JNI -> JIT : CAS loop (4 iter)
+note right of JIT #f3e8ff
+  <font color=#6b21a8>ldaxrh/stxrh atomic
+  4 iterations converge</font>
 end note
 JIT --> JNI : String[12]
-JNI --> J : {X-Gorgon, val,\nX-Khronos, val,\nX-Argus, val,\nX-Ladon, val,\nX-Helios, val,\nX-Medusa, val}
+JNI --> J : <font color=#7c3aed><b>X-Gorgon, X-Khronos\nX-Argus, X-Ladon\nX-Helios, X-Medusa</b></font>
 
 @enduml

@@ -1,20 +1,29 @@
 @startuml
-skinparam backgroundColor #1a1b26
-skinparam defaultFontColor #c0caf5
-skinparam rectangleBackgroundColor #24283b
-skinparam rectangleBorderColor #7aa2f7
-skinparam arrowColor #7aa2f7
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam rectangleBackgroundColor #f1f5f9
+skinparam rectangleBorderColor #3b82f6
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
 
-title 六神签名生成管线 (cmd=0x2000006)
+title <font size=16><b>六神签名生成管线</b></font> (cmd=0x2000006)
 
-rectangle "输入\nURL + Body + Device + Timestamp" as IN #2d3149
+rectangle "<font size=13><b>输入</b></font>\nURL + Body\nDevice Info\nTimestamp" as IN #e0f2fe
 
-rectangle "X-Argus\nSM3→Protobuf→Simon128/256→XOR→AES-CBC→B64" as ARG
-rectangle "X-Gorgon\nMD5→置换表→RBIT/XOR链式混淆" as GOR
-rectangle "X-Khronos\nUnix timestamp" as KHR
-rectangle "X-Ladon\nSpeck-128/128" as LAD
-rectangle "X-Helios\n设备环境指纹(算法待确认)" as HEL
-rectangle "X-Medusa\n主验证(三段结构,算法待确认)" as MED
+rectangle "<font color=#7c3aed><b>X-Argus</b> (最复杂)</font>\nSM3 Hash (截断6B)\n-> Protobuf (20+字段)\n-> Simon-128/256 (72轮)\n-> XOR (8B前缀)\n-> AES-128-CBC\n-> Base64" as ARG #f3e8ff
+
+rectangle "<b>X-Gorgon</b>\nMD5(URL+Body+Cookie)\n-> 置换表/XOR\n-> RBIT+NOT 链式混淆" as GOR #e0f2fe
+
+rectangle "<b>X-Khronos</b>\nUnix 时间戳 (秒)" as KHR #f1f5f9
+
+rectangle "<b>X-Ladon</b>\nSpeck-128/128 密码\n设备绑定密钥" as LAD #e0f2fe
+
+rectangle "<b>X-Helios</b>\n设备环境指纹\n<font color=#94a3b8>算法待确认</font>" as HEL #fef3c7
+
+rectangle "<b>X-Medusa</b>\n主验证参数\n三段结构\n<font color=#94a3b8>算法待确认</font>" as MED #fef3c7
 
 IN --> ARG
 IN --> GOR
@@ -22,4 +31,5 @@ IN --> KHR
 IN --> LAD
 IN --> HEL
 IN --> MED
+
 @enduml

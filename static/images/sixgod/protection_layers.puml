@@ -1,69 +1,53 @@
 @startuml
-skinparam backgroundColor #1a1b26
-skinparam defaultFontColor #c0caf5
-skinparam componentBackgroundColor #24283b
-skinparam componentBorderColor #7aa2f7
-skinparam packageBackgroundColor #1f2335
-skinparam packageBorderColor #565f89
-skinparam noteBorderColor #e0af68
-skinparam noteBackgroundColor #2d3149
-skinparam arrowColor #7aa2f7
 
-title MetaSec libmetasec_ml.so 保护层架构 (3.8MB, ARM64)
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam componentBackgroundColor #f1f5f9
+skinparam componentBorderColor #3b82f6
+skinparam packageBackgroundColor #f8fafc
+skinparam packageBorderColor #64748b
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+skinparam noteFontColor #78350f
+skinparam arrowColor #3b82f6
 
-package "Layer 1: OLLVM 控制流平坦化" #1f2335 {
-  [主调度器 SO+0x173ec4] as OLL
+
+title <font size=16><b>MetaSec 保护层架构</b></font>\nlibmetasec_ml.so (3.8MB, ARM64)
+
+package "Layer 1: OLLVM 控制流平坦化" as L1 #e0f2fe {
+  component "主调度器\nSO+0x173ec4" as OLL #bfdbfe
   note right of OLL
-    madd/mul 哈希计算
-    状态变量分发
-    所有关键函数被平坦化
+    madd/mul 哈希状态转移
+    所有关键函数平坦化
   end note
-  
-  package "Layer 2: 自定义 VM 字节码" #24283b {
-    [VM 解释器 SO+0x1702a8] as VM
+
+  package "Layer 2: 自定义 VM 字节码" as L2 #fef3c7 {
+    component "VM 解释器\nSO+0x1702a8" as VM #fde68a
     note right of VM
-      32位指令字解码
+      32-bit 指令字解码
       ubfx/and/orr 位域提取
-      br x8 间接跳转分发
     end note
-    
-    package "Layer 3: JIT 代码生成" #2d3149 {
-      [运行时代码 0x12540000-0x12599000] as JIT
+
+    package "Layer 3: JIT 代码生成" as L3 #fce7f3 {
+      component "运行时代码\n0x12540000" as JIT #f9a8d4
       note right of JIT
         Phase 2 动态生成 ~360KB
         PLT stub + CAS 计算循环
-        签名核心逻辑在此执行
       end note
     }
   }
 }
 
-component "自毁处理器 ×3" as TRAP #f7768e
-component "反仿真检测" as ANTI #e0af68
-component "加密字符串 ×12734" as STR #bb9af7
-component "自修改代码" as SMC #ff9e64
-component "JNI 混淆" as JNIOB #73daca
-
-TRAP -[hidden]right- ANTI
-ANTI -[hidden]right- STR
-STR -[hidden]right- SMC
-SMC -[hidden]right- JNIOB
-
-note bottom of TRAP
-  SO+0x266a38/b0c/be0
-  跳转到 0x1000 (未映射)
-  覆盖 ~71 个调用点
-end note
-
-note bottom of ANTI
-  时间戳相关分发
-  环境变量验证
-  静默 exit(0)
-end note
-
-note bottom of STR
-  运行时解密
-  cmd=0x1000001
-end note
+rectangle "<b>辅助防御</b>" as AUX #f8fafc {
+  component "自毁处理器 x3\n~71 调用点" as TRAP #fecaca
+  component "反仿真\n静默 exit(0)" as ANTI #fed7aa
+  component "加密字符串\nx12,734" as STR #e9d5ff
+  component "自修改代码\nSO+0x18b054" as SMC #bae6fd
+  component "JNI 混淆\nRegisterNatives->Object" as JNIOB #d1fae5
+}
 
 @enduml
