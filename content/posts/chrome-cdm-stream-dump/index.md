@@ -1,8 +1,8 @@
 ---
 title: "十三次碰壁之后：当密钥不可提取时 - Chrome Widevine CDM 流捕获的工程突围"
 slug: "chrome-cdm-stream-dump-widevine-vtable-hook"
-date: 2026-04-29
-lastmod: 2026-04-30
+date: 2026-05-04
+lastmod: 2026-05-04
 draft: false
 tags: ["widevine", "drm", "chrome", "CDM", "reverse-engineering", "LD_PRELOAD", "vtable-hook", "white-box-aes", "stream-capture"]
 categories: ["security-research"]
