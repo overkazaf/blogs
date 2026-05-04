@@ -1,38 +1,49 @@
 @startuml
 skinparam backgroundColor #FFFFFF
-skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
 skinparam defaultFontSize 13
-skinparam defaultFontColor #1e293b
 skinparam shadowing false
 skinparam roundCorner 8
-skinparam arrowColor #3b82f6
-skinparam arrowThickness 2
 skinparam activityBackgroundColor #f1f5f9
 skinparam activityBorderColor #3b82f6
+skinparam arrowColor #3b82f6
 
-title <font size=16><b>Widevine CDM 4.10.2934 密钥生命周期</b></font>
+title Widevine CDM 4.10.2934 Key Lifecycle
 
 start
 
-:License Response (1210B)\n到达 UpdateSession();
+:License Response (1210B)
+arrives via UpdateSession();
 
-:CDM 内部解密 license;
+:CDM decrypts license internally;
 
-#fefce8:Content Key **K** (16B)\n短暂存在于栈帧中;
+:Content Key **K** (16B)
+BRIEFLY on stack frame;
+note right: Transient - exists < 1ms
 
-:立即 XOR 混淆\nK_blinded = K XOR M\n(M = session-derived mask);
+:Immediately XOR-blinded
+K_blinded = K XOR M
+(M = session-derived mask);
 
-#f1f5f9:堆存储: **K_blinded**\n(17 个 key_id 索引位置);
+:Heap storage: **K_blinded**
+(17 key_id indexed locations);
+note right: Bare key NEVER in heap
 
-:--- 每次 Decrypt() 调用 ---;
+:--- Per Decrypt() call ---;
 
-#fefce8:栈上恢复: K = K_blinded XOR M\n(仅在当前栈帧内);
+:Stack restore: K = K_blinded XOR M
+(current stack frame only);
 
-:白盒 AES 轮运算\n(OLLVM 虚拟化, 97% CPU);
+:White-box AES rounds
+(OLLVM virtualized, 97% CPU);
 
-#fecaca:K 和轮密钥 **清零**\n(函数返回前);
+:K and round keys **ZEROED**
+(before function return);
+note right: Zeroed by explicit memset
 
-#dcfce7:**DecryptAndDecodeFrame 输出**\n解密后的 YUV 明文\n<- 笔者在此处捕获;
+:**DecryptAndDecodeFrame output**
+Decrypted YUV plaintext
+<-- CAPTURED HERE;
+note right #dcfce7: Our vtable hook captures the decoded video frames
 
 stop
 

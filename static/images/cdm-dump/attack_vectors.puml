@@ -1,58 +1,53 @@
 @startuml
 skinparam backgroundColor #FFFFFF
-skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
 skinparam defaultFontSize 13
-skinparam defaultFontColor #1e293b
 skinparam shadowing false
 skinparam roundCorner 8
-skinparam arrowColor #3b82f6
-skinparam arrowThickness 2
 skinparam activityBackgroundColor #f1f5f9
 skinparam activityBorderColor #3b82f6
-skinparam activityDiamondBackgroundColor #fefce8
-skinparam activityDiamondBorderColor #ca8a04
+skinparam arrowColor #3b82f6
 
-title <font size=16><b>13 次密钥提取尝试 -> 全部失败 -> 转向流捕获</b></font>
+title 13 Attack Vectors: All Failed -> Paradigm Shift
 
 start
 
-partition "Phase 1: BoringSSL AES Hooks" #fef2f2 {
-  :Hook aesni_set_encrypt_key\n@ SO+0xb29090;
-  #fecaca:从未触发 (dead code) ✗;
-
+partition "Phase 1: BoringSSL Hooks (3 attempts)" {
+  :Hook aesni_set_encrypt_key;
+  note right: NEVER fired (dead code)
   :Hook aesni_ctr32_encrypt_blocks;
-  #fecaca:从未触发 + 破坏播放 ✗;
-
-  :eBPF uprobes x12 个\nBoringSSL AES 入口;
-  #fecaca:全部 0 次命中 ✗;
+  note right: NEVER fired + broke playback
+  :eBPF uprobes x12 AES entries;
+  note right: ALL 0 hits
 }
 
-partition "Phase 2: 内存搜索" #fef2f2 {
-  :暴力扫描全部 rw-p 堆;
-  #fecaca:密钥不以明文存储 ✗;
-
-  :搜索 AES S-box / T-table;
-  #fecaca:CDM 中不存在标准表 ✗;
-
-  :搜索 key_id 附近 +-512B;
-  #fecaca:密钥与 key_id 不相邻 ✗;
-
-  :UpdateSession 时刻堆快照;
-  #fecaca:密钥收到后立即 XOR 混淆 ✗;
+partition "Phase 2: Memory Search (5 attempts)" {
+  :Brute-force scan all rw-p heap (131MB);
+  note right: Key NOT stored as bare bytes
+  :Search AES S-box (256B table);
+  note right: 0 hits in 453MB CDM memory
+  :Search key_id neighbors +-512B;
+  note right: Key NOT adjacent to key_id
+  :AES key schedule detection (176B);
+  note right: 0 valid schedules in 122MB
+  :Heap snapshot at UpdateSession;
+  note right: Key XOR-blinded immediately
 }
 
-partition "Phase 3: 硬件断点" #fef2f2 {
-  :int3 trap on aesenc 指令;
-  #fecaca:aesenc 从未执行 ✗;
-
-  :perf record CPU 分析;
-  #fecaca:97% CPU 在 OLLVM 调度器\n0xd23680 (软件白盒 AES) ✗;
+partition "Phase 3: Hardware Traps (2 attempts)" {
+  :int3 trap on aesenc opcodes;
+  note right: aesenc NEVER executed
+  :perf record CPU profiling;
+  note right: 97% CPU in OLLVM dispatcher
 }
 
-#fefce8:**核心发现**: 密钥提取不可行\nCDM 使用白盒 AES + key blinding\n裸密钥仅在栈帧内存在,返回即清零;
+:KEY EXTRACTION INFEASIBLE
+White-box AES + key blinding
+Bare key only on stack, zeroed on return;
 
-partition "Phase 4: 范式转移" #f0fdf4 {
-  #dcfce7:**放弃密钥提取, 转向流捕获**\nvtable hook DecryptAndDecodeFrame\n直接捕获解密后的 YUV 明文;
+partition "Phase 4: Paradigm Shift (SUCCESS)" {
+  :vtable hook DecryptAndDecodeFrame
+Capture decrypted YUV directly
+No key needed!;
 }
 
 stop

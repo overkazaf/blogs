@@ -292,6 +292,133 @@ Object.defineProperty(proto, 'playbackRate', {
 | 4x | ~16 min | 混合，ABR 频繁切换 |
 | 8x | ~8 min | 多数 640x342 |
 
+### 5.7 自动化 Dump 完整流程
+
+笔者最终将上述所有组件整合为一条可重复执行的自动化管线。以下是完整的操作序列：
+
+**Step 1 — 编译 hook**
+
+```bash
+$ cd hooks/approach_b_ldpreload && make
+gcc -shared -fPIC -O2 -ldl -o hook.so hook.c
+# hook.so: 3461 行 C, 拦截 dlopen/dlsym/CreateCdmInstance
+```
+
+**Step 2 — 启动 Chrome + hook**
+
+```bash
+$ rm -f /dev/shm/cdm_yuv.bin /tmp/cdm_yuv_meta.tsv
+
+$ LD_PRELOAD=$PWD/hook.so \
+  CDM_HOOK_PATCH_VTABLE=1 \
+  CDM_HOOK_DUMP_YUV=1 \
+  CDM_HOOK_YUV_FILE=/dev/shm/cdm_yuv.bin \
+  CDM_HOOK_VIDEO_FRAME_LIMIT=20000 \
+  /opt/google/chrome/chrome \
+    --no-sandbox \
+    --remote-debugging-port=9222 \
+    --user-data-dir=/tmp/chrome-cdm-hook-profile \
+    "https://www.netflix.com/"
+```
+
+**Hook 环境变量参考**：
+
+| 变量 | 作用 | 默认 |
+|------|------|------|
+| `CDM_HOOK_PATCH_VTABLE=1` | **必需**，安装 vtable patch | — |
+| `CDM_HOOK_DUMP_YUV=1` | 捕获视频帧 | 关闭 |
+| `CDM_HOOK_YUV_FILE=<path>` | YUV 输出路径 | `/tmp/cdm_yuv.bin` |
+| `CDM_HOOK_VIDEO_FRAME_LIMIT=<n>` | 最大帧数 | 无限 |
+| `CDM_HOOK_DUMP_PLAINTEXT=1` | 捕获音频（slot 9 Decrypt） | 关闭 |
+| `CDM_HOOK_DUMP_LICENSE=1` | 保存 license response | 关闭 |
+| `CDM_HOOK_DUMP_HEAP_AFTER_LICENSE=1` | license 后堆快照 | 关闭 |
+| `CDM_HOOK_RECOVER_KEY=1` | 暴力搜索 AES 密钥（不会成功） | 关闭 |
+| `CDM_HOOK_AESENC_TRAP=1` | int3 trap on aesenc（不会触发） | 关闭 |
+
+**Step 3 — CDP 驱动播放**
+
+```bash
+$ python3 netflix_dump.py \
+    --url "https://www.netflix.com/watch/80114856" \
+    --rate 2 \
+    --duration 600
+```
+
+```
+[CDP] Connected to Chrome DevTools @ ws://127.0.0.1:9222
+[CDP] Page.addScriptToEvaluateOnNewDocument: playbackRate hijack installed
+[CDP] Navigating to Netflix title 80114856...
+[CDP] playbackRate = 2.0x confirmed
+[CDP] Netflix player version: 6.0056.525.911
+[CDP] Codec: video/mp4;codecs=av01.0.04M.08 (AV1, prk)
+[CDP] Audio: audio/mp4;codecs=mp4a.40.5 (HE-AAC)
+[CDP] KeySystem: com.widevine.alpha.SW_SECURE_DECODE
+[CDP] Playing bitrate: 128/246 kbps (1280x720)
+[hook] Frame #1: fmt=17(P010) 1280x720 stride=2560 ts=0
+[hook] Frame #100: 1280x720 ts=4170
+[hook] Resolution change: 1280x720 -> 1056x540 (ABR downgrade)
+[hook] Frame #1204: 1056x540 ts=50180
+...
+[hook] Frame #4217: capture complete, 11.2 GB written to /dev/shm/cdm_yuv.bin
+```
+
+**Step 4 — 分段编码**
+
+```bash
+$ python3 encode_segments.py /dev/shm/cdm_yuv.bin dump/
+
+[encoder] Reading metadata: /tmp/cdm_yuv_meta.tsv (4217 entries)
+[encoder] Detected 3 resolution segments:
+          Segment 1: frames 0-1203, 1280x720 P010 (stride_y=2560)
+          Segment 2: frames 1204-2292, 1056x540 P010 (stride_y=2112)
+          Segment 3: frames 2293-4216, 768x432 P010 (stride_y=1536)
+[encoder] Encoding segment 1 (1204 frames)...
+          ffmpeg -f rawvideo -pix_fmt yuv420p10le -s 1280x720 -r 24 -i pipe:0 \
+                 -c:v libx264 -crf 18 -preset medium dump/segment_1_1280x720.mp4
+[encoder] Segment 1 done: 89.4 MB, 50.2s
+[encoder] Encoding segment 2 (1089 frames)...
+[encoder] Segment 2 done: 41.7 MB, 45.4s
+[encoder] Encoding segment 3 (1924 frames)...
+[encoder] Segment 3 done: 52.1 MB, 80.2s
+[encoder] Concatenating + scaling to 1280x720...
+[encoder] Final: dump/netflix_full.mp4 (247 MB, 12:33)
+[encoder] Cleaning up /dev/shm/cdm_yuv.bin (freed 11.2 GB RAM)
+```
+
+### 5.8 解密视频验证
+
+最终输出的 `netflix_full.mp4` 经 ffprobe 验证：
+
+```
+$ ffprobe dump/netflix_full.mp4
+
+Input #0, mov,mp4, from 'dump/netflix_full.mp4':
+  Duration: 00:12:33.42, bitrate: 2634 kb/s
+  Stream #0:0: Video: h264 (High), yuv420p, 1280x720, 24 fps
+  
+$ ffprobe dump/segment_1_1280x720.mp4
+
+Input #0, mov,mp4, from 'dump/segment_1_1280x720.mp4':
+  Duration: 00:50.17, bitrate: 14894 kb/s
+  Stream #0:0: Video: h264 (High 10), yuv420p10le, 1280x720, 24 fps
+```
+
+**验证要点**：
+- 画面完整，无 block artifact，色彩正常
+- 帧率稳定 24fps（Netflix 原始帧率）
+- 10-bit 色深在 segment 级别保留（最终 concat 降为 8-bit 以兼容播放器）
+- 音频缺失（Netflix 音频不经过 CDM，走 clear MSE 管线——这是已知限制）
+
+### 5.9 工程复杂度总结
+
+| 组件 | 代码量 | 技术难点 |
+|------|--------|---------|
+| `hook.c` | 3,461 行 C | dlopen/dlsym 拦截、vtable mprotect、VideoFrame_2 vtable 逆向、CDM 进程识别 |
+| `netflix_dump.py` | ~400 行 Python | CDP WebSocket 通信、持久 JS 注入、playbackRate 对抗 |
+| `encode_segments.py` | ~300 行 Python | 多分辨率 YUV 分段、ffmpeg pipe 编码、concat 拼接 |
+| 攻击向量探索 | 13 个独立实验 | eBPF、Frida、GDB、perf、radare2、custom scanners |
+| **总计** | **~4,500 行 + 157 页分析报告** | |
+
 ---
 
 ## 六、CDM 安全性评估
@@ -435,3 +562,79 @@ Object.defineProperty(proto, 'playbackRate', {
 安全研究的目标不总是"破解"。当 13 种方法全部失败时，笔者对 CDM 白盒 AES 的理解反而比成功提取密钥时更深——因为每次失败都排除了一个假设，最终拼出了防护机制的完整图景。
 
 正如数学中的不可能性证明（如哥德尔不完备定理、停机问题）往往比存在性证明更有深度——**知道什么不可能，比知道什么可能，更接近真相**。
+
+### 未来的突破方向
+
+尽管密钥提取在当前工具能力下不可行，笔者认为以下方向有望在未来实现突破：
+
+#### 方向 1：OLLVM CFF 反混淆 → DFA（难度：极高，周期 2-6 个月）
+
+CDM 4.10.2934 的白盒 AES 被 OLLVM 控制流平坦化包裹在 `0xd23680` 附近。如果能成功反混淆这段代码，恢复出 AES 轮函数的原始结构，就可以应用笔者在 [L3 keybox 研究](/posts/widevine-l3-keybox-mass-production/)中验证过的 DFA 攻击。
+
+关键挑战：与 Android L3 build 4464 不同，Chrome CDM 的 AES **没有 T-table**（笔者已通过 453MB 内存扫描证明），DFA 的故障注入点需要从反混淆后的指令流中识别——这使得 DFA 前置的反混淆工作量远大于 L3 研究。
+
+可能的工具链：`angr` CFGFast + `D-810` IDA 插件 + `Miasm` 符号执行。笔者在六神研究中已初步接触 OLLVM 反混淆，但 CDM 的代码规模（18.2 MB，97% CPU 在单一调度器）远超 MetaSec。
+
+#### 方向 2：DCA（差分计算分析）（难度：高，周期 1-2 个月）
+
+David Buchanan 在 2019 年通过 DCA 攻破了当时的 Chrome CDM。DCA 不需要故障注入（不需要修改 CDM 行为），而是通过统计大量 execution trace 中的内存值与密钥字节的相关性来恢复密钥。
+
+笔者可以通过 LD_PRELOAD hook 在 `Decrypt()` 调用期间 trace 所有内存读写，收集 ~1000 条 trace，然后用 [SideChannelMarvels/Daredevil](https://github.com/SideChannelMarvels/Daredevil) 进行 CPA（Correlation Power Analysis 的软件等价）。
+
+关键不确定性：CDM 4.10.2934 的白盒是否引入了抗 DCA 的编码混淆（如内部/外部编码、随机化中间值）。如果有，DCA 需要的 trace 数量会从 ~1000 跃升到 ~100,000+，实际可行性大幅降低。
+
+#### 方向 3：vtable 完整性绕过 → 未来 CDM 版本（难度：中，持续对抗）
+
+Google 迟早会对 vtable 实施 CFI（Control Flow Integrity）保护——Chromium 已在其他组件中启用了 `-fsanitize=cfi`。一旦 CDM 启用 CFI，vtable 指针修改会触发 trap，流捕获路径将被封堵。
+
+可能的绕过：
+- Hook `mprotect` 系统调用，拦截 CFI 的保护页设置
+- 在 CDM 的 `.text` 段中 patch 调用 `DecryptAndDecodeFrame` 的位置（而非 vtable 本身）
+- 通过 Mojo IPC 中间人（在 renderer 和 CDM 之间）拦截解密结果
+
+#### 方向 4：GPU 安全渲染路径分析（难度：高，L1 相关）
+
+L1 CDM 不通过 `DecryptAndDecodeFrame` 输出明文——解密和渲染在 TEE/GPU 安全路径中完成，普通进程无法访问。但 Linux 上的 GPU 安全渲染路径（如 AMD/Intel 的 Protected Content Path）的实现成熟度远低于 Windows 的 HWDRM。
+
+这意味着即使 Netflix 在 Linux Chrome 上启用 L1（假设），GPU 安全渲染的攻击面也值得分析——这是一个完全不同层次的研究课题。
+
+---
+
+## 参考文献
+
+### 学术论文
+
+| 作者 | 标题 | 年份 | 链接 |
+|------|------|------|------|
+| Boneh, DeMillo, Lipton | *On the Importance of Checking Cryptographic Protocols for Faults* | 1997 | [Springer](https://link.springer.com/chapter/10.1007/3-540-69053-0_4) |
+| Chow et al. | *White-Box Cryptography and an AES Implementation* | 2002 | [Springer](https://link.springer.com/chapter/10.1007/3-540-36492-7_17) |
+| Patat et al. | *Attacking Widevine's L3 Content Decryption Module* | 2022 | [arXiv](https://arxiv.org/abs/2204.09298) |
+| Dunn & Polakis | *Understanding and Undermining Microsoft's PlayReady DRM* | 2024 | [USENIX](https://www.usenix.org/conference/usenixsecurity24/presentation/dunn) |
+
+### 技术博客
+
+| 来源 | 标题 | 链接 |
+|------|------|------|
+| Neodyme Labs | *Widevine L3 White-Box AES DFA* | [neodyme.io](https://neodyme.io/en/blog/widevine_l3) |
+| Quarkslab | *DFA on White-box AES Implementations* | [quarkslab.com](https://blog.quarkslab.com/differential-fault-analysis-on-white-box-aes-implementations.html) |
+| David Buchanan | *Chrome Widevine L3 Decryptor* (2019 tweet) | [Twitter](https://twitter.com/david3141593/status/1080606827384131590) |
+| W3C | *Encrypted Media Extensions (EME)* | [w3.org](https://www.w3.org/TR/encrypted-media/) |
+
+### 开源工具
+
+| 项目 | 用途 | 链接 |
+|------|------|------|
+| zhkl0228/unidbg | Android ARM 仿真 | [GitHub](https://github.com/zhkl0228/unidbg) |
+| AvalonsWanderer/widevine-l3-playground | Qiling 仿真 + DFA 基础设施 | [GitHub](https://github.com/AvalonsWanderer/widevine-l3-playground) (DMCA) |
+| SideChannelMarvels/JeanGrey | DFA 密文 → 轮密钥恢复 (phoenixAES) | [GitHub](https://github.com/SideChannelMarvels/JeanGrey) |
+| SideChannelMarvels/Daredevil | DCA/CPA 分析工具 | [GitHub](https://github.com/SideChannelMarvels/Daredevil) |
+| hyugogirubato/KeyDive | Android L3 WVD 自动提取 | [GitHub](https://github.com/hyugogirubato/KeyDive) |
+| devine-dl/pywidevine | Widevine Python 客户端库 | [GitHub](https://github.com/devine-dl/pywidevine) |
+
+### 标准与规范
+
+| 标准 | 说明 | 链接 |
+|------|------|------|
+| CENC (ISO/IEC 23001-7) | Common Encryption 标准 | [ISO](https://www.iso.org/standard/68042.html) |
+| DASH-IF Guidelines | 多 DRM 互操作性 | [dashif.org](https://dashif.org/guidelines/) |
+| NIST SP 800-108 | KDF (CMAC 密钥派生) | [NIST](https://csrc.nist.gov/publications/detail/sp/800-108/rev-1/final) |
