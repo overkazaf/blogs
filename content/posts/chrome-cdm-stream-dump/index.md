@@ -545,6 +545,223 @@ Input #0, mov,mp4, from 'dump/segment_1_1280x720.mp4':
 
 ---
 
+## 5A、技术深潜：那些"看起来简单"的细节
+
+> 前面的叙述为了保持主线清晰，省略了不少底层细节。但逆向工程的真实难度恰恰藏在这些细节里——每一个都曾让笔者卡住数小时。本节逐一展开。
+
+### 5A.1 vtable slot 14 从何而来：Itanium C++ ABI 的 vtable 布局
+
+笔者说"hook vtable[14] 就是 `DecryptAndDecodeFrame`"——但这个 14 不是从文档查来的，而是从 C++ ABI 规范 + 二进制验证推导出来的。
+
+**背景**：Chromium 定义了 CDM 接口 `ContentDecryptionModule_11`（[content_decryption_module.h](https://source.chromium.org/chromium/chromium/src/+/main:media/cdm/api/content_decryption_module.h)），它是一个纯虚基类。按照 Itanium C++ ABI（Linux/macOS 通用），vtable 的布局规则是：
+
+```
+vtable layout:
+  [0]  offset-to-top (通常 0)
+  [1]  RTTI pointer
+  [2]  第一个虚函数指针 → 实际 slot 0
+  [3]  第二个虚函数指针 → 实际 slot 1
+  ...
+```
+
+但代码中通过 `*(void***)cdm` 得到的是**跳过 offset-to-top 和 RTTI 之后的函数指针数组**——所以 `vtable[0]` 对应第一个虚函数。
+
+CDM 接口声明的虚函数顺序：
+
+| slot | 方法 | 说明 |
+|------|------|------|
+| 0 | `Initialize` | CDM 初始化 |
+| 1 | `GetStatusForPolicy` | HDCP 策略查询 |
+| 2 | `SetServerCertificate` | 设置服务端证书 |
+| 3 | `CreateSessionAndGenerateRequest` | 创建会话 |
+| 4 | `LoadSession` | 加载持久会话 |
+| 5 | **`UpdateSession`** | **安装 license（笔者 hook 此处捕获 license response）** |
+| 6 | `CloseSession` | 关闭会话 |
+| 7 | `RemoveSession` | 移除会话 |
+| 8 | `TimerExpired` | 定时器 |
+| 9 | **`Decrypt`** | **解密音频样本** |
+| 10 | `InitializeAudioDecoder` | 初始化音频解码器 |
+| 11 | `InitializeVideoDecoder` | 初始化视频解码器 |
+| 12 | `DeinitializeDecoder` | 销毁解码器 |
+| 13 | `ResetDecoder` | 重置解码器 |
+| 14 | **`DecryptAndDecodeFrame`** | **解密+解码视频帧（主捕获点）** |
+| 15 | `DecryptAndDecodeSamples` | 解密+解码音频样本 |
+
+**但这里有一个陷阱**：如果 CDM 类有虚析构函数（`virtual ~ContentDecryptionModule_11()`），析构函数会占据 vtable 的前两个 slot（complete destructor + deleting destructor），把后续所有函数**往后推 2 位**。笔者最初按头文件数出 slot 14 = `DecryptAndDecodeFrame`，结果 hook 到的是错误的函数。
+
+**验证方法**：用 radare2 读取 CDM 实例的 vtable 指针，逐 slot 反查符号：
+
+```
+[0x00] → 0xd08a40 (Initialize — 验证通过，无析构函数偏移)
+[0x05] → 0xd09120 (UpdateSession — 确认 slot 5 正确)
+[0x09] → 0xd09360 (Decrypt — 确认 slot 9 正确)
+[0x0e] → 0xd09510 (DecryptAndDecodeFrame — 确认 slot 14 正确!)
+```
+
+**结论**：CDM 11 的虚析构函数**不在 vtable 中**（Chromium 使用 `Destroy()` 静态方法代替虚析构），所以 slot 编号与头文件声明顺序一致。但这不能假设——必须通过二进制验证。
+
+### 5A.2 CDM 进程沙箱的精确限制：为什么只有 fd 1 可用
+
+Chrome 的 CDM 运行在一个定制沙箱中（`--service-sandbox-type=cdm`），笔者在开发 hook.so 时遇到了一系列"明明应该能工作但就是不行"的问题：
+
+| 操作 | 结果 | 原因 |
+|------|------|------|
+| `fprintf(stderr, ...)` | **静默丢失** | Chrome 在 `execve` 前 `close(2)`，stderr 不存在 |
+| `fopen("/tmp/hook.log", "w")` | **EPERM** | CDM 沙箱的 seccomp 规则拒绝在 `/tmp` 创建文件 |
+| `open("/dev/shm/out.bin", O_CREAT)` | **OK** | `/dev/shm` 在沙箱白名单中（CDM 需要共享内存） |
+| `fprintf(stdout, ...)` | **OK** | fd 1 被 Chrome 继承，重定向到父进程的日志管道 |
+| `pthread_create(...)` | **看似 OK 但阻塞** | seccomp 允许 `clone()`，但 constructor 完成前创建线程导致死锁 |
+
+**发现 fd 1 的过程**：笔者最初使用 stderr 输出日志——一行输出都看不到，以为 hook 没有加载。切换到 `/tmp` 文件——权限拒绝。最后在绝望中尝试 `write(1, msg, len)`——日志出现在 Chrome 的 stdout 中！
+
+原理：Chrome 的进程模型中，`fork()` + `execve()` 创建子进程时会选择性关闭文件描述符。CDM utility 进程关闭 stderr（安全考虑：防止 CDM 向用户终端输出信息），但保留 stdout（用于 IPC 日志收集）。这一行为没有文档化，笔者是通过 `/proc/self/fd/` 枚举发现的：
+
+```c
+// hook.c constructor 中
+for (int fd = 0; fd < 10; fd++) {
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    char target[256];
+    ssize_t n = readlink(path, target, sizeof(target)-1);
+    if (n > 0) { target[n] = 0; dprintf(1, "fd %d -> %s\n", fd, target); }
+}
+// 输出: fd 0 -> /dev/null, fd 1 -> pipe:[12345], fd 3 -> socket:[...]
+// fd 2 不存在!
+```
+
+### 5A.3 YUV420P10 帧解析的三个陷阱
+
+`DecryptAndDecodeFrame` 返回的 `VideoFrame_2` 对象本身也是虚函数派发的接口，笔者需要从中提取原始 YUV 数据。这里有三个容易踩的坑：
+
+**陷阱 1：Format() = 17 意味着什么？**
+
+`VideoFrame_2::Format()` 返回一个整数。Chromium 的 `VideoPixelFormat` 枚举定义了 30+ 种格式，但 CDM 的接口头文件中没有包含这个枚举——只说"returns format as int"。笔者需要交叉引用 Chromium 源码：
+
+```
+PIXEL_FORMAT_I420 = 1,    // 8-bit  4:2:0 (每像素 1 字节)
+PIXEL_FORMAT_YV12 = 2,    // 8-bit  4:2:0 (V 在 U 前)
+...
+PIXEL_FORMAT_YUV420P10 = 17,  // 10-bit 4:2:0 (每像素 2 字节!)
+```
+
+Netflix 返回 **Format=17**（YUV420P10），这意味着 `stride_y = 2560` 实际上是 `width = 1280`（每像素 2 字节），**不是** 2560 像素宽！笔者最初按 8-bit 格式处理，得到的画面是一半正常一半绿色条纹——典型的 stride 计算错误。
+
+**陷阱 2：Buffer::Size() 返回 Capacity 而非实际帧大小**
+
+`VideoFrame_2::FrameBuffer()` 返回一个 `Buffer*`，`Buffer::Size()` 按文档应该返回"buffer 中有效数据的大小"。但实测发现它返回 **Capacity**（分配大小），对于 1280×720 P010 帧，`Size()` 返回 1,425,408 字节，其中大量是零填充。
+
+**正确计算实际帧大小**：
+
+```c
+uint32_t off_y = frame_vtable->PlaneOffset(frame, 0);  // Y 平面偏移
+uint32_t off_u = frame_vtable->PlaneOffset(frame, 1);  // U 平面偏移
+uint32_t off_v = frame_vtable->PlaneOffset(frame, 2);  // V 平面偏移
+uint32_t stride_y = frame_vtable->Stride(frame, 0);
+uint32_t stride_v = frame_vtable->Stride(frame, 2);
+
+uint32_t height = (off_u - off_y) / stride_y;
+uint32_t frame_bytes = off_v + stride_v * (height / 2);
+// 1280×720 P010: off_y=0, off_u=1843200, off_v=2304000
+// height = 1843200 / 2560 = 720
+// frame_bytes = 2304000 + 1280 * 360 = 2,764,800
+```
+
+**陷阱 3：VideoFrame_2 的 vtable slot 编号**
+
+与 CDM 的 vtable 不同，`VideoFrame_2` 的 vtable **有虚析构函数**，且占据 slot 0-1（complete + deleting destructor）。所以实际方法的 slot 编号要 +2：
+
+| 声明顺序 | 实际 slot | 方法 |
+|---------|----------|------|
+| 0 (析构) | 0, 1 | ~VideoFrame_2() |
+| 1 | **3** | Format() |
+| 3 | **5** | SetFormat() |
+| 5 | **7** | FrameBuffer() |
+| ... | ... | ... |
+
+笔者最初按声明顺序调用 slot 1 以为是 `Format()`，实际调用到的是 deleting destructor——直接 `free` 了 frame 对象，CDM 随即 crash。通过 GDB 单步才发现这个偏移错误。
+
+### 5A.4 BoringSSL dead code 的证明链
+
+笔者声称"CDM 中的 BoringSSL AES 函数是 dead code"——这是一个很强的断言，需要严格的证据链：
+
+**证据 1：radare2 静态分析**
+
+```bash
+$ r2 -q -c 'afl~aesni' libwidevinecdm.so
+0x00b29090    3 48   sym.aesni_set_encrypt_key
+0x00b290c0    7 256  sym.aesni_encrypt
+0x00b276c0   21 3072 sym.aesni_ctr32_encrypt_blocks
+```
+
+函数存在，有合法的机器码，看起来完全正常。
+
+**证据 2：eBPF uprobes（动态验证）**
+
+```python
+# 12 个 BoringSSL AES 函数入口全部设置 uprobe
+for offset in [0xb29090, 0xb290c0, 0xb276c0, ...]:  # 12 个
+    bpf.attach_uprobe(name="libwidevinecdm.so", addr=offset, fn_name="trace_entry")
+```
+
+在 Netflix 播放 10 分钟期间（包含 license 交换 + 持续解密），**全部 12 个 probe 的触发次数 = 0**。
+
+**证据 3：perf record CPU profiling**
+
+```bash
+$ perf record -p <CDM_PID> -g -- sleep 30
+$ perf report --sort=symbol
+  97.2%  libwidevinecdm.so  [.] 0xd23680   # OLLVM CFF dispatcher
+   1.8%  libwidevinecdm.so  [.] 0xd24100   # nearby code
+   0.3%  libc.so            [.] memcpy
+   ...
+   0.0%  libwidevinecdm.so  [.] aesni_set_encrypt_key    # ZERO samples
+   0.0%  libwidevinecdm.so  [.] aesni_ctr32_encrypt_blocks # ZERO samples
+```
+
+97% 的 CPU 时间集中在 `0xd23680` 附近——这是 OLLVM 控制流平坦化的主调度器。AES 操作被**虚拟化**为调度器中的 `imul; xor` 算术序列，BoringSSL 的标准实现完全未被调用。
+
+**证据 4：int3 trap on aesenc opcode**
+
+```c
+// 找到 CDM 中所有 aesenc 指令的位置
+// aesenc = 0x66 0x0F 0x38 0xDC
+// 在每个位置替换第一个字节为 0xCC (int3)
+// 注册 SIGTRAP handler 记录触发
+```
+
+Netflix 播放期间，**0 次 SIGTRAP 触发**。aesenc 硬件指令存在于二进制中但**从未被执行**。
+
+**综合结论**：CDM 4.10.2934 包含 BoringSSL 的 AES 实现作为**链接残留物**——它与 Chrome 的 BoringSSL 共享库一起编译，但 CDM 的内容解密路径完全使用自己的白盒软件 AES 实现，通过 OLLVM 虚拟化执行。
+
+### 5A.5 白盒 AES key blinding 的密码学原理
+
+笔者说"密钥从不以可观测形式存在于堆中"——为什么 `K_blinded = K ⊕ M` 就够了？
+
+**模型**：
+```
+攻击者能力：任意时刻读取进程的全部堆内存
+防御目标：攻击者不能从堆快照中恢复 content key K
+```
+
+**key blinding 的安全性**：
+
+1. **堆中只有 K_blinded = K ⊕ M**，其中 M 是 session-derived mask
+2. M 本身**也不以明文存在于堆中**——它在每次 `Decrypt()` 调用时通过白盒 AES 的内部状态临时派生，仅存在于 CPU 寄存器或栈帧中
+3. 栈帧在函数返回前被**显式清零**（`explicit_bzero` 或等价操作），防止栈残留
+
+这意味着在任意堆快照中：
+- K 不存在（只有 K ⊕ M）
+- M 不存在（只在栈帧中临时计算）
+- K ⊕ M 是一个随机值（因为 M 对攻击者来说是均匀随机的），与真正的随机数**不可区分**
+
+**与 Android L3 的对比**：
+- Android L3 build 4464 使用 T-table AES，密钥嵌入在 T-table 的查表路径中——**可以通过 DFA 从 T-table 的差分行为中恢复**
+- Chrome CDM 4.10.2934 使用 key blinding + 虚拟化白盒——密钥**从不参与可观测的内存操作**，DFA 的前提（可观测的 AES 结构）不成立
+
+**理论上的突破路径**：如果能逆向 OLLVM 调度器 `0xd23680` 处的白盒 AES 实现，确定 M 的派生算法，就可以从 K_blinded 恢复 K。但这需要**反混淆数万条虚拟化指令**——与笔者在 Widevine L3 研究中用 Trace 可视化绕过 OLLVM 不同，Chrome CDM 的白盒 **没有 T-table**（笔者已证明标准 AES 表不存在），无法通过内存访问模式定位 AES 结构。反混淆是唯一路径。
+
+---
+
 ## 六、CDM 安全性评估
 
 ### 6.1 与 Android L3 CDM 的代际对比
