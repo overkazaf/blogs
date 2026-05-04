@@ -29,7 +29,7 @@ math: false
 
 先用一张图说清楚整个初始化到签名输出的完整序列：
 
-![初始化序列图](/images/sixgod/init_sequence.png)
+![初始化序列图](https://overkazaf.github.io/blogs/images/sixgod/init_sequence.png)
 *完整的 Phase 1→6 初始化序列。绿色高亮的 Phase 3（配置验证）是整个研究的核心突破点；蓝色高亮的最终输出包含全部六个签名参数。*
 
 整个研究分为 **9 个递进的步骤**：
@@ -82,7 +82,7 @@ MetaSec SDK 不仅保护抖音，还部署在字节跳动全系 APP 中——Tik
 
 六组签名参数由同一个 native 函数调用（`cmd=0x2000006`）一次性生成，藏在经过三层保护的 `libmetasec_ml.so` 深处。
 
-![签名生成管线](/images/sixgod/signature_pipeline.png)
+![签名生成管线](https://overkazaf.github.io/blogs/images/sixgod/signature_pipeline.png)
 *六神签名的并行生成管线。X-Argus 是最复杂的（SM3→Protobuf→Simon→XOR→AES→Base64 六阶段），X-Khronos 最简单（纯时间戳）。*
 
 #### 笔者的研究动机
@@ -114,7 +114,7 @@ MetaSec SDK 不仅保护抖音，还部署在字节跳动全系 APP 中——Tik
 
 面对三层防护的 native 库，攻击路线的选择本身就是一个决策：
 
-![攻击路线对比](/images/sixgod/attack_routes.png)
+![攻击路线对比](https://overkazaf.github.io/blogs/images/sixgod/attack_routes.png)
 *三条攻击路线的优劣对比。笔者选择了 Route C（unidbg 仿真），以可复现性和深度可观测性为核心考量。*
 
 | 路线 | 方法 | 优点 | 缺点 |
@@ -172,7 +172,7 @@ Java 层
 
 > 这是笔者遇到的最复杂的商业 Android 保护方案之一。
 
-![保护层架构](/images/sixgod/protection_layers.png)
+![保护层架构](https://overkazaf.github.io/blogs/images/sixgod/protection_layers.png)
 *MetaSec 的三层核心保护（OLLVM → VM → JIT）与五种辅助防御机制。注意层间的耦合关系：OLLVM 保护 VM 入口，VM 保护密钥操作，JIT 保护签名计算——静态分析无法穿透任何一层。*
 
 | 保护层 | 实现方式 | 对分析的影响 |
@@ -334,7 +334,7 @@ return UUID.fromString("12345678-1234-1234-1234-123456789abc");
 
 **推断过程**：
 
-![配置验证决策树](/images/sixgod/config_validation.png)
+![配置验证决策树](https://overkazaf.github.io/blogs/images/sixgod/config_validation.png)
 *Phase 3 配置验证的决策树。17 个字段中任何一个不匹配都会导致不同形式的失败——exit(1)、VM 无限循环或静默返回。绿色路径是唯一的成功路径。*
 
 Phase 3 的行为随配置状态呈现清晰的三级响应：
