@@ -62,7 +62,7 @@ Chrome 桌面端的 CDM（build 4.10.2934.0, 2026 年当前版本）是完全不
 | 密钥存储 | 可从内存提取 | **XOR blinding，裸密钥仅在栈帧内** |
 | 混淆层 | OLLVM + VM | **OLLVM CFF，97% CPU 在调度器** |
 
-Google 在 6 年间将 CDM 的 AES 实现从"可被 DFA 攻破的 T-table"升级为"密钥从不以可观测形式存在的白盒"——这是笔者切身感受到的**防护代际差距**。
+Google 在 8 年间将 CDM 的 AES 实现从"可被 DFA 攻破的 T-table"升级为"密钥从不以可观测形式存在的白盒"——这是笔者切身感受到的**防护代际差距**。
 
 ### 2.2 研究动机
 
@@ -317,7 +317,7 @@ Object.defineProperty(proto, 'playbackRate', {
 | **笔者 (L3 keybox)** | 2026.04 | Android build 4464 | DFA + Trace 可视化 | **成功** |
 | **笔者 (本文)** | 2026.04 | Chrome 4.10.2934 | 13 种方法 + vtable hook | **密钥：失败 / 流：成功** |
 
-**关键差距**：Buchanan 和 Hadad 攻击的是 2019-2020 年的旧版 CDM。Google 在此后 6 年持续升级白盒 AES 实现，从 T-table 迁移到完全虚拟化的软件白盒。笔者的 13 次失败是对**当前版本**安全强度的实证验证。
+**关键差距**：Buchanan 和 Hadad 攻击的是 2019-2020 年的旧版 CDM。Google 在此后持续升级白盒 AES 实现，从 T-table 迁移到完全虚拟化的软件白盒。笔者的 13 次失败是对**当前版本**安全强度的实证验证。
 
 ---
 
@@ -348,7 +348,7 @@ Object.defineProperty(proto, 'playbackRate', {
 - Phase 3 证明：**硬件 AES 指令从未执行**（纯软件白盒）
 - 综合证明：**CDM 的白盒 AES 在常规动态分析下不可突破**
 
-这一结论对安全评估的意义在于：L3 CDM 的密钥保护**已经达到了需要 Neodyme 级别白盒密码学分析才能突破的强度**——这是 Google 6 年持续投入的成果。
+这一结论对安全评估的意义在于：L3 CDM 的密钥保护**已经达到了需要 Neodyme 级别白盒密码学分析才能突破的强度**——这是 Google 8 年持续投入的成果。
 
 ### 7.3 AI 辅助的能力边界
 
@@ -426,7 +426,7 @@ Object.defineProperty(proto, 'playbackRate', {
 2. 刻画了 CDM 的**完整密钥生命周期**：license 解密 → 栈帧明文（瞬态）→ XOR blinding 存储 → 每次 Decrypt 栈上恢复 → 返回清零
 3. 完成了从密钥提取到流捕获的**范式转移**，构建了 LD_PRELOAD + vtable hook + CDP 注入 + 多分辨率编码的完整管线
 4. 在 Netflix 上完成了**端到端验证**，支持 1x-8x 加速捕获
-5. 与笔者的 [Android L3 DFA 研究](/posts/widevine-l3-keybox-mass-production/)形成对照，展示了 **Google 6 年间 CDM 防护的代际进化**
+5. 与笔者的 [Android L3 DFA 研究](/posts/widevine-l3-keybox-mass-production/)形成对照，展示了 **Google 8 年间 CDM 防护的代际进化**
 
 ### 一个值得深思的问题
 
