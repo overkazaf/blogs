@@ -80,7 +80,7 @@ Google 在 8 年间将 CDM 的 AES 实现从"可被 DFA 攻破的 T-table"升级
 | **运行平台** | Chrome Linux (144.0+), `--no-sandbox` |
 | **主机** | Ubuntu 22.04 LTS, Dual Xeon E5-2673 v4 (80 threads), 96GB RAM |
 | **分析工具** | radare2, eBPF/bpftrace, GDB, Frida, perf, custom C hook (3461 行) |
-| **分析时间** | 2026-04-15 ~ 2026-04-25 |
+| **分析时间** | 2026-04-20 ~ 2026-05-04 |
 
 ---
 
