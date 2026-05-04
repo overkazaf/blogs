@@ -403,9 +403,15 @@ Input #0, mov,mp4, from 'dump/segment_1_1280x720.mp4':
   Stream #0:0: Video: h264 (High 10), yuv420p10le, 1280x720, 24 fps
 ```
 
+以下是从解密后视频中提取的 5 个不同时间点的帧抽样，确认画面完整、无 block artifact、色彩和细节完全保留：
+
+![解密视频帧抽样](https://overkazaf.github.io/blogs/images/cdm-dump/decrypt_proof_composite.png)
+*上排：t=15s（字幕叠加）、t=45s（室内中景）、t=90s（车内特写）。下排：t=120s（全景）、t=150s（室内暗光）。右下信息面板显示 CDM 版本和视频参数。全部 1280x720，H.264 Constrained Baseline，23.98fps。*
+
 **验证要点**：
-- 画面完整，无 block artifact，色彩正常
-- 帧率稳定 24fps（Netflix 原始帧率）
+- 画面完整，无 block artifact，色彩正常——暗光场景（t=120s, t=150s）细节清晰可辨
+- 字幕叠加正常（t=15s），说明视频解码管线未被破坏
+- 帧率稳定 23.98fps（Netflix 原始帧率）
 - 10-bit 色深在 segment 级别保留（最终 concat 降为 8-bit 以兼容播放器）
 - 音频缺失（Netflix 音频不经过 CDM，走 clear MSE 管线——这是已知限制）
 
