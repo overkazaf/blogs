@@ -1,0 +1,69 @@
+@startuml
+skinparam backgroundColor #1a1b26
+skinparam defaultFontColor #c0caf5
+skinparam componentBackgroundColor #24283b
+skinparam componentBorderColor #7aa2f7
+skinparam packageBackgroundColor #1f2335
+skinparam packageBorderColor #565f89
+skinparam noteBorderColor #e0af68
+skinparam noteBackgroundColor #2d3149
+skinparam arrowColor #7aa2f7
+
+title MetaSec libmetasec_ml.so 保护层架构 (3.8MB, ARM64)
+
+package "Layer 1: OLLVM 控制流平坦化" #1f2335 {
+  [主调度器 SO+0x173ec4] as OLL
+  note right of OLL
+    madd/mul 哈希计算
+    状态变量分发
+    所有关键函数被平坦化
+  end note
+  
+  package "Layer 2: 自定义 VM 字节码" #24283b {
+    [VM 解释器 SO+0x1702a8] as VM
+    note right of VM
+      32位指令字解码
+      ubfx/and/orr 位域提取
+      br x8 间接跳转分发
+    end note
+    
+    package "Layer 3: JIT 代码生成" #2d3149 {
+      [运行时代码 0x12540000-0x12599000] as JIT
+      note right of JIT
+        Phase 2 动态生成 ~360KB
+        PLT stub + CAS 计算循环
+        签名核心逻辑在此执行
+      end note
+    }
+  }
+}
+
+component "自毁处理器 ×3" as TRAP #f7768e
+component "反仿真检测" as ANTI #e0af68
+component "加密字符串 ×12734" as STR #bb9af7
+component "自修改代码" as SMC #ff9e64
+component "JNI 混淆" as JNIOB #73daca
+
+TRAP -[hidden]right- ANTI
+ANTI -[hidden]right- STR
+STR -[hidden]right- SMC
+SMC -[hidden]right- JNIOB
+
+note bottom of TRAP
+  SO+0x266a38/b0c/be0
+  跳转到 0x1000 (未映射)
+  覆盖 ~71 个调用点
+end note
+
+note bottom of ANTI
+  时间戳相关分发
+  环境变量验证
+  静默 exit(0)
+end note
+
+note bottom of STR
+  运行时解密
+  cmd=0x1000001
+end note
+
+@enduml

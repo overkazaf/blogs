@@ -1,0 +1,25 @@
+@startuml
+skinparam backgroundColor #1a1b26
+skinparam defaultFontColor #c0caf5
+skinparam rectangleBackgroundColor #24283b
+skinparam rectangleBorderColor #7aa2f7
+skinparam arrowColor #7aa2f7
+
+title 六神签名生成管线 (cmd=0x2000006)
+
+rectangle "输入\nURL + Body + Device + Timestamp" as IN #2d3149
+
+rectangle "X-Argus\nSM3→Protobuf→Simon128/256→XOR→AES-CBC→B64" as ARG
+rectangle "X-Gorgon\nMD5→置换表→RBIT/XOR链式混淆" as GOR
+rectangle "X-Khronos\nUnix timestamp" as KHR
+rectangle "X-Ladon\nSpeck-128/128" as LAD
+rectangle "X-Helios\n设备环境指纹(算法待确认)" as HEL
+rectangle "X-Medusa\n主验证(三段结构,算法待确认)" as MED
+
+IN --> ARG
+IN --> GOR
+IN --> KHR
+IN --> LAD
+IN --> HEL
+IN --> MED
+@enduml

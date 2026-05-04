@@ -1,0 +1,59 @@
+@startuml
+skinparam backgroundColor #1a1b26
+skinparam defaultFontColor #c0caf5
+skinparam activityBackgroundColor #24283b
+skinparam activityBorderColor #7aa2f7
+skinparam activityDiamondBackgroundColor #2d3149
+skinparam activityDiamondBorderColor #e0af68
+skinparam arrowColor #7aa2f7
+
+title Phase 3 配置 JSON 验证���策树
+
+start
+:Phase 3 接��� JSON[17];
+
+if (field[0] appId == "1128"?) then (yes)
+else (no)
+  #f7768e:ms_config.cc:41 → exit(1);
+  stop
+endif
+
+if (field[2] altAppId == "1128"?) then (yes)
+else (no)
+  #f7768e:VM 静默失败;
+  stop
+endif
+
+if (field[4] sdkVersion?) then
+  if (== "v06.05.40-dy" ?) then (Java层值 ✓)
+    #9ece6a:通过;
+  else (native值 "v04.09.09.07-bugfix" ✗)
+    #ff9e64:ms_config.h:254\nVM 无限循环;
+    stop
+  endif
+endif
+
+if (field[10] aid == "1128"?) then (yes)
+else (no)
+  #f7768e:VM 拒绝;
+  stop
+endif
+
+if (field[12] versionCode == "370500"?) then (yes)
+else (no)
+  #f7768e:静默失败;
+  stop
+endif
+
+if (field[16][1] == field[4] ?) then (yes)
+else (no)
+  #f7768e:不一致 → 失败;
+  stop
+endif
+
+#9ece6a:VM 执行 3173 条指令;
+#9ece6a:返回 Boolean.TRUE;
+:Phase 4 返回 session handle;
+stop
+
+@enduml

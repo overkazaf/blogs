@@ -1,0 +1,18 @@
+@startuml
+skinparam backgroundColor #1a1b26
+skinparam defaultFontColor #c0caf5
+skinparam rectangleBackgroundColor #24283b
+skinparam rectangleBorderColor #7aa2f7
+skinparam arrowColor #7aa2f7
+skinparam noteBackgroundColor #2d3149
+skinparam noteBorderColor #e0af68
+
+title 攻击路线对比
+
+rectangle "Route A: 纯算法还原\n需逆向 OLLVM + 提取密钥\n工作量 > 2个月  ✗" as A
+rectangle "Route B: Frida Hook\n需 Root 设备 + Anti-Frida 绕过\n静默 exit(0) 绕过 hook  ✗" as B
+rectangle "**Route C: unidbg 仿真** ✓\n无需真机, 确定性执行\n深度可观测, 2个周末完成\n代价: 补全 50+ JNI 回调" as C #1a3a2a
+
+A -[hidden]down- B
+B -[hidden]down- C
+@enduml

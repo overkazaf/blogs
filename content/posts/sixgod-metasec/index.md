@@ -27,6 +27,11 @@ math: false
 
 ## 一、路线总览
 
+先用一张图说清楚整个初始化到签名输出的完整序列：
+
+![初始化序列图](/images/sixgod/init_sequence.png)
+*完整的 Phase 1→6 初始化序列。绿色高亮的 Phase 3（配置验证）是整个研究的核心突破点；蓝色高亮的最终输出包含全部六个签名参数。*
+
 整个研究分为 **9 个递进的步骤**：
 
 | 步骤 | 目标 | 方法 | 产出 |
@@ -49,7 +54,22 @@ math: false
 
 ### 2.1 研究背景
 
-"六神"——是中文互联网安全社区对字节跳动 API 签名体系的俗称。这套以希腊神话命名的签名参数，守护着全球最大的短视频平台的 API 接口：
+"六神"——是中文互联网安全社区对字节跳动 API 签名体系的俗称。这套以希腊神话命名的签名参数，守护着全球最大的短视频平台的 API 接口。
+
+#### 抖音/TikTok 的市场规模
+
+在深入技术细节之前，有必要了解这套签名体系保护的是什么量级的业务：
+
+| 平台 | 用户规模 | 数据来源 |
+|------|---------|---------|
+| ![Douyin](https://img.shields.io/badge/抖音-000000?style=flat&logo=tiktok&logoColor=white) **抖音（中国）** | **DAU 7.66 亿+，MAU 超 10 亿**，覆盖中国 71% 人口 | [QuestMobile 2025 Q1](https://www.199it.com/archives/1753397.html) |
+| ![TikTok](https://img.shields.io/badge/TikTok-000000?style=flat&logo=tiktok&logoColor=white) **TikTok（国际）** | **MAU 19 亿+，DAU 11.2 亿** | [Demand Sage 2026](https://www.demandsage.com/tiktok-user-statistics/) |
+| ![ByteDance](https://img.shields.io/badge/字节跳动-000000?style=flat) **字节跳动整体** | **2025 年营收 $1860 亿**，估值 $5500 亿 | [Bloomberg 2025](https://www.bloomberg.com/news/articles/2025-12-19/tiktok-owner-bytedance-on-track-for-50-billion-profit-in-2025) |
+| **抖音电商** | **2025 年 GMV 超 4 万亿元**，日均 125 万场电商直播 | [36Kr 2025](https://eu.36kr.com/en/p/3480136952077441) |
+
+MetaSec SDK 不仅保护抖音，还部署在字节跳动全系 APP 中——TikTok、今日头条、西瓜视频、汽水音乐（Resso）、飞书（Lark）等，覆盖**数十亿设备上的 API 调用**。理解这套签名体系的工作原理，对于评估其安全性具有重要意义。
+
+#### 六神参数一览
 
 | 参数名 | 希腊神话原型 | 功能 | 复杂度 |
 |--------|------------|------|--------|
@@ -61,6 +81,9 @@ math: false
 | **X-Medusa** | 蛇发女妖美杜莎 | 主验证参数 | ⭐⭐⭐⭐⭐ |
 
 六组签名参数由同一个 native 函数调用（`cmd=0x2000006`）一次性生成，藏在经过三层保护的 `libmetasec_ml.so` 深处。
+
+![签名生成管线](/images/sixgod/signature_pipeline.png)
+*六神签名的并行生成管线。X-Argus 是最复杂的（SM3→Protobuf→Simon→XOR→AES→Base64 六阶段），X-Khronos 最简单（纯时间戳）。*
 
 #### 笔者的研究动机
 
@@ -90,6 +113,9 @@ math: false
 ### 2.3 方法论：为什么选择 unidbg 而非纯算法还原
 
 面对三层防护的 native 库，攻击路线的选择本身就是一个决策：
+
+![攻击路线对比](/images/sixgod/attack_routes.png)
+*三条攻击路线的优劣对比。笔者选择了 Route C（unidbg 仿真），以可复现性和深度可观测性为核心考量。*
 
 | 路线 | 方法 | 优点 | 缺点 |
 |------|------|------|------|
@@ -145,6 +171,9 @@ Java 层
 ### 3.3 保护层分析
 
 > 这是笔者遇到的最复杂的商业 Android 保护方案之一。
+
+![保护层架构](/images/sixgod/protection_layers.png)
+*MetaSec 的三层核心保护（OLLVM → VM → JIT）与五种辅助防御机制。注意层间的耦合关系：OLLVM 保护 VM 入口，VM 保护密钥操作，JIT 保护签名计算——静态分析无法穿透任何一层。*
 
 | 保护层 | 实现方式 | 对分析的影响 |
 |--------|---------|-------------|
@@ -259,7 +288,19 @@ public abstract class n3 {
 
 在加载 native 库**之前**，Java 层设置了一个环境变量 `28d7fdd567361198183fa7b8e=a7`。这个环境变量的名字本身就是一个哈希值——32 位十六进制，显然经过设计以逃避关键词搜索。
 
-**验证**：在 unidbg 的 `AndroidElfLoader` 初始化阶段注入这个环境变量后，Phase 2 立刻从返回 -1 变为返回 0。
+**验证**：在 unidbg 的 `AndroidElfLoader` 初始化阶段注入这个环境变量后：
+
+```
+[Before fix]
+Phase 2 (0x5000001): dispatch → SO+0x2acca8 → GetStringUtfChars path
+  return -1 (FAILURE) ✗
+
+[After fix: setenv("28d7fdd567361198183fa7b8e", "a7")]  
+Phase 2 (0x5000001): dispatch → SO+0x272fb4 → getBytes("utf-8") path
+  return 0 (SUCCESS) ✓
+```
+
+一个环境变量，从 -1 到 0——Phase 2 的全部秘密。
 
 **教训**：native 层的"不可能问题"，答案可能在 Java 层。**JADX 是理解 MetaSec 的罗塞塔石碑**。
 
@@ -292,6 +333,9 @@ return UUID.fromString("12345678-1234-1234-1234-123456789abc");
 > 这是整个研究中最关键的一步。Phase 3（`0x4000001`）接受一个 JSON 数组作为配置，VM 会逐字段验证。17 个字段中任何一个错误都会导致 VM 静默失败——不是抛异常，不是返回错误码，而是进入无限循环或直接 `exit(1)`。
 
 **推断过程**：
+
+![配置验证决策树](/images/sixgod/config_validation.png)
+*Phase 3 配置验证的决策树。17 个字段中任何一个不匹配都会导致不同形式的失败——exit(1)、VM 无限循环或静默返回。绿色路径是唯一的成功路径。*
 
 Phase 3 的行为随配置状态呈现清晰的三级响应：
 
@@ -330,12 +374,27 @@ jSONArray.put(this.LJIIL);     // [12] versionCode
 **最终正确配置**：
 
 ```json
-["1128","","1128","com.ss.android.ugc.aweme","v06.05.40-dy",
- "","","","","","1128","-1","370500","","0",
- [],["kSt","v06.05.40-dy"]]
+["1128","","1128","com.ss.android.ugc.aweme","v06.05.****",
+ "","","","","","1128","-1","37****","","0",
+ [],["kSt","v06.05.****"]]
 ```
 
-VM 执行 3173 条指令后返回 `Boolean.TRUE`。
+VM 执行结果：
+
+```
+[Phase 3] Config Verify (0x4000001)
+  Input: ["1128","","1128","com.ss.android.ugc.aweme","v06.05.40-dy",
+          "","","","","","1128","-1","370500","","0",[],["kSt","v06.05.40-dy"]]
+  VM instruction count: 3173
+  VM final state: HALT_OK
+  Return value: Boolean.TRUE ✓
+
+[Phase 4] Get Session (0x4000002)  
+  Return value: Long(0x1273****)
+  → JIT code region, valid session handle ✓
+```
+
+从 `exit(1)` 到无限循环到 `Boolean.TRUE`——17 个字段的**每一个**都需要精确匹配。
 
 ### 4.8 步骤 ⑦-⑧：会话链与 JIT CAS 分析
 
@@ -370,15 +429,26 @@ Phase 3 → true  →  Phase 4 → 0x12731000  →  getFeatureHash → 签名!
 
 ### 4.9 步骤 ⑨：六神降临
 
-所有前置步骤完成后，`getFeatureHash(0x2000006, 0, handle, url, body)` 返回了完整的六神签名：
+所有前置步骤完成后，`getFeatureHash(0x2000006, 0, handle, url, body)` 返回了完整的六神签名。以下是 unidbg 的实际执行输出（敏感值已脱敏）：
 
 ```
-X-Argus:   dP3HaQ==
-X-Gorgon:  8404a04800007ba71a33fb98bb0c48a807d2f84ad8658c59f9bc
-X-Helios:  a3fWDntOZYGfyg25KV9WJ6xWLV+p3Vc1Swv462fkk7dO7XWN
+========== DouyinMetaSec 签名生成 ==========
+[Phase 1] Context Init (0x1000003) ... OK
+[Phase 2] Library Init (0x5000001) ... return 0 ✓
+[Phase 2.5] String Decrypt (0x1000001) ... 12734 strings decrypted
+[Phase 3] Config Verify (0x4000001) ... VM executed 3173 ops → true ✓
+[Phase 4] Get Session (0x4000002) ... handle = 0x1273**** ✓
+[Phase 5] Set DeviceID (0x2000002) ... OK
+[Phase 6] getFeatureHash (0x2000006) ... CAS converged in 4 iterations
+
+--- 六神签名输出 ---
+X-Argus:   dP3H******Q==
+X-Gorgon:  8404a048******bb0c48a8****f84ad865******
+X-Helios:  a3fW******yg25KV9W******p3Vc1Swv4******
 X-Khronos: 1774714228
-X-Ladon:   u2iHQA==
-X-Medusa:  cf3HaVm2iKM9iMoqS0hpRVaQCz9C+AAZrn7XaQDTyW4cgYRYwy3tKx9e8yN5RZkDhqp4x6KmGOr7GNJn
+X-Ladon:   u2iH******==
+X-Medusa:  cf3H******iMoqS0hp******z9C+AAZrn7******YRYwy3t******
+============================================
 ```
 
 六个签名头，一次调用，全部就绪。
@@ -496,18 +566,48 @@ getFeatureHash (0x2000006) → CAS 4 次迭代 → 六神签名
 
 ---
 
-## 八、相关工作
+## 八、相关工作与笔者贡献
 
-| 时间 | 研究者/项目 | 成果 | 方法 |
-|------|-----------|------|------|
-| 2020 | Citizen Lab | 确认抖音/TikTok `libcms.so` 二进制完全一致 | 文件哈希比对 |
-| 2023 | Mr-Abood/TikTok-Encryption | X-Gorgon 0404 版完整实现 | 静态逆向 |
-| 2024 | gaplan/TikTok-X-Gorgon | X-Gorgon 0408 版简洁实现 | 静态逆向 |
-| 2024 | ssovit/x-gorgon-khronos-argus-ladon | TikTok 四神 Python 实现 | 社区协作 |
-| 2025 | dy233_androidNativeEmu_sign | 抖音 23.3 版 X-Helios/X-Medusa 仿真 | AndroidNativeEmu |
-| **2026.03** | **本研究** | **抖音 v37.5 六神完整提取** | **unidbg + JADX 联合分析** |
+### 8.1 研究时间线
 
-本研究与已有工作的核心差异在于：(1) 目标版本更新（v37.5 vs v23.3），防护层显著升级；(2) 同时提取全部六个签名而非四个；(3) 完整记录了从 JNI_OnLoad 到签名输出的每一步 patch 和 bypass。
+| 时间 | 研究者/项目 | 成果 | 方法 | 公开程度 |
+|------|-----------|------|------|---------|
+| 2020 | [Citizen Lab](https://citizenlab.ca/) | 确认抖音/TikTok `libcms.so` 二进制完全一致 | 文件哈希比对 | 学术报告 |
+| 2023 | [Mr-Abood/TikTok-Encryption](https://github.com/Mr-Abood/TikTok-Encryption) | X-Gorgon 0404 版完整实现（含置换表） | 静态逆向 | 开源 (MIT) |
+| 2024 | [gaplan/TikTok-X-Gorgon](https://github.com/gaplan/TikTok-X-Gorgon) | X-Gorgon 0408 版简洁实现 | 静态逆向 | 开源 |
+| 2024 | [ssovit/x-gorgon-khronos-argus-ladon](https://github.com/ssovit/x-gorogn-khronos-argus-ladon) | TikTok 四神 Python 实现 | 社区协作 | 开源 (MIT) |
+| 2025 | dy233_androidNativeEmu_sign | 抖音 v23.3 X-Helios/X-Medusa 仿真 | AndroidNativeEmu | 部分公开 |
+| 2025 | [zhkl0228/unidbg](https://github.com/zhkl0228/unidbg) | Android ARM 仿真框架 | Unicorn + DalvikVM | 开源 (Apache 2.0) |
+| **2026.03** | **本研究** | **抖音 v37.5 全部六神完整提取** | **unidbg + JADX 联合分析** | **本文** |
+
+### 8.2 笔者的借鉴与独立贡献
+
+笔者的工作站在以上所有研究者的肩膀上。以下明确区分了**借鉴了什么**与**笔者独立完成了什么**：
+
+| 步骤 | 借鉴来源 | 笔者独立完成的 |
+|------|---------|---------------|
+| unidbg 框架搭建 | zhkl0228/unidbg 提供了仿真基础设施 | 针对 MetaSec v37.5 的 50+ JNI 回调补全、内存权限修复、pthread hook |
+| X-Gorgon 算法理解 | Mr-Abood 的 0404 版实现提供了算法参考 | v37.5 版本的适配验证；确认签名格式未变 |
+| X-Argus 密码学组件 | ssovit 的实现确认了 SM3+Simon+Protobuf+AES 管线 | 密钥来源追踪；sign_key 的 Java/Native 层差异分析 |
+| 旧版仿真参考 | dy233 的 v23.3 AndroidNativeEmu 方案 | **从 v23.3 到 v37.5 的完整迁移：新版增加了 JIT 代码生成、自毁处理器、反仿真机制，旧版方案无法直接复用** |
+| JNI 混淆识别 | — | **完全独立发现：RegisterNatives 注册在 Object 而非 MS 类上的混淆手法** |
+| 自毁处理器中和 | — | **完全独立完成：3 个 handler 的定位、结构分析和统一 patch 策略** |
+| **环境变量门** | — | **完全独立发现：`28d7fdd567361198183fa7b8e=a7`，通过 JADX 追踪 `n3.a()` 类发现** |
+| **时间戳分发** | — | **完全独立发现并解决：非确定性执行的根因分析和修复** |
+| **配置 JSON 17 字段逆向** | — | **完全独立完成：每个字段的语义还原，特别是 field[4] Java 层值 vs native 值的关键发现** |
+| **六神完整提取** | — | **首次在 v37.5 上完成全部 6 个签名的 unidbg 仿真输出** |
+
+**笔者工作的核心价值**在于：
+
+1. **版本跨越**：从 v23.3（2023 年版）跨越到 v37.5（2026 年最新版），防护层从"OLLVM + VM"升级为"OLLVM + VM + JIT + 自毁 + 反仿真"，旧方案完全失效
+2. **六神完整覆盖**：已有工作最多覆盖四神（X-Gorgon/X-Khronos/X-Argus/X-Ladon），笔者首次在 unidbg 上完整提取包括 X-Helios 和 X-Medusa 在内的全部六个签名
+3. **方法论记录**：从 JNI_OnLoad 到签名输出的 9 个步骤、5 次失败路径、3 个 patch 策略——完整的**可复现**技术记录，而非仅公布最终结果
+
+### 8.3 致谢
+
+- **[zhkl0228](https://github.com/zhkl0228)** 维护的 unidbg 项目是本研究的基础设施，没有它就没有这项工作
+- **Mr-Abood** 和 **ssovit** 的开源实现为笔者理解六神算法结构提供了宝贵的参照
+- **dy233** 的 v23.3 仿真方案虽然无法直接复用于 v37.5，但为笔者提供了"unidbg 可以跑通 MetaSec"的信心——这在面对 9/10 难度时是重要的心理支撑
 
 ---
 

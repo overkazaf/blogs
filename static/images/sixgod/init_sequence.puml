@@ -1,0 +1,78 @@
+@startuml
+skinparam backgroundColor #1a1b26
+skinparam defaultFontColor #c0caf5
+skinparam sequenceArrowColor #7aa2f7
+skinparam sequenceLifeLineBorderColor #565f89
+skinparam sequenceParticipantBackgroundColor #24283b
+skinparam sequenceParticipantBorderColor #7aa2f7
+skinparam noteBorderColor #e0af68
+skinparam noteBackgroundColor #2d3149
+skinparam sequenceGroupBackgroundColor #1f2335
+skinparam sequenceGroupBorderColor #bb9af7
+skinparam sequenceDividerBackgroundColor #1f2335
+
+title 抖音 MetaSec 六神签名初始化序列
+
+participant "Java Layer" as J #24283b
+participant "JNI Bridge\nSO+0x271938" as JNI #24283b
+participant "OLLVM Dispatcher\nSO+0x173ec4" as OLL #24283b
+participant "Custom VM\nSO+0x1702a8" as VM #24283b
+participant "JIT Engine\n0x1254xxxx" as JIT #24283b
+
+== Phase 1: Context Init (0x1000003) ==
+J -> JNI : m.a(0x1000003, 0, 0, null, context)
+JNI -> OLL : dispatch(cmd=0x1000003)
+OLL --> J : getPackageName(), getFilesDir()...
+OLL --> JNI : OK
+JNI --> J : null (success)
+
+== Phase 2: Library Init (0x5000001) ==
+J -> JNI : m.a(0x5000001, 0, 0, null, configArray)
+JNI -> OLL : dispatch(cmd=0x5000001)
+note right of OLL #2d3149
+  检查环境变量
+  28d7fdd5673611...=a7
+  缺失 → silent exit(0)
+end note
+OLL -> JIT : 生成可执行代码 (~360KB)
+JIT --> OLL : code at 0x12540000
+OLL --> JNI : return 0
+JNI --> J : Integer(0)
+
+== Phase 2.5: String Decrypt (0x1000001) ==
+J -> JNI : m.a(0x1000001, ...)
+note right of JNI #2d3149
+  解密 12,734 个
+  加密字符串
+end note
+JNI --> J : decrypted string
+
+== Phase 3: Config Verify (0x4000001) ==
+J -> JNI : m.a(0x4000001, 0, 0, jsonConfig, null)
+JNI -> VM : execute bytecode
+note right of VM #9ece6a
+  ★ 核心突破点
+  验证 17 个 JSON 字段
+  field[4] = "v06.05.40-dy"
+  (Java层值, 非native值)
+end note
+VM --> JNI : 3173 ops → Boolean.TRUE
+JNI --> J : true
+
+== Phase 4: Get Session (0x4000002) ==
+J -> JNI : m.a(0x4000002, 0, 0, null, null)
+JNI -> OLL : dispatch
+OLL --> JNI : Long(0x1273****)
+JNI --> J : session handle
+
+== Phase 6: getFeatureHash (0x2000006) ==
+J -> JNI : m.a(0x2000006, 0, handle, url, body)
+JNI -> JIT : CAS computation loop
+note right of JIT #2d3149
+  ldaxrh/stxrh 原子操作
+  4 次迭代收敛
+end note
+JIT --> JNI : String[12]
+JNI --> J : {X-Gorgon, val,\nX-Khronos, val,\nX-Argus, val,\nX-Ladon, val,\nX-Helios, val,\nX-Medusa, val}
+
+@enduml
