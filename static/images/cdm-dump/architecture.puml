@@ -1,0 +1,54 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+skinparam sequenceParticipantBackgroundColor #f1f5f9
+skinparam sequenceParticipantBorderColor #3b82f6
+skinparam sequenceParticipantFontStyle bold
+skinparam noteBorderColor #f59e0b
+skinparam noteBackgroundColor #fffbeb
+
+title <font size=16><b>Chrome CDM Stream Dump 架构</b></font>
+
+box "Chrome Browser" #f0f9ff
+participant "Renderer\n(JS context)" as R
+participant "Mojo IPC" as M
+participant "CDM Utility\nProcess" as CDM
+end box
+
+participant "hook.so\n(LD_PRELOAD)" as HOOK #dcfce7
+participant "/dev/shm\n(RAM buffer)" as SHM #fefce8
+participant "ffmpeg\nencoder" as ENC #f3e8ff
+
+R -> R : playbackRate = 8x\n(CDP persistent injection)
+R -> M : EME encrypted frame
+M -> CDM : DecryptAndDecodeFrame()
+CDM -> HOOK : vtable[14] redirected
+note right of HOOK #dcfce7
+  1. Call real DecryptAndDecodeFrame
+  2. Read VideoFrame_2 vtable
+  3. Extract YUV planes (I420/P010)
+  4. Compute frame extent from offsets
+end note
+HOOK -> SHM : write raw YUV\n(553 MB/s @ 8x)
+HOOK -> HOOK : write metadata\n/tmp/cdm_yuv_meta.tsv
+HOOK --> CDM : return original result
+CDM --> M : decoded frame
+M --> R : render to screen
+
+== After capture ==
+
+ENC -> SHM : read YUV segments
+note right of ENC #f3e8ff
+  Split by resolution
+  Per-segment ffmpeg encode
+  Concat + scale to 720p
+end note
+ENC -> ENC : output: netflix_full.mp4
+
+@enduml
