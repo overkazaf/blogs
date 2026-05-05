@@ -304,7 +304,18 @@ window.fetch = function(url, opts) {
 };
 ```
 
-这**确实**影响了 Netflix 返回的 manifest（观察到 AV1 with `prk` flag），但**并未**解锁 1080p——因为 license server 在密码学层面验证 CDM 安全级别，L3 客户端只能获得 720p 密钥。
+这**确实**影响了 Netflix 返回的 manifest（观察到 AV1 with `prk` flag），但在笔者的 Linux 实验环境中**并未**解锁 1080p。
+
+**关于 720p 限制的重要说明**：笔者当前实验环境为无 GPU 的 Linux 服务器，Chrome 使用 SwiftShader 软件渲染（`--use-gl=angle --use-angle=swiftshader`），不支持 HDCP。Netflix 的 1080p 策略不仅检查 CDM 安全级别（L1/L3），还检查**显示路径的 HDCP 状态**——即使 CDM 报告 L3，在支持 HDCP 的桌面环境（macOS + 外接显示器、Windows + 独显）上，Netflix 通常会下发 1080p 流。
+
+| 平台 | CDM 级别 | HDCP | 预期最高分辨率 | 笔者验证 |
+|------|---------|------|-------------|---------|
+| **Linux 无头服务器 (SwiftShader)** | L3 | 不支持 | **720p** | **本文实验环境** |
+| macOS + Retina 显示器 | L3 | 支持 | **1080p** | 待验证 |
+| Windows + 独显 + HDCP 显示器 | L3 | 支持 | **1080p** | 待验证 |
+| 任意平台 + L1 CDM | L1 | 支持 | 4K HDR | 需 TEE 设备 |
+
+笔者后续计划在 macOS 和 Windows 桌面环境上复现本文的 vtable hook 方案（macOS 使用 `DYLD_INSERT_LIBRARIES` 替代 `LD_PRELOAD`，Windows 使用 DLL injection），预期可在 L3 + HDCP 条件下获得 1080p 流。本文的 720p 限制是**实验环境约束**，而非方案本身的天花板。
 
 #### 5.4.2 /dev/shm：RAM 缓冲解决吞吐瓶颈
 
