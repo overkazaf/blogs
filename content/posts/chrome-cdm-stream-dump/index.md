@@ -964,6 +964,135 @@ vtable[14] hook 捕获 1920×1080 YUV
 | 需要 Chrome MV2 扩展或 CDP | MV2 在 Chrome 中已弃用，CDP 需要 `--remote-debugging-port` |
 | **不绕过 license server 验证** | 如果 server 交叉检查 CDM 级别与请求 profiles 的一致性，此方法失效 |
 
+### 5A.9 解密函数 `d23980` 的指令级拆解：白盒 AES 的真面目
+
+> 这是本文最深的技术层。笔者通过 radare2 完整反汇编了 CDM 的实际解密函数（`d23980`，758 字节，228 条指令），发现它根本不是"标准 AES"——而是一个**两阶段循环流密码 + GF(257) 仿射白化**的组合结构。
+
+#### 函数签名
+
+通过分析 prologue 和 caller adapter 函数（`d9a399`, `d9bf40`），笔者还原了完整的 10 参数调用签名：
+
+```c
+void d23980(
+    uint8_t*  out_base,           // RDI: 输出基地址
+    size_t    running_offset,     // RSI: 已处理偏移
+    SubsampleEntry* subsamples,   // RDX: {u32 clear_sz; u32 cipher_sz} 数组
+    int64_t   n_subsamples,       // RCX: subsample 数量
+    uint64_t  tbl_counts_packed,  // R8:  hi32=tblB_count | lo32=tblA_count
+    uint32_t  flags,              // R9:  bit0 = 启用密文阶段
+    // stack:
+    TableDescriptor tbl_B,        // [rbp+0x10]: 二级 XOR + 白化密钥流
+    TableDescriptor tbl_A,        // [rbp+0x20]: 一级 XOR 密钥流
+    uint8_t*  write_ptr,          // [rbp+0x30]: 写入指针
+    size_t    write_budget        // [rbp+0x38]: 本次最大写入字节数
+);
+```
+
+10 个参数——6 个寄存器 + 4 个栈参数。这是一个对性能要求极高的函数（97% CPU），参数之多反映了 CENC subsample 结构的复杂性。
+
+#### Stage 1：循环 XOR 流密码（`d23a30`–`d23a69`，77% CPU）
+
+Stage 1 处理每个 subsample 的 "clear" 部分（CENC 术语，实际上仍被加密）：
+
+```asm
+STAGE1_XOR:
+    movzx eax, byte [input + r14]   ; 读取输入字节
+    div   r11, tblA_len             ; rdx = r11 mod tblA_len (表索引)
+    inc   r11                       ; 推进全局计数器
+    xor   al, byte [tblA + rdx]    ; v ^= tblA[offset mod len]
+    mov   byte [write_ptr + r14], al ; 写入输出
+    inc   r14                       ; 推进局部计数器
+    cmp   r14, emit_count
+    jb    STAGE1_XOR               ; 循环
+```
+
+本质上是 `output[i] = input[i] ^ tblA[global_counter++ mod tblA_len]`——一个以查表值为 keystream 的**循环 XOR 流密码**。密钥流的"密钥"是 `tblA` 本身（一个 ≤8KB 的字节表），其内容由上层 OLLVM 调度器在每次 `UpdateSession` 时从 blinded key 派生填充。
+
+#### Stage 2：GF(257) 仿射白化 + 二级 XOR（`d23b40`–`d23c17`，18% CPU）
+
+Stage 2 处理每个 subsample 的 "cipher" 部分，在 Stage 1 的 XOR 之上叠加一层**有限域仿射变换**：
+
+```asm
+; GF(257) affine whitening
+movzx eax, r15b               ; v = input byte (0..255)
+imul  r15d, eax, 0x61         ; v * 97
+add   r15d, 0x60              ; v * 97 + 96
+; --- mod 257 via Barrett reduction ---
+imul  eax, r15d, 0x7f81       ; * 32641 (Barrett constant for 257)
+shr   eax, 0x17               ; >> 23 = 除以 257 的近似商
+mov   r14d, eax
+shl   r14d, 8
+or    r14d, eax               ; * 257 = 商 * 257
+sub   r15d, r14d              ; 原值 - 商*257 = 余数 = (v*97+96) mod 257
+; --- XOR with tblB ---
+xor   r15b, byte [tblB + key_idx]
+```
+
+**数学本质**：字节 `v` 被提升到 GF(257)（257 是素数），施加仿射置换 `S(v) = (97v + 96) mod 257`，截断回 8 位，再与 `tblB` 的密钥流字节 XOR。
+
+笔者通过穷举验证（256 个输入值全部测试）确认这是一个**可逆的字节置换**：
+
+```python
+S = [(97 * b + 96) % 257 for b in range(256)]  # 256 个不同输出 → 双射
+S_inv = [0] * 256
+for b in range(256): S_inv[S[b] & 0xff] = b
+# 逆变换: S_inv(y) = 53 * (y - 96) mod 257, 因为 97 * 53 ≡ 1 (mod 257)
+```
+
+**这不是 AES S-box**。标准 AES S-box 基于 GF(2⁸) 上的乘法逆 + 仿射变换；CDM 的 S-box 基于 GF(257) 上的线性映射。这解释了为什么笔者在内存中搜索标准 AES S-box 时得到 0 命中——CDM 使用了一个**完全不同的代数结构**。
+
+#### 为什么这个设计对 DFA 免疫
+
+笔者在 Android L3 研究中通过 DFA 成功攻破了 T-table 白盒 AES。为什么同样的方法在 Chrome CDM 上不可行？
+
+| 维度 | Android L3 (T-table) | Chrome CDM (d23980) |
+|------|---------------------|---------------------|
+| AES 结构 | 标准 10 轮 SubBytes+ShiftRows+MixColumns | **循环 XOR + GF(257) 仿射白化** |
+| 密钥位置 | 嵌入 T-table 的查表路径 | 嵌入 tblA/tblB 表内容（由 OLLVM 派生） |
+| DFA 前提 | 故障在 Round 9 引入 → MixColumns 扩散到 4 字节列 | **无 MixColumns 结构——故障不会以可预测模式扩散** |
+| 内存可观测 | T-table 4KB，热力图清晰可辨 | tblA/tblB 动态填充，无固定地址 |
+
+DFA 依赖 AES 的 **ShiftRows + MixColumns 列扩散**来从故障差分中约束轮密钥。CDM 的 `d23980` 根本不是标准 AES 轮结构——它是一个流密码，没有列、没有轮、没有可利用的差分传播模式。
+
+### 5A.10 CDM .text 完整性校验：int3 为什么会被检测
+
+> 笔者在 Phase 3 尝试了在 `aesdeclast` 指令处设置 int3 trap。结果不是"trap 没触发"，而是"CDM 直接拒绝解密"——连 `DecryptAndDecodeFrame` 都不被调用了。CDM 检测到了 .text 段被修改。
+
+笔者通过 hook.c 实现了 aesdeclast trap：
+
+1. 扫描 CDM 的 r-xp 段（6.4 MB .text），搜索 `66 0f 38 df` 模式
+2. 找到 **35 个** aesdeclast 指令位置
+3. 将每个位置的第一字节 `0x66` 替换为 `0xCC`（int3）
+4. 注册 SIGTRAP handler，准备在触发时读取 XMM 寄存器中的轮密钥
+
+**两种安装时机的结果**：
+
+| 模式 | 安装时机 | 结果 |
+|------|---------|------|
+| Eager | dlopen 后立即 patch | Chrome 直接终止（GPU 进程异常） |
+| Deferred | UpdateSession 返回后 patch | License 接受成功，但 **0 次 DecryptAndDecodeFrame 调用**，Netflix 拒绝创建 `<video>` 元素 |
+
+**关键发现**：CDM 在**整个 DRM 会话期间**持续验证 .text 段完整性，不仅仅是启动时。35 个 int3 字节被检测到后，CDM 进入一种"静默拒绝"状态——license 照常处理，但所有解密操作被阻断。
+
+**可能的内部机制**：
+
+1. **周期性 CRC/hash**：CDM 在后台线程中定期计算 .text 段的校验和，每次 AES 操作前验证
+2. **状态机绑定**：`UpdateSession` 播种一个状态值，每帧解密时重新验证该状态——被篡改的代码导致状态不一致
+3. **CFI token**：间接跳转到 AES helper 时需要一个签名 token，int3 注入使 token 失效
+
+**对策——硬件断点（不修改 .text）**：
+
+x86 的 Debug Register（DR0-DR3）可以设置最多 4 个执行断点，CPU 在到达目标地址时产生 `#DB` 异常，**无需修改任何指令字节**。这对 .text 完整性校验完全透明。
+
+```c
+// 通过 ptrace 从外部进程设置硬件断点
+ptrace(PTRACE_POKEUSER, cdm_pid, offsetof(user, u_debugreg[0]), aesdeclast_addr);
+ptrace(PTRACE_POKEUSER, cdm_pid, offsetof(user, u_debugreg[7]),
+       DR7_LOCAL_ENABLE_0 | DR7_CONDITION_EXECUTE | DR7_LEN_1);
+```
+
+**但这条路也有风险**：CDM 可能通过 CPUID 检测 Debug Extension 是否被激活，或通过 `perf_event_open` 的返回值探测是否有外部进程在监控。这是一场**硬件级的猫鼠游戏**。
+
 ---
 
 ## 六、CDM 安全性评估
