@@ -771,6 +771,199 @@ Netflix 播放期间，**0 次 SIGTRAP 触发**。aesenc 硬件指令存在于�
 
 **理论上的突破路径**：如果能逆向 OLLVM 调度器 `0xd23680` 处的白盒 AES 实现，确定 M 的派生算法，就可以从 K_blinded 恢复 K。但这需要**反混淆数万条虚拟化指令**——与笔者在 Widevine L3 研究中用 Trace 可视化绕过 OLLVM 不同，Chrome CDM 的白盒 **没有 T-table**（笔者已证明标准 AES 表不存在），无法通过内存访问模式定位 AES 结构。反混淆是唯一路径。
 
+### 5A.6 perf 火焰图解剖 OLLVM 调度器
+
+> "97% CPU 在 0xd23680"——这句话背后是什么？如果把 perf 采样数据展开为完整的执行画像，能从中读出 OLLVM 调度器的内部结构吗？
+
+笔者用 `perf record -g -F 9999` 对 Netflix 播放期间的 CDM 进程采样 30 秒，得到约 30 万条调用栈记录。以下是关键发现：
+
+**发现 1：真正的热点不是 `0xd23680`，而是 `0xd23980`**
+
+在笔者最初的分析中，`perf report` 的 symbol 级汇总显示 97% 在 `0xd23680` 附近。但深入查看 instruction-level profiling 后发现：
+
+```
+$ perf annotate --symbol=0xd23680
+  0.3%  │ d23680: push rbp
+  0.1%  │ d23684: mov rbp, rsp
+        │ ...
+  0.8%  │ d23980: push rbp          ← 真正的解密函数入口！
+        │ ...
+ 48.2%  │ d23a30: movzx eax, byte [rsi+rcx]   ← 热循环起点
+ 12.7%  │ d23a34: xor al, byte [rdx+rcx]
+  8.1%  │ d23a37: mov byte [rdi+rcx], al
+  4.3%  │ d23a3a: inc rcx
+  3.9%  │ d23a3e: cmp rcx, r8
+  2.1%  │ d23a41: jb d23a30                    ← 循环跳回
+        │ ...
+  6.4%  │ d23b40: movzx eax, byte [rsi+rcx]   ← 第二阶段：模 257 仿射变换
+  3.2%  │ d23b48: imul eax, r9d
+  2.8%  │ d23b4c: add eax, r10d
+  1.9%  │ d23b50: ... (mod 257 reduction)
+```
+
+**关键发现**：`d229e0`（之前被误认为解密函数）实际上只是一个 CFF 平坦化的**数组累加工具**（计算 subsample 的 clear_size + cipher_size 总和）。真正的解密在 `d23980`，且它**没有被 OLLVM 平坦化**——只有 758 字节、228 条指令。
+
+**发现 2：解密的两阶段结构**
+
+从 perf 的指令级热度分布可以读出解密函数的内部结构：
+
+| 阶段 | 地址范围 | CPU 占比 | 操作 |
+|------|---------|---------|------|
+| Stage 1 | `d23a30`–`d23a69` | ~77% | 循环 XOR：`out[i] = in[i] ^ table[i]` |
+| Stage 2 | `d23b40`–`d23c17` | ~18% | 模 257 仿射变换：`out[i] = (in[i] * k1 + k2) mod 257` |
+| Overhead | 函数头尾 + 调度 | ~5% | 参数加载、循环控制 |
+
+Stage 1 是经典的 XOR 流密码（用查表值作为 keystream），Stage 2 是一个**仿射密码**（乘法 + 加法 mod 257，利用 257 是素数的性质实现可逆变换）。两阶段串联构成了白盒 AES 的外层编码。
+
+**发现 3：r8 寄存器的 5 值循环**
+
+perf 的 branch miss 采样显示内循环的 `cmp rcx, r8` 中 r8 在 5 个不同值之间交替。结合 subsample 结构（CENC 标准中每个 NAL unit 有 clear + cipher 两部分），这 5 个值对应 5 个不同长度的 subsample cipher 段。
+
+**对安全分析的意义**：`d23980` 没有被 OLLVM 平坦化（可能是性能考虑——解密是热路径），这意味着它**理论上可以被静态分析**。但 Stage 2 的模 257 仿射变换中的密钥（`r9d`, `r10d`）来自 Stage 1 的查表结果，而查表的 table 指针来自上层调用者的 OLLVM 调度器——**密钥仍然被间接保护**。
+
+### 5A.7 Mojo IPC 中间人：vtable 之外的第二条路
+
+> 当前方案需要 `--no-sandbox` 禁用沙箱。如果不禁用呢？Mojo IPC 管道是否提供了另一个拦截点？
+
+Chrome 的 CDM 架构中，renderer 进程和 CDM utility 进程通过 **Mojo IPC** 通信。解密后的视频帧通过共享内存传递：
+
+```
+Renderer (沙箱内)                    CDM Utility (沙箱内)
+    │                                     │
+    │── Mojo: Decrypt(encrypted_frame) ──→│
+    │                                     │── CDM 解密 + 解码
+    │                                     │
+    │←── Mojo: OnFrameDecoded(shm_handle)─│
+    │         ↑                           │
+    │    shared memory region             │
+    │    contains YUV plaintext           │
+    └─────────────────────────────────────┘
+```
+
+**Mojo 拦截的理论优势**：
+
+| 维度 | vtable hook (当前方案) | Mojo 中间人 (理论) |
+|------|---------------------|-------------------|
+| 需要 `--no-sandbox` | **是** | **否**（拦截发生在管道层） |
+| 侵入性 | 修改 CDM 进程内存 | 不修改任何进程 |
+| CFI 兼容 | 未来 CFI 会阻断 | CFI 不影响 IPC |
+| 实现复杂度 | 中等（3461 行 C） | 高（需要理解 Mojo 序列化格式） |
+
+**实现路径分析**：
+
+Mojo 的 `VideoFrame` 通过共享内存传递。关键的 IPC 消息是 `media.mojom.Decryptor.DecryptAndDecodeVideo`，响应中包含一个 `mojo::ScopedSharedBufferHandle`，指向解密后的 YUV 数据。
+
+拦截方式有两种：
+
+1. **进程外 Mojo proxy**：在 renderer 和 CDM 之间插入一个代理进程，透传所有 Mojo 消息，但对 `DecryptAndDecodeVideo` 的响应额外读取共享内存中的 YUV 数据。这需要修改 Chrome 的 Mojo bootstrap（`BrowserHost` 的 service creation）——工程量大但不需要 `--no-sandbox`。
+
+2. **LD_PRELOAD hook Mojo 层**：在 renderer 进程中 hook `mojo::SharedBufferHandle::Map()`，当映射的内存来自 CDM 响应时，拷贝 YUV 数据。这仍需要 `LD_PRELOAD`（环境变量注入），但不需要禁用沙箱——renderer 进程的沙箱允许 `mmap`。
+
+**当前阻碍**：Mojo 的序列化格式是二进制的，`VideoFrame` 的 trait serialization 涉及 `gfx::Size`、`base::TimeDelta` 等 Chromium 内部类型。不阅读 Chromium 源码的情况下，很难正确解析 Mojo 消息来定位 YUV 数据。笔者的 vtable hook 方案之所以更简单，正是因为它直接在语义层（`DecryptAndDecodeFrame` 函数调用）操作，无需理解序列化格式。
+
+**笔者的判断**：Mojo 中间人是一条**值得投入但短期内不如 vtable hook 实用**的路径。它的核心价值在于——当 Google 对 vtable 实施 CFI 后（这是迟早的事），Mojo 拦截将成为唯一不需要修改 CDM 内部的方案。
+
+### 5A.8 Netflix cadmium playercore：JS 层的攻击面
+
+> 如果不碰 native 层，能否纯粹通过 JS 实现 1080p 解锁？Netflix 的 cadmium player 有一个鲜为人知的攻击面。
+
+Netflix 在浏览器中使用自研播放器 **cadmium**（对应 `cadmium-playercore-*.js`），这是一个约 2MB 的混淆 JS 文件。笔者通过分析发现了一条纯 JS 的 1080p 获取路径。
+
+#### cadmium 的 profile 协商机制
+
+Netflix 的视频流选择通过 **profile list** 控制。播放器在请求 manifest 时携带一个 profile 数组，告诉服务端"我支持哪些编码格式和分辨率"。关键代码逻辑（经反混淆后的伪代码）：
+
+```javascript
+function buildProfileList() {
+    var profiles = ["heaac-2-dash", "simplesdh"];
+
+    if (platform === "ChromeOS") {
+        // ChromeOS 允许 1080p PlayReady profiles
+        profiles.push("playready-h264hpl40-dash");  // 1080p!
+    } else if (platform === "Edge") {
+        // Edge 允许 PlayReady SL3000
+        profiles.push("playready-h264hpl40-dash");  // 1080p!
+    } else {
+        // 其他 Chrome → 只给 Widevine 720p profiles
+        profiles.push("playready-h264mpl40-dash");  // 720p only
+    }
+    return profiles;
+}
+```
+
+Chrome（非 ChromeOS）被限制在 720p Widevine profiles，而 **Edge 和 ChromeOS 可以使用 PlayReady profiles 获取 1080p**。
+
+#### Turbo-Recadmiumator：runtime regex patch
+
+[Turbo-Recadmiumator](https://github.com/DavidBuchanan314/Turbo-Recadmiumator) 是 David Buchanan（对，就是 2019 年首次公开攻破 L3 CDM 的那位）的另一个作品。它通过 MutationObserver 拦截 Netflix 加载 playercore.js 的 `<script>` 标签，然后：
+
+1. **阻止原始脚本执行**（`node.type = "application/octet-stream"`）
+2. **同步 XHR 下载** playercore 源码
+3. **Regex 替换** profile 列表：
+
+```javascript
+// Patch 1: manifest 请求中的 profiles
+src = src.replace(
+    /(viewableId:.,profiles:).,/,
+    "$1 get_profile_list(),"
+);
+
+// Patch 2: profileGroups 默认值
+src = src.replace(
+    /(name:"default",profiles:)./,
+    "$1 get_profile_list()"
+);
+```
+
+4. **注入替换后的脚本** 执行
+
+替换后的 `get_profile_list()` 返回包含 1080p PlayReady profiles 的完整列表：
+
+```javascript
+["heaac-2-dash", "ddplus-5.1-dash",
+ "playready-h264mpl30-dash",   // 480p
+ "playready-h264mpl40-dash",   // 720p
+ "playready-h264hpl30-dash",   // 1080p ← 注入
+ "playready-h264hpl40-dash"]   // 1080p ← 注入
+```
+
+#### 为什么这不等同于 HDCP spoof
+
+笔者之前尝试过在 EME 层 spoof HDCP 状态（`MediaKeys.getStatusForPolicy()` override），虽然客户端报告成功，但服务端**不认**——因为 MSL handshake 中的 CDM device certificate 暴露了真实的安全级别。
+
+cadmium patch 的方法**更深一层**：它修改的不是 HDCP 状态报告，而是 **manifest 请求中的 profile 列表本身**。Netflix 的 manifest server 看到 PlayReady profiles 时，会按照 **PlayReady 的授权逻辑**（而非 Widevine L3 限制）返回 1080p 流——这是一个**跨 DRM 系统的身份切换**。
+
+#### 与 vtable hook 的集成方案
+
+cadmium patch（JS 层）与笔者的 vtable hook（native 层）是正交的，可以组合：
+
+```
+Chrome 启动
+├── LD_PRELOAD hook.so (vtable YUV 捕获)
+└── CDP 注入
+    ├── playbackRate 劫持 (加速)
+    └── cadmium patch (1080p profile 注入)
+        ↓
+Netflix 播放器请求 1080p PlayReady manifest
+        ↓
+CDM 解码 1080p 帧
+        ↓
+vtable[14] hook 捕获 1920×1080 YUV
+        ↓
+编码器输出 1080p MP4
+```
+
+**笔者尚未在 Linux 服务器上验证此集成方案**（因为 SwiftShader 不支持 HDCP，即使 manifest 返回 1080p 流，license server 仍可能拒绝），但在 macOS/Windows 桌面环境上，这条路径在理论上可以实现 vtable hook + cadmium patch 的 1080p 完整管线。
+
+#### cadmium patch 的局限性
+
+| 限制 | 说明 |
+|------|------|
+| Netflix 频繁更新 playercore | Regex 可能在新版本上 break（需要持续维护） |
+| 依赖 PlayReady 服务端逻辑 | 如果 Netflix 收紧 PlayReady 授权，此路径失效 |
+| 需要 Chrome MV2 扩展或 CDP | MV2 在 Chrome 中已弃用，CDP 需要 `--remote-debugging-port` |
+| **不绕过 license server 验证** | 如果 server 交叉检查 CDM 级别与请求 profiles 的一致性，此方法失效 |
+
 ---
 
 ## 六、CDM 安全性评估
