@@ -1,4 +1,4 @@
-// Reading progress indicator
+// ====== Reading progress indicator ======
 window.addEventListener('scroll', () => {
     const article = document.querySelector('.post-content');
     if (!article) return;
@@ -8,7 +8,7 @@ window.addEventListener('scroll', () => {
     article.style.setProperty('--scroll', progress + '%');
 });
 
-// Back-to-top button
+// ====== Back-to-top button ======
 (function() {
     var btn = document.createElement('button');
     btn.id = 'back-to-top';
@@ -43,7 +43,7 @@ window.addEventListener('scroll', () => {
     });
 })();
 
-// Image lightbox (click to fullscreen)
+// ====== Image lightbox ======
 document.addEventListener('DOMContentLoaded', function() {
     var overlay = document.createElement('div');
     overlay.id = 'lightbox-overlay';
@@ -58,7 +58,8 @@ document.addEventListener('DOMContentLoaded', function() {
         #lightbox-overlay img {
             max-width: 95vw; max-height: 92vh;
             object-fit: contain; border-radius: 8px;
-            border: none; padding: 0; background: transparent;
+            border: none !important; padding: 0 !important;
+            background: transparent !important;
             box-shadow: 0 8px 40px rgba(0,0,0,0.5);
         }
     `;
@@ -79,13 +80,57 @@ document.addEventListener('DOMContentLoaded', function() {
     overlay.addEventListener('click', function() {
         overlay.classList.remove('active');
     });
-
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') overlay.classList.remove('active');
     });
 });
 
-// Estimated reading time enhancement (for long articles)
+// ====== TOC active heading tracking ======
+document.addEventListener('DOMContentLoaded', function() {
+    var tocLinks = document.querySelectorAll('.toc a');
+    if (!tocLinks.length) return;
+
+    var headings = [];
+    tocLinks.forEach(function(link) {
+        var id = decodeURIComponent(link.getAttribute('href').replace('#', ''));
+        var el = document.getElementById(id);
+        if (el) headings.push({ el: el, link: link });
+    });
+
+    if (!headings.length) return;
+
+    var ticking = false;
+    function updateActive() {
+        var scrollPos = window.scrollY + 120;
+        var current = headings[0];
+        for (var i = 0; i < headings.length; i++) {
+            if (headings[i].el.offsetTop <= scrollPos) {
+                current = headings[i];
+            }
+        }
+        tocLinks.forEach(function(l) { l.classList.remove('toc-active'); });
+        if (current) {
+            current.link.classList.add('toc-active');
+            // scroll TOC sidebar to keep active item visible
+            var toc = current.link.closest('.toc');
+            if (toc && toc.style.position === 'fixed') {
+                var linkTop = current.link.offsetTop;
+                var tocHeight = toc.clientHeight;
+                if (linkTop > toc.scrollTop + tocHeight - 60 || linkTop < toc.scrollTop + 40) {
+                    toc.scrollTo({ top: linkTop - tocHeight / 3, behavior: 'smooth' });
+                }
+            }
+        }
+        ticking = false;
+    }
+
+    window.addEventListener('scroll', function() {
+        if (!ticking) { requestAnimationFrame(updateActive); ticking = true; }
+    });
+    updateActive();
+});
+
+// ====== Deep read coffee indicator ======
 document.addEventListener('DOMContentLoaded', function() {
     var content = document.querySelector('.post-content');
     if (!content) return;
@@ -100,4 +145,64 @@ document.addEventListener('DOMContentLoaded', function() {
         span.style.color = 'var(--text-dim)';
         meta.appendChild(span);
     }
+});
+
+// ====== Heading anchor links (click to copy) ======
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.post-content h2[id], .post-content h3[id], .post-content h4[id]').forEach(function(h) {
+        h.style.position = 'relative';
+        h.style.cursor = 'pointer';
+        var anchor = document.createElement('span');
+        anchor.className = 'heading-anchor';
+        anchor.textContent = '#';
+        anchor.style.cssText = 'position:absolute;left:-1.2em;color:var(--text-dim);opacity:0;transition:opacity 0.2s;font-weight:400;';
+        h.prepend(anchor);
+        h.addEventListener('mouseenter', function() { anchor.style.opacity = '0.6'; });
+        h.addEventListener('mouseleave', function() { anchor.style.opacity = '0'; });
+        h.addEventListener('click', function() {
+            var url = location.origin + location.pathname + '#' + h.id;
+            navigator.clipboard.writeText(url).then(function() {
+                anchor.textContent = '✓';
+                anchor.style.color = 'var(--accent-green)';
+                anchor.style.opacity = '1';
+                setTimeout(function() {
+                    anchor.textContent = '#';
+                    anchor.style.color = 'var(--text-dim)';
+                    anchor.style.opacity = '0';
+                }, 1500);
+            });
+        });
+    });
+});
+
+// ====== External link indicator ======
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.post-content a[href^="http"]').forEach(function(a) {
+        if (a.hostname !== location.hostname) {
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener noreferrer');
+            if (!a.querySelector('img') && !a.textContent.includes('↗')) {
+                a.insertAdjacentHTML('afterend', '<sup style="font-size:0.7em;color:var(--text-dim);margin-left:1px;">↗</sup>');
+            }
+        }
+    });
+});
+
+// ====== Table of contents reading progress mini-bar ======
+document.addEventListener('DOMContentLoaded', function() {
+    var toc = document.querySelector('.toc');
+    if (!toc) return;
+    var bar = document.createElement('div');
+    bar.id = 'toc-progress';
+    bar.style.cssText = 'height:2px;background:linear-gradient(90deg,var(--primary),var(--accent-purple));width:0%;transition:width 0.3s;border-radius:2px;margin-top:8px;';
+    toc.appendChild(bar);
+
+    window.addEventListener('scroll', function() {
+        var article = document.querySelector('.post-content');
+        if (!article) return;
+        var rect = article.getBoundingClientRect();
+        var total = article.scrollHeight - window.innerHeight;
+        var pct = Math.min(100, Math.max(0, (-rect.top / total) * 100));
+        bar.style.width = pct + '%';
+    });
 });
