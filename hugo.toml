@@ -20,6 +20,7 @@ ShowShareButtons = true
 ShowToc = true
 TocOpen = true
 ShowWordCount = true
+comments = true
 
 [params.homeInfoParams]
 Title = "+5 Security Research"
