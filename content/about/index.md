@@ -32,6 +32,10 @@ C/C++, Go, JavaScript, Python, Java
 - Vulnerability research & exploit development
 - Cryptography in real-world protocols
 
+### Projects
+
+🔬 [Reverse Engineering Blog](https://overkazaf.github.io/reverse_engineering) — Writeups, tools, and methodology for binary analysis, DRM research, and protocol reverse engineering.
+
 ### Contact
 
 📧 overkazaf@gmail.com
