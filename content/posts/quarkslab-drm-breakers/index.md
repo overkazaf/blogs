@@ -1,8 +1,8 @@
 ---
 title: "铸剑者的十年 - Quarkslab 白盒密码破译武器库与 DRM 攻防全纪实"
 slug: "quarkslab-drm-whitebox-cryptanalysis-arsenal"
-date: 2026-05-09
-lastmod: 2026-05-09
+date: 2026-05-08
+lastmod: 2026-05-08
 draft: false
 tags: ["quarkslab", "white-box-cryptography", "DFA", "DCA", "BGE", "DRM", "widevine", "TrustZone", "TEE", "side-channel", "reverse-engineering", "QBDI", "LIEF", "SideChannelMarvels", "samsung", "boot-chain", "CVE", "emulation", "cryptography", "AES"]
 categories: ["security-research"]
@@ -22,7 +22,7 @@ math: false
 3. **TEE 实战突破（2019–2020）**：三人团队在 Black Hat USA 2019 公开 Samsung TrustZone 攻击链，从 S-EL0 一路打到 EL3 代码执行——这层 TEE 正是 Widevine L1 DRM 的信任根基
 4. **新一代工具（2023–2024）**：DarkPhoenix（带外部编码的 DFA）和 BlueGalaxyEnergy（首个开源 BGE 实现）将攻击能力推进到下一代白盒防护
 
-笔者在前两篇文章中对 [Widevine L3 keybox 的 DFA 提取](/posts/widevine-l3-keybox-mass-production/) 和 [Chrome CDM 白盒 AES 的 13 次碰壁](/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 做了亲身实战，本文则退后一步，把镜头对准这些武器背后的铸剑者。
+笔者在前两篇文章中对 [Widevine L3 keybox 的 DFA 提取](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) 和 [Chrome CDM 白盒 AES 的 13 次碰壁](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 做了亲身实战，本文则退后一步，把镜头对准这些武器背后的铸剑者。
 
 ---
 
@@ -82,9 +82,9 @@ math: false
 
 | 本博客文章 | Quarkslab 直接关联 |
 |-----------|-------------------|
-| [Widevine L3 keybox 量产](/posts/widevine-l3-keybox-mass-production/) | 使用 JeanGrey/phoenixAES + Stark/aes_keyschedule 做 DFA |
-| [Chrome CDM 流捕获](/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) | DCA/collision 理论帮助理解白盒 AES 为何不可提取密钥 |
-| [抖音六神签名](/posts/douyin-sixgod-metasec-unidbg-reverse-engineering/) | OLLVM 去混淆思路借鉴 Triton DSE |
+| [Widevine L3 keybox 量产](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) | 使用 JeanGrey/phoenixAES + Stark/aes_keyschedule 做 DFA |
+| [Chrome CDM 流捕获](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) | DCA/collision 理论帮助理解白盒 AES 为何不可提取密钥 |
+| [抖音六神签名](https://overkazaf.github.io/blogs/posts/douyin-sixgod-metasec-unidbg-reverse-engineering/) | OLLVM 去混淆思路借鉴 Triton DSE |
 | **本文** | 系统梳理上述工具和理论的源头 |
 
 ---
@@ -344,7 +344,7 @@ daredevil -c mem_addr1_rw1_128_2000.config
 | **Daredevil** | [SideChannelMarvels/Daredevil](https://github.com/SideChannelMarvels/Daredevil) | CPA 高阶相关功率分析 |
 | **Tracer** | [SideChannelMarvels/Tracer](https://github.com/SideChannelMarvels/Tracer) | DBI trace 收集（PIN/Valgrind/可视化） |
 
-**对 DRM 的影响**：笔者在 [Widevine L3 keybox 文章](/posts/widevine-l3-keybox-mass-production/) 中正是使用 `phoenixAES` 从 150 次 fault 中恢复了 ROOT_KEY。DFA 的速度（秒级）远超 DCA（分钟级），是实际攻击白盒 DRM 的首选。
+**对 DRM 的影响**：笔者在 [Widevine L3 keybox 文章](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) 中正是使用 `phoenixAES` 从 150 次 fault 中恢复了 ROOT_KEY。DFA 的速度（秒级）远超 DCA（分钟级），是实际攻击白盒 DRM 的首选。
 
 #### 动手复现 DFA
 
@@ -829,7 +829,7 @@ Quarkslab 的十年工作实质上证明了一个**悲观结论**：**基于查�
 | **第 2 代** | T-table + 外部编码 | DCA△, DarkPhoenix, BGE v2 | **✓ 大部分** |
 | **第 3 代** | 非标准白盒（密钥 blinding、无 T-table） | ? | ✗ （DCA/DFA 信号消失） |
 
-Chrome CDM 4.10.2934 属于第 3 代——笔者的 [13 次碰壁](/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 从侧面佐证了这一判断。
+Chrome CDM 4.10.2934 属于第 3 代——笔者的 [13 次碰壁](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 从侧面佐证了这一判断。
 
 ---
 
@@ -1105,7 +1105,7 @@ OP-TEE / 其他
 |---------|---------|---------|
 | 白盒密码分析 + 工具开发 | Quarkslab | 本文 §九 的 Level 0→5 路径 |
 | TEE 漏洞挖掘 + 0-day | Project Zero / 360 Alpha Lab | 从 Beniamini 2017 博客开始 → QEMU 仿真 TA → fuzz |
-| DRM 协议分析 + 实战破解 | Neodyme / David Buchanan | 从 Widevine L3 DFA（笔者的[第一篇](/posts/widevine-l3-keybox-mass-production/)）开始 |
+| DRM 协议分析 + 实战破解 | Neodyme / David Buchanan | 从 Widevine L3 DFA（笔者的[第一篇](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/)）开始 |
 | 白盒理论研究 + 新方案设计 | NXP + CryptoExperts | 从 WhibOx Contest 参赛开始（每届 CHES 配套） |
 | 硬件侧信道 + 芯片安全 | Riscure | 买一块 ChipWhisperer → 做 CPA → 迁移到软件 DCA |
 

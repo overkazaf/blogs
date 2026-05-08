@@ -48,7 +48,7 @@ math: false
 
 ### 2.1 研究背景：Widevine 的两张面孔
 
-笔者在[前文](/posts/widevine-l3-keybox-mass-production/)中通过 DFA 攻破了 Android L3 CDM（build 4464, 2018 年编译）的白盒 AES，成功提取了密钥并实现了 keybox 量产。那个 CDM 使用经典的 T-table 实现，DFA 信号清晰可辨。
+笔者在[前文](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/)中通过 DFA 攻破了 Android L3 CDM（build 4464, 2018 年编译）的白盒 AES，成功提取了密钥并实现了 keybox 量产。那个 CDM 使用经典的 T-table 实现，DFA 信号清晰可辨。
 
 Chrome 桌面端的 CDM（build 4.10.2934.0, 2026 年当前版本）是完全不同的对手：
 
@@ -1227,7 +1227,7 @@ ptrace(PTRACE_POKEUSER, cdm_pid, offsetof(user, u_debugreg[7]),
 2. 刻画了 CDM 的**完整密钥生命周期**：license 解密 → 栈帧明文（瞬态）→ XOR blinding 存储 → 每次 Decrypt 栈上恢复 → 返回清零
 3. 完成了从密钥提取到流捕获的**范式转移**，构建了 LD_PRELOAD + vtable hook + CDP 注入 + 多分辨率编码的完整管线
 4. 在 Netflix 上完成了**端到端验证**，支持 1x-8x 加速捕获
-5. 与笔者的 [Android L3 DFA 研究](/posts/widevine-l3-keybox-mass-production/)形成对照，展示了 **Google 8 年间 CDM 防护的代际进化**
+5. 与笔者的 [Android L3 DFA 研究](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/)形成对照，展示了 **Google 8 年间 CDM 防护的代际进化**
 
 ### 一个值得深思的问题
 
@@ -1243,7 +1243,7 @@ ptrace(PTRACE_POKEUSER, cdm_pid, offsetof(user, u_debugreg[7]),
 
 #### 方向 1：OLLVM CFF 反混淆 → DFA（难度：极高，周期 2-6 个月）
 
-CDM 4.10.2934 的白盒 AES 被 OLLVM 控制流平坦化包裹在 `0xd23680` 附近。如果能成功反混淆这段代码，恢复出 AES 轮函数的原始结构，就可以应用笔者在 [L3 keybox 研究](/posts/widevine-l3-keybox-mass-production/)中验证过的 DFA 攻击。
+CDM 4.10.2934 的白盒 AES 被 OLLVM 控制流平坦化包裹在 `0xd23680` 附近。如果能成功反混淆这段代码，恢复出 AES 轮函数的原始结构，就可以应用笔者在 [L3 keybox 研究](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/)中验证过的 DFA 攻击。
 
 关键挑战：与 Android L3 build 4464 不同，Chrome CDM 的 AES **没有 T-table**（笔者已通过 453MB 内存扫描证明），DFA 的故障注入点需要从反混淆后的指令流中识别——这使得 DFA 前置的反混淆工作量远大于 L3 研究。
 
