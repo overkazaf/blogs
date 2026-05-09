@@ -74,7 +74,17 @@ EL1 ─── OS Kernel                    内核态
 EL0 ─── User Applications            用户态
 ```
 
-TrustZone 在此基础上引入了 **Secure / Non-Secure 二分法**：EL0 和 EL1 各存在两个实例（Normal World 和 Secure World），由 EL3 的 `SCR_EL3.NS` 位控制当前处于哪个 World。
+TrustZone 在此基础上引入了 **Secure / Non-Secure 二分法**：EL0 和 EL1 各存在两个实例（Normal World 和 Secure World），由 EL3 的 `SCR_EL3.NS` 位控制当前处于哪个 World。下图以对称视图展示了两个 World 内部的层级结构、各层运行的组件，以及它们之间的通信通道：
+
+![Normal World vs Secure World 异常等级对称视图](https://overkazaf.github.io/blogs/images/el0-to-el3/nw-sw-levels.png)
+*左右两大色块分别是 Secure World（绿色, SCR_EL3.NS=0）和 Normal World（蓝灰色, SCR_EL3.NS=1）。红色箭头标注的 SMC 调用是两个 World 之间唯一的合法通道——它必须经过中间的 EL3 Secure Monitor（红色）进行上下文保存/恢复和 World 切换。黄色虚线表示 shared memory 逻辑通道——Normal World 的 App (EL0-NW) 通过 TEE Client Driver 将命令和参数写入共享内存，S-EL1 TEE OS 再将其分发到目标 TA (S-EL0)。注意 NW 侧有三层（EL0→EL1→EL2），SW 侧只有两层（S-EL0→S-EL1），EL3 跨越两者之上。底部的 TZASC 是硬件级内存隔离控制器——它在总线级别强制 NW 无法访问 SW 内存。*
+
+这张图揭示了几个对攻击者至关重要的结构性事实：
+
+1. **NW→SW 的唯一入口是 shared memory**：攻击者不能直接调用 TA 的函数，只能通过 shared memory 传递数据。这意味着所有 S-EL0 层的漏洞都必须通过**精心构造的 shared memory 内容**触发
+2. **EL3 是两个 World 的桥梁和仲裁者**：控制 EL3 = 控制 World 切换 = 可以同时读写两个 World 的所有内存
+3. **SW 侧没有 EL2**：Secure World 没有 Hypervisor 层，S-EL1 (TEE OS) 直接管理 S-EL0 (TA)——这意味着从 S-EL0 到 S-EL1 只需要一次提权，比 NW 侧少一层
+4. **TZASC 是单向门**：SW→NW 可访问，NW→SW 不可访问。但如果攻击者到达 EL3，就可以重新配置 TZASC，使 NW 也能访问 SW 内存
 
 **关键硬件约束**：
 - Normal World **无法**访问 Secure World 的内存（由 TZASC 硬件控制器强制执行）

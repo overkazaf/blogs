@@ -1,0 +1,84 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+
+title ARM TrustZone: Normal World vs Secure World 异常等级对称视图
+
+skinparam rectangle {
+  BackgroundColor #f1f5f9
+  BorderColor #94a3b8
+}
+
+together {
+  rectangle "Normal World (REE)\nSCR_EL3.NS = 1" as NW #e2e8f0 {
+
+    rectangle "EL0-NW: 用户应用" as N0 #f1f5f9 {
+      card "Android App" as napp #ffffff
+      card "Chrome / Netflix" as nchr #ffffff
+    }
+
+    rectangle "EL1-NW: Linux Kernel" as N1 #dbeafe {
+      card "TEE Client Driver\n/dev/tee0" as ntee #ffffff
+      card "File System\nNetwork Stack" as nfs #ffffff
+    }
+
+    rectangle "EL2-NW: Hypervisor (可选)" as N2 #bfdbfe {
+      card "KVM / pKVM" as nkvm #ffffff
+    }
+  }
+
+  rectangle "Secure World (SWd)\nSCR_EL3.NS = 0" as SW #dcfce7 {
+
+    rectangle "S-EL0: Trusted Applications" as S0 #bbf7d0 {
+      card "Widevine L1 TA" as swv #ffffff
+      card "Keymaster TA" as skm #ffffff
+      card "Gatekeeper TA" as sgk #ffffff
+    }
+
+    rectangle "S-EL1: TEE OS + Secure Drivers" as S1 #86efac {
+      card "Kinibi / QSEE\nTEEGRIS / OP-TEE" as stos #ffffff
+      card "Secure Driver\n(VALIDATOR 等)" as sdrv #ffffff
+    }
+  }
+}
+
+rectangle "EL3: Secure Monitor (ATF)\n始终 Secure, 最高特权\n控制 SCR_EL3.NS 位 -> 决定 World 归属" as EL3 #fecaca
+
+rectangle "硬件隔离层\nTZASC (TrustZone Address Space Controller)\n总线级内存访问控制" as HW #fef3c7
+
+N0 -[#3b82f6]-> N1 : syscall
+N1 -[#3b82f6]-> N2 : HVC
+N2 -[#dc2626,bold]-> EL3 : SMC
+N1 -[#dc2626,bold]-> EL3 : SMC\n(无 Hypervisor 时)
+
+EL3 -[#16a34a,bold]-> S1 : ERET\nworld switch
+S1 -[#16a34a]-> S0 : TA dispatch
+
+N0 .[#ca8a04].> S0 : shared memory\n(逻辑通道)
+
+EL3 -[hidden]-> HW
+
+note bottom of NW
+  NW 无法访问 SW 内存
+  由 TZASC 硬件强制
+end note
+
+note bottom of SW
+  SW 可以访问 NW 内存
+  (单向可见)
+end note
+
+note right of EL3 #fecaca
+  EL3 职责:
+  1. 保存/恢复 World 上下文
+  2. 切换 SCR_EL3.NS 位
+  3. SMC 请求分发
+  4. 管理 TZASC 配置
+  5. Secure Boot 验证
+end note
+
+@enduml
