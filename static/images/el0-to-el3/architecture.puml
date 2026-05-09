@@ -1,0 +1,60 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title ARM TrustZone 异常等级与攻击面全景
+
+rectangle "Normal World (REE)\nSCR_EL3.NS = 1" as NW #f1f5f9 {
+  rectangle "EL0: 用户应用\nAndroid App / Chrome" as NEL0 #e2e8f0
+  rectangle "EL1: Linux Kernel\n驱动 / TEE Client API" as NEL1 #cbd5e1
+  rectangle "EL2: Hypervisor\n(可选)" as NEL2 #94a3b8
+}
+
+rectangle "Secure World (SWd)\nSCR_EL3.NS = 0" as SW #dcfce7 {
+  rectangle "S-EL0: Trusted Applications\nWidevine TA / Keymaster / Gatekeeper" as SEL0 #bbf7d0
+  rectangle "S-EL1: TEE OS Kernel\nKinibi / QSEE / TEEGRIS / OP-TEE\n+ Secure Drivers" as SEL1 #86efac
+}
+
+rectangle "EL3: Secure Monitor\nARM Trusted Firmware (ATF)\nSMC Dispatcher" as EL3 #fecaca
+
+rectangle "Boot Chain\nbootrom → BL1 → BL2 → BL31 → BL33" as BOOT #fefce8
+
+NEL0 -[#3b82f6]-> NEL1 : syscall
+NEL1 -[#3b82f6]-> NEL2 : HVC
+NEL2 -[#dc2626,dashed]-> EL3 : SMC
+NEL1 -[#dc2626,dashed]-> EL3 : SMC\n(TEE driver)
+
+EL3 -[#16a34a]-> SEL1 : world switch\nSCR_EL3.NS=0
+SEL1 -[#16a34a]-> SEL0 : TA dispatch
+
+NEL0 -[#ca8a04,dotted]-> SEL0 : 逻辑通道\n(shared memory\n+ TEE Client API)
+
+BOOT -[#7c3aed]-> EL3 : 初始化
+
+note right of EL3 #fffbeb
+  **EL3 = 上帝模式**
+  可读写所有内存
+  控制 world switch
+  管理安全配置寄存器
+end note
+
+note bottom of SEL0 #dcfce7
+  **DRM 密钥在这里**
+  Widevine L1 私钥
+  Keymaster 密钥
+  Gatekeeper 凭据
+end note
+
+note left of BOOT #fefce8
+  **替代攻击路径**
+  USB → bootloader
+  → EL3 (不经过 TA)
+end note
+
+@enduml

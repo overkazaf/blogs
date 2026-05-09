@@ -1,0 +1,85 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title 四条真实攻击链对比 (2017–2024)
+
+|#fecaca| Quarkslab 2019\n(Kinibi, Galaxy S6-S9)
+start
+#fecaca:Normal World EL0
+发送命令到 SEM Trustlet;
+#fecaca:S-EL0: SEM 栈溢出
+memcpy 无边界检查
+控制 LR → ROP;
+#fecaca:S-EL0→S-EL1: VALIDATOR
+安全驱动同类溢出
+获得驱动级权限;
+#fecaca:S-EL1→EL3: Kinibi mmap
+清零黑名单 @0xfe512440
+映射 EL3 代码页为可写
+修改 SMC handler;
+#16a34a:**EL3 代码执行**
+任意 Secure World 内存读写;
+stop
+
+|#fefce8| Quarkslab 2024\n(Boot Chain, Galaxy A225F)
+start
+#fefce8:USB 接口
+CVE-2024-20865
+Odin 认证绕过 (GPT 无签名);
+#fefce8:Bootloader (LK)
+CVE-2024-20832
+JPEG 解析堆溢出 → 代码执行;
+#fefce8:获得 Root
+禁用 boot 签名验证
+持久化 root 权限;
+#fefce8:EL3 信息泄露
+CVE-2024-20820
+SMC handler OOB read;
+#fefce8:任意物理内存映射
+CVE-2024-20021
+映射 Secure World 物理页;
+#16a34a:**Keystore 密钥泄露**
+Widevine L1 私钥可达;
+stop
+
+|#e0e7ff| 360 Alpha Lab 2021\n(QTEE Widevine L1)
+start
+#e0e7ff:Normal World App
+调用 QTEE TEE driver;
+#e0e7ff:S-EL0: Widevine TA 漏洞
+command handler 缺陷;
+#e0e7ff:Info Leak → ASLR 绕过
+第二个漏洞泄露 TA 基址;
+#e0e7ff:TA 内代码执行
+利用堆/栈控制;
+#e0e7ff:访问 SFS
+读取 Widevine 安全存储;
+#16a34a:**DRM 密钥提取**
+Widevine L1 私钥获取;
+stop
+
+|#f3e8ff| Project Zero 2017\n(QSEE Widevine, Nexus 6)
+start
+#f3e8ff:Normal World App
+与 Widevine TA 通信;
+#f3e8ff:S-EL0: PRDiag 溢出
+CVE-2015-6639
+全局缓冲区覆盖;
+#f3e8ff:内存侦察
+标记+探测 secapp 区域;
+#f3e8ff:Messy Write 原语
+nonce 生成 → 任意字节写入;
+#f3e8ff:函数指针覆盖
+command dispatch 表劫持;
+#16a34a:**QSEE 代码执行**
+TA 内任意代码执行;
+stop
+
+@enduml
