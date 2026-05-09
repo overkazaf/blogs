@@ -46,6 +46,7 @@ math: false
 | **② 工具武器化** | 2016–2018 | SideChannelMarvels + LIEF 集成 | Philippe Teuwen, Romain Thomas | Deadpool / JeanGrey / Daredevil / Stark |
 | **③ TEE 实战** | 2019–2020 | Samsung TrustZone 全链漏洞 | Adamski, Guilbon, Peterlin | EL3 代码执行（SVE-2019-16665） |
 | **④ 新一代工具** | 2020–2024 | QBDI 碰撞攻击 + DarkPhoenix + BGE | Paul Hernault, Nicolas Surbayrole | 破解带外部编码 + shuffled states 的白盒 |
+| **⑤ 全栈纵深** | 2023–2024 | Android FBE + Boot Chain 4 CVE | Rossi Bellom, Melotti, Neveu | 从 USB 接口到 Secure World 全内存泄露 |
 
 > 一条贯穿始终的线索：Quarkslab 的研究者总是先**发表理论**，再**开源工具**，最后在**真实系统上实战验证**。这种「论文 → 代码 → 漏洞」的三拍节奏，使他们的工作具有极强的可复现性和工程影响力。
 
@@ -557,6 +558,46 @@ cd ../tainting
 
 **扩展点 7 — 从 Samsung 迁移到 Qualcomm**：360 Alpha Lab 的 [Wideshears](https://www.youtube.com/watch?v=0oWFJq6tLe4) 做的正是这件事。Qualcomm QTEE 的 TA 格式（标准 ELF + QSEE 特定 header）比 Kinibi 的 MCLF 更接近常规逆向分析。关键差异在于 QTEE 的内存共享机制（ION buffer → TA mmap）和 ASLR 实现——360 找到了 info leak 绕过 ASLR 的方法，这是整个利用链的核心。
 
+#### 2024 年后续：GlobalConfusion — 用设计缺陷批量制造 TEE 0-day
+
+Quarkslab 在 2019–2020 年的 Samsung TrustZone 攻击是「一次一个漏洞」的手工艺——逆向特定 TA、找到特定溢出、构造特定利用链。但 2024 年 8 月，EPFL HexHive 实验室的 Marcel Busch、Philipp Mao 和 Mathias Payer 在 USENIX Security 2024 上发表的 [GlobalConfusion](https://www.usenix.org/conference/usenixsecurity24/presentation/busch-globalconfusion) 将这种攻击从手工推进到了**工业化**。
+
+**核心发现**：GlobalPlatform TEE Internal Core API（所有 TrustZone TA 的事实标准接口）存在一个**设计层面的缺陷**——它将参数类型检查设为**可选的预处理器宏**（fail-open design），而非强制的运行时校验。这意味着每当 TA 开发者忘记调用 `TEE_PARAM_TYPE_GET` 检查 `paramTypes` 时，就会产生一个 type-confusion 漏洞：攻击者可以把 `value` 类型的参数（两个 32-bit 整数）伪装成 `memref` 类型（指针 + 大小），从而获得**在 TA 地址空间内任意读写**的能力。
+
+**规模**：
+
+| 指标 | 数据 |
+|------|------|
+| 扫描 TA 总数 | **14,777** 个（来自 5 家厂商的固件镜像） |
+| 覆盖 TEE 平台 | BeanPod、MiTEE、QSEE、Kinibi、**TEEGRIS** |
+| 确认已知漏洞 | 9 个 |
+| 发现静默修复漏洞 | 10 个 |
+| 发现 **0-day** | **14 个** |
+| 分配 CVE | **4 个**（含 CVE-2023-32835，MediaTek TA0811） |
+| Bug bounty | $12,000 |
+| 受影响 OEM | Samsung、Xiaomi、Oppo、Vivo、华为 |
+
+**Samsung TEEGRIS 的数据最触目惊心**：在 4,589 个 TEEGRIS TA 中，有 **291 个漏洞实例**（#Vuln 列），17 个唯一受影响的 TA，其中 **7 个是 0-day**。受影响的 TA 包括 `tz_kg.elf`（密钥生成）和 `secstor2.elf`（安全存储）——这些正是 Widevine L1 DRM 信任链的底层依赖。
+
+**实战利用示例**：研究者在 Xiaomi Redmi 设备上演示了两个利用：
+1. **TA1449**（小米，BeanPod）：type-confusion → 任意内存读取 → 泄露 TA 内存中的认证密钥
+2. **TA0811**（MediaTek，CVE-2023-32835）：type-confusion → 利用 `query_drmkey_impl` 函数 → 覆盖返回地址 → **TA 内代码执行**
+
+**工具开源**：[HexHive/GlobalConfusion](https://github.com/HexHive/GlobalConfusion)（GPCheck 静态分析器 + TIPI 污点分析框架）
+
+**与 Quarkslab 工作的关系**：
+
+```
+Quarkslab (2019)                    GlobalConfusion (2024)
+───────────────                     ─────────────────────
+手动逆向特定 TA                      自动化扫描 14,777 个 TA
+找 1 个栈溢出                        发现 1 类设计缺陷 → 批量 0-day
+攻击 Kinibi (Galaxy S6–S9)           覆盖 5 种 TEE + 5 家 OEM
+3 个漏洞 → EL3 代码执行               14 个 0-day → 4 CVE
+```
+
+两项工作是**互补的**：Quarkslab 证明了 TEE 可以被攻破（深度），GlobalConfusion 证明了这种脆弱性是**系统性的、跨厂商的**（广度）。对于 DRM 安全研究者来说，GlobalConfusion 的意义在于：**即使 Widevine L1 TA 本身没有漏洞，它运行在同一 TEE 中的其他 TA 可能有 type-confusion 漏洞——攻破任何一个 TA 就能读取整个 TEE 的内存，包括 Widevine 的私钥**。
+
 ---
 
 ### 4.6 DarkPhoenix（2023）
@@ -623,6 +664,93 @@ cd ../tainting
 | 攻击速度 | 分钟 | 秒 | 毫秒–秒 |
 | 自动化程度 | 高 | 高 | 高 |
 | Quarkslab 工具 | Daredevil | JeanGrey / DarkPhoenix | BlueGalaxyEnergy |
+
+---
+
+### 4.8 Quarkslab 2023–2024 新战线：从白盒密码到 Boot Chain
+
+> 2022 年之后，Quarkslab 的攻击面从「白盒 AES」和「TEE Trustlet」进一步扩展到了**整个 Android 安全栈**——从启动链底层到数据加密上层。这两项新研究与 DRM 的关联比表面看起来更深：Boot Chain 攻击可以泄露 Keystore 密钥（DRM 私钥的存放地），而 FBE 攻击直接涉及 Gatekeeper TA（与 Widevine 运行在同一 TEE 中）。
+
+#### 4.8.1 Android 数据加密深度研究（2023）
+
+**博客原文**：[Android Data Encryption in Depth](https://blog.quarkslab.com/android-data-encryption-in-depth.html)（Maxime Rossi Bellom & Damiano Melotti，2023-08-14）
+
+**会议发表**：REcon 2023 — [Dissecting the Modern Android Data Encryption Scheme](https://cfp.recon.cx/2023/talk/3NQUNN/)
+
+**研究目标**：评估 Android 文件级加密（FBE）在攻击者拥有高级软件漏洞时的抗性。
+
+**两条攻击路径**：
+
+| 路径 | 目标机制 | 利用的漏洞 | 设备 | 结果 |
+|------|---------|----------|------|------|
+| **路径 A** | Gatekeeper TA（TrustZone 内） | MediaTek SoC 漏洞 via MTKClient → patch TA 绕过凭据验证 | Samsung Galaxy A226B (MT6833V) | 提取加密材料 |
+| **路径 B** | Weaver（Titan M 安全芯片） | CVE-2022-20233 → Titan M 代码执行 | Samsung Galaxy A225F (MT6769V) | 直接从芯片内存提取 Weaver 密钥 |
+
+**与 DRM 的关联**：路径 A 攻击的 Gatekeeper TA 和 Widevine L1 TA **运行在同一个 TEE 中**。如果 Gatekeeper 可以被 patch（绕过凭据验证），同样的技术路径可以用来 patch Widevine TA——或者利用已获得的 TEE 执行权限直接读取 Widevine 的内存空间。
+
+**关键结论**：Android FBE 的设计是扎实的——即使攻破了 Gatekeeper/Weaver，攻击者仍然需要暴力破解用户密码（通过 scrypt 慢散列保护）。但对于 DRM 研究者来说，重要的启示是：**MediaTek SoC 的 bootrom 漏洞可以作为进入 TEE 的跳板**。
+
+#### 4.8.2 Samsung Galaxy A* Boot Chain 攻击（2024）
+
+**博客原文**：[Attacking the Samsung Galaxy A* Boot Chain](https://blog.quarkslab.com/attacking-the-samsung-galaxy-a-boot-chain.html)（Maxime Rossi Bellom & Raphaël Neveu，2024-10-15）
+
+**会议发表**：**Black Hat USA 2024** + SSTIC 2024
+
+**四个 CVE 构成的攻击链**：
+
+这是你提到的 4 个 CVE 攻击。它们针对 Samsung Galaxy A225F（MediaTek SoC），从 USB 接口一路打到 Secure World 内存泄露：
+
+| CVE | 组件 | 类型 | 利用方式 | 效果 |
+|-----|------|------|---------|------|
+| **CVE-2024-20865** | Odin (USB 刷机协议) | 认证绕过 | GPT 分区可通过 USB 无认证写入 → 修改 PIT 表绕过签名验证 | 获得 bootloader 级别的代码注入能力 |
+| **CVE-2024-20832** | Little Kernel (引导程序) | 堆溢出 | Samsung 自定义 JPEG 解析器未校验文件大小 → 堆溢出 → 代码执行 | 在 bootloader 中执行任意代码 |
+| **CVE-2024-20820** | Secure Monitor (EL3) | 越界读取 | 特定 SMC handler 存在 OOB read | 泄露完整的 Secure Monitor 内存 |
+| **CVE-2024-20021** | MediaTek TEE 驱动 | 任意物理内存映射 | 将任意物理地址映射到虚拟地址（限 8MB 连续） | **泄露 Secure World 全部内存** |
+
+**攻击链总览**：
+
+```
+USB 接口
+   │  CVE-2024-20865: Odin 认证绕过 → 写入恶意分区
+   ▼
+Little Kernel (Bootloader)
+   │  CVE-2024-20832: JPEG 解析堆溢出 → 代码执行
+   ▼
+Secure Monitor (EL3)
+   │  CVE-2024-20820: OOB read → 泄露 Monitor 内存
+   ▼
+TEE 驱动 (内核)
+   │  CVE-2024-20021: 任意物理内存映射
+   ▼
+Secure World 全部内存
+   → Android Keystore 密钥泄露
+   → 所有 TA 内存可读（包括 Widevine L1 TA）
+```
+
+**对 DRM 的直接影响**：最终效果是「泄露任何来自 Secure World 内存的数据，包括 **Android Keystore 密钥**」。Android Keystore 是 Widevine L1 设备私钥的存放位置——这意味着 Quarkslab 的 2024 攻击链从理论上可以直接提取 Widevine L1 的设备凭证，而不需要攻击 Widevine TA 本身。
+
+**受影响范围**：基于 MediaTek SoC 的**大部分 Samsung 设备**至少受一个 CVE 影响。Samsung 已推送补丁。
+
+**PoC 代码**：Quarkslab 在 GitHub 发布了四个 CVE 的概念验证代码。
+
+**Quarkslab TEE 研究的演进脉络**：
+
+```
+2019: Kinibi 逆向 (Galaxy S6–S9)
+        │  手动逆向 → 3 个漏洞 → EL3 代码执行
+        │
+2023: Android FBE 研究 (Galaxy A22x)
+        │  Gatekeeper TA 攻击 + Weaver 攻击
+        │  重点: MediaTek bootrom 作为 TEE 入口
+        │
+2024: Boot Chain 攻击 (Galaxy A225F)  ★ 4 CVE
+        │  USB → Bootloader → EL3 → Secure World 全内存
+        │  重点: 不攻击 TA，从底层硬件接口绕过
+        │
+趋势: 从攻击 TA 本身 → 攻击 TA 运行的基础设施
+```
+
+> Quarkslab 的研究路径清晰地展示了一个趋势：**随着 TA 自身的加固越来越强（加密、签名、anti-rollback），攻击者开始转向攻击 TEE 的「地基」——bootloader、secure monitor、物理内存映射驱动**。这与白盒密码学的演进逻辑完全一致：当白盒 AES 变得不可攻破时（第 3 代），攻击者转向攻击协议层或 TEE 层。
 
 ---
 
@@ -758,6 +886,7 @@ Quarkslab 并非孤军作战。全球有十余支团队在白盒密码学 / DRM 
 | ![360](https://img.shields.io/badge/360_Alpha_Lab-00AA00?style=flat) **360 Alpha Lab** | 🇨🇳 中国 | TEE 漏洞挖掘 + DRM 实战 | Qi Zhao: [Wideshears — Breaking Widevine on QTEE](https://www.youtube.com/watch?v=0oWFJq6tLe4)（Black Hat Asia 2021）— 首次公开 Qualcomm QTEE 上 Widevine L1 TA 的完整利用链 | **平行路线**：360 攻 Qualcomm QTEE，Quarkslab 攻 Trustonic Kinibi；两支团队覆盖了 Android TEE 的两大主流实现 |
 | ![Synacktiv](https://img.shields.io/badge/Synacktiv-222222?style=flat) **Synacktiv** | 🇫🇷 法国 | 渗透 + TEE + 移动安全 | [Kinibi TEE: Trusted Application Exploitation](https://www.synacktiv.com/en/publications/kinibi-tee-trusted-application-exploitation)（Samsung TA 新漏洞） | **同赛道竞争**：同样攻 Kinibi/Samsung TrustZone；Quarkslab 更早（2019），Synacktiv 补充了后续补丁绕过 |
 | ![David Buchanan](https://img.shields.io/badge/David_Buchanan-333333?style=flat) **David Buchanan**（个人） | 🇬🇧 英国 | DRM 破解 + 逆向 | 2019 年 1 月首次用 DFA 攻破 Widevine L3 白盒 AES（[报道](https://sudonull.com/post/232829)），引发 Google 补丁 | **直接受益于** Quarkslab 的 DFA 博客和 JeanGrey 工具；他的工作促使 Google 升级白盒实现 |
+| ![EPFL HexHive](https://img.shields.io/badge/EPFL_HexHive-FF0000?style=flat) **EPFL HexHive** | 🇨🇭 瑞士 | TEE 漏洞自动化发现 + 静态分析 | [GlobalConfusion](https://www.usenix.org/conference/usenixsecurity24/presentation/busch-globalconfusion)（USENIX Security 2024）— 扫描 14,777 TA，发现 14 个 0-day，获 4 CVE | **规模化升级**：Quarkslab 做深度（手动逆向 → EL3），HexHive 做广度（自动化扫描 → 批量 0-day）；两者联合说明 TEE 安全既有深度漏洞也有系统性设计缺陷 |
 | ![Meituan](https://img.shields.io/badge/美团安全-FFD500?style=flat) **美团安全团队** | 🇨🇳 中国 | iOS 逆向 + DRM | [Research on Fairplay DRM and Obfuscation Realization](https://segmentfault.com/a/1190000041023774/en) — Apple FairPlay DRM 混淆分析 | **独立赛道**：专注 Apple 生态，与 Quarkslab（主攻 Android/Linux）互不重叠 |
 
 #### 学术 / 理论侧团队
