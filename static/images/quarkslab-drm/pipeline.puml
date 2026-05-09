@@ -1,0 +1,56 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+skinparam activity {
+  BackgroundColor #f1f5f9
+  BorderColor #94a3b8
+}
+
+|#dcfce7| Phase 1: 理论突破
+start
+:CHES 2016 — DCA
+软件侧信道 = 硬件 DPA 的类比
+Bos, **Hubain**, Michiels, **Teuwen**;
+note right #fffbeb
+  **Best Paper Award**
+  LNCS vol.9813, pp.215-236
+end note
+:DFA on White-Box AES (2016)
+在 Deadpool 上实战验证;
+
+|#fefce8| Phase 2: 工具武器化
+:Deadpool + Daredevil + JeanGrey + Stark
+SideChannelMarvels 组织成立;
+:LIEF × SideChannelMarvels (2018)
+Android SO → Linux 跨平台 DFA;
+:QBDI collision-based attack (2020)
+DBI + 碰撞分析联合破解;
+
+|#fecaca| Phase 3: TEE 实战
+:Samsung TrustZone Deep Dive (2019)
+Kinibi OS 逆向 (Galaxy S6–S9);
+note right #fffbeb
+  **Black Hat USA 2019**
+  Adamski, Guilbon, Peterlin
+end note
+:漏洞利用链 (2020)
+S-EL0 → secure driver → S-EL1 → **EL3 代码执行**
+CVE: SVE-2019-16665;
+
+|#f3e8ff| Phase 4: 新一代工具
+:DarkPhoenix (2023-02)
+DFA + 外部编码;
+:BlueGalaxyEnergy v1 (2023-12)
+BGE attack 首个开源实现;
+:BlueGalaxyEnergy v2 (2024-02)
+支持解密 + shuffled states;
+
+stop
+@enduml

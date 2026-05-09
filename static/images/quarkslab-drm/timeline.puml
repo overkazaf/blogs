@@ -1,0 +1,90 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title Quarkslab 白盒密码破译与 DRM 攻防时间线 (2015–2024)
+
+legend top left
+  |<#dcfce7>  | 理论/论文 |
+  |<#fefce8>  | 工具发布 |
+  |<#fecaca>  | 漏洞/实战 |
+  |<#f3e8ff>  | 博客/教程 |
+endlegend
+
+|#f1f5f9| 2015
+start
+:Triton DSE 框架
+SSTIC 2015;
+
+|#dcfce7| 2016
+#dcfce7:★ CHES 2016 Best Paper
+DCA: 软件侧信道 = 硬件 DPA
+Bos, Hubain, Michiels, Teuwen;
+note right #fffbeb
+  LNCS vol.9813
+  pp.215-236
+end note
+#fefce8:SideChannelMarvels 成立
+Deadpool + JeanGrey + Daredevil
++ Tracer + Stark;
+#f3e8ff:DFA on White-Box AES blog
+Philippe Teuwen & Charles Hubain;
+
+|#fefce8| 2017
+:LIEF v1.0 发布
+Romain Thomas
+ELF/PE/Mach-O/DEX;
+:QBDI v1.0 发布
+跨平台 DBI;
+
+|#f3e8ff| 2018
+:LIEF × SideChannelMarvels
+Android SO → Linux DFA
+10.2s 恢复密钥;
+
+|#fecaca| 2019
+#fecaca:★ Black Hat USA
+Breaking Samsung TrustZone
+Adamski, Guilbon, Peterlin;
+note right #fffbeb
+  Galaxy S6–S9
+  Kinibi OS
+end note
+:Samsung TZ Part 1 & 2 blog
+逆向工具开源;
+#dcfce7:Grey-Box Attacks
+Journal of Cryptology
+Bos, Hubain et al.;
+
+|#fecaca| 2020
+#fecaca:Samsung TZ Part 3 blog
+漏洞利用链公开
+S-EL0 → S-EL1 → **EL3**
+CVE: SVE-2019-16665;
+:Samsung 推送补丁
+(2020.02–06);
+#f3e8ff:QBDI collision-based attack
+Paul Hernault
+攻破 GreHack 2019 白盒;
+
+|#fefce8| 2023
+#fefce8:★ DarkPhoenix 发布
+DFA + 外部编码
+100万+ fault 注入;
+#fefce8:★ BlueGalaxyEnergy v1
+首个开源 BGE 实现
+Nicolas Surbayrole & Teuwen;
+
+|#fefce8| 2024
+#fefce8:BlueGalaxyEnergy v2
+支持解密方向
++ shuffled states;
+
+stop
+@enduml
