@@ -28,13 +28,17 @@ math: false
 
 ## 一、路线总览
 
+十年的研究不是一条直线，而是四个彼此叠加的阶段。下面这张管线图从左到右展示了 Quarkslab 如何从一篇学术论文出发，逐步构建出完整的白盒攻击生态——每个阶段的产出都是下一个阶段的输入：
+
 ![Quarkslab 四阶段攻击管线](https://overkazaf.github.io/blogs/images/quarkslab-drm/pipeline.png)
-*理论突破 → 工具武器化 → TEE 实战 → 新一代工具：Quarkslab 十年 DRM 攻防的完整脉络。*
+*四个阶段的递进关系：Phase 1 的 DCA/DFA 理论催生了 Phase 2 的工具链（Deadpool/JeanGrey/Daredevil）；工具链的成熟使 Phase 3 的 TEE 实战成为可能（Samsung TrustZone EL3 代码执行）；而实战中暴露的新防护手段（外部编码、shuffled states）反过来驱动了 Phase 4 的新一代工具（DarkPhoenix/BlueGalaxyEnergy）。注意管线不是单向的——右侧的「新一代工具」又会被未来的研究者用于攻击下一代 DRM 实现。*
+
+如果把这四个阶段展开到具体年份，就形成了下面这条时间线。每个节点标注了产出类型——绿色是论文/理论突破，黄色是工具发布，红色是漏洞利用实战，紫色是博客/教程。可以看到 Quarkslab 的节奏非常规律：**每 2–3 年完成一次「理论 → 工具 → 实战」的完整循环**。
 
 ![Quarkslab 时间线 2015–2024](https://overkazaf.github.io/blogs/images/quarkslab-drm/timeline.png)
-*2015–2024 完整时间线。绿色=论文，黄色=工具发布，红色=漏洞/实战，紫色=博客/教程。*
+*2015–2024 完整时间线。两个密集产出期清晰可见：2016 年（CHES Best Paper + SideChannelMarvels 五件套同年发布）和 2023–2024 年（DarkPhoenix + BlueGalaxyEnergy 双工具接力）。中间的 2019–2020 年则是 TEE 实战的爆发期——Black Hat 演讲、三篇深度博客、CVE 补丁，全部压缩在 18 个月内完成。*
 
-Quarkslab 的 DRM 相关工作跨越十年，可以按「理论 → 工具 → 实战 → 迭代」四个阶段来理解：
+将管线图和时间线结合起来，Quarkslab 的 DRM 相关工作可以概括为以下四个阶段：
 
 | 阶段 | 时间 | 里程碑 | 核心人物 | 产出 |
 |------|------|--------|---------|------|
@@ -106,9 +110,39 @@ Quarkslab 的工作围绕三种攻击展开：
 
 > 这三种攻击的难度和适用范围递进：DCA 最通用但需要大量 trace；DFA 更快但需要 fault 注入能力；BGE 最精准但需要识别出 T-table 结构。Quarkslab 按这个顺序逐步开源了对应工具。
 
-### 3.3 DCA 算法伪代码
+### 3.3 DBI 技术栈对比：Valgrind 及其替代品
 
-理解 DCA 的核心只需要理解一段伪代码：
+DCA 和 DFA 攻击的前提是**能够观测或修改白盒程序的内部执行状态**——这依赖于 DBI（Dynamic Binary Instrumentation，动态二进制插桩）技术。DBI 的基本原理是：在目标程序运行时，动态插入监控代码，记录每一条指令的执行、每一次内存读写的地址和值，而不需要目标程序的源码。
+
+Quarkslab 的 Tracer 工具提供了两个 DBI 后端：**TracerGrind**（基于 Valgrind）和 **TracerPin**（基于 Intel PIN）。理解它们的差异以及与其他 DBI 方案的关系，有助于你根据目标平台选择正确的工具。
+
+**Valgrind** 是什么：Valgrind 是一个开源的指令级仿真框架，最初为 C/C++ 程序内存调试而生（最知名的用途是 `memcheck` 检测内存泄漏）。它通过将目标程序的机器码**翻译为中间表示（VEX IR）**再重新编译执行来实现插桩——相当于一个 JIT 编译器。这种「翻译执行」的架构使得 Valgrind 可以在每条指令前后插入任意监控逻辑，而无需修改目标二进制。TracerGrind 就是一个 Valgrind 插件，在每次内存读写时记录地址和值，生成 DCA/DFA 需要的 trace 文件。
+
+以下是 Quarkslab 研究中涉及的所有 DBI 方案的横向对比：
+
+| 特性 | **Valgrind** | **Intel PIN** | **QBDI** | **Frida** | **DynamoRIO** | **Unicorn/unidbg** |
+|------|-------------|---------------|----------|-----------|---------------|-------------------|
+| **原理** | VEX IR 翻译执行 | JIT 编译插桩 | LLVM-based JIT | JavaScript 注入 + inline hook | 翻译执行 | CPU 仿真（QEMU 后端） |
+| **平台** | Linux, macOS | Linux, Windows, macOS | Linux, macOS, Android, iOS, Windows | 全平台 | Linux, Windows | 跨平台（仿真，不依赖目标 OS） |
+| **架构** | x86, x86_64, ARM, AArch64 | x86, x86_64 | x86, x86_64, ARM, AArch64 | x86, x86_64, ARM, AArch64 | x86, x86_64, AArch64 | x86, x86_64, ARM, AArch64, MIPS |
+| **性能** | 极慢（20–50× 减速） | 中等（2–5× 减速） | 中等（3–10× 减速） | 中等（取决于 hook 密度） | 中等（3–8× 减速） | 慢（仿真器开销，但可控） |
+| **trace 粒度** | 指令级 + 内存级 | 指令级 + 内存级 | 指令级 + 内存级 | 函数级（默认）/ 指令级（Stalker） | 指令级 + 内存级 | 完全可控（内存回调） |
+| **Android SO 支持** | 需 LIEF 迁移 | ✗（仅 x86） | ✓（原生支持） | ✓（原生支持） | 有限 | ✓（unidbg 专为此设计） |
+| **适合场景** | DCA trace 收集（Quarkslab 首选） | DCA trace（Windows 目标） | 跨平台 DCA + 碰撞攻击 | Hook 单个函数、在线调试 | 大规模 fuzzing | Android SO 仿真 + DFA fault 注入 |
+| **Quarkslab 使用** | TracerGrind（Tracer 项目） | TracerPin（Tracer 项目） | 碰撞攻击（§4.4） | 与 QBDI 集成 | — | — |
+
+**选型建议**：
+
+- **首次尝试白盒攻击**：先用 **Valgrind + TracerGrind**，虽然最慢但最稳定、trace 最完整，且 Deadpool 的示例脚本默认就是基于它的
+- **攻击 Android SO**：如果目标是 `.so` 库且有 JNI 依赖，**unidbg** 是最实用的选择（笔者在 Widevine L3 和抖音六神中都使用了它）；如果依赖不复杂，用 **LIEF 迁移到 Linux + Valgrind** 更快
+- **需要在真机上动态分析**：**Frida + QBDI** 组合——Frida 注入进程，QBDI 做指令级 trace
+- **Windows 上的白盒**：**Intel PIN + TracerPin** 是唯一的选择
+
+### 3.4 DCA 算法伪代码
+
+上面的表格告诉你 DCA/DFA/BGE 各需要什么条件，但没有告诉你它们**怎么工作**。如果你想复刻 Quarkslab 的研究——而不仅仅是当工具的使用者——必须理解核心算法。以下三节分别给出每种攻击的伪代码，按「能直接改写成 Python 脚本」的粒度来写。
+
+DCA 的核心思想可以压缩成不到 30 行 Python：
 
 ```python
 # DCA 攻击核心算法
@@ -149,7 +183,9 @@ def dca_attack(traces, plaintexts, byte_index):
 
 **扩展点 1 — 高阶 DCA**：当白盒实现使用了 masking（每个中间值被随机掩码保护），单字节相关性消失。此时需要**高阶 DCA**——对两个采样点做联合统计（例如 `traces[:,t1] ⊕ traces[:,t2]`），代价是 $O(T^2)$ 复杂度。Daredevil 支持高阶 CPA。
 
-### 3.4 DFA 算法伪代码
+### 3.5 DFA 算法伪代码
+
+如果说 DCA 是「观察大量执行 trace 然后做统计」，DFA 则是一种更具侵入性的方法——主动修改白盒的内部状态（注入 fault），然后从正确输出和错误输出的**差异**中推导密钥。DFA 的优势是速度快（通常只需要 8–200 个 fault，而不是 2000 次完整执行），代价是需要找到注入 fault 的位置。以下伪代码展示了核心推导逻辑：
 
 ```python
 # DFA 攻击核心流程
@@ -193,7 +229,9 @@ def dfa_attack(correct_ciphertext, faulty_ciphertexts):
 
 **扩展点 2 — Fault 位置自动定位**：在白盒实现中，AES 轮次被编码到查找表里，很难手动确定「第 9 轮在哪里」。Quarkslab 的方法是**暴力搜索**——修改每个表的每个字节，检查输出是否产生 4 字节差分。如果是 → 该表位于倒数第二轮 MixColumns 区域。
 
-### 3.5 BGE 攻击原理（代数视角）
+### 3.6 BGE 攻击原理（代数视角）
+
+DCA 和 DFA 都需要**执行**白盒程序——要么跑很多次收集 trace，要么注入 fault 比较输出。但有一种场景它们都无能为力：如果你只拿到了白盒实现的**静态查找表数据**（例如从固件 dump 中提取），无法执行程序怎么办？BGE 攻击正是为这种场景设计的——它不需要执行目标程序，只需要**读取白盒查找表的内容**，通过代数分析直接恢复密钥。
 
 BGE 攻击的数学比 DCA/DFA 更深。核心思想：
 
@@ -461,6 +499,8 @@ QBDI（QuarkslaB Dynamic Binary Instrumentation）是 Quarkslab 开发的跨平�
 
 **攻击链**：
 
+从用户态到 EL3 的利用路径跨越了 ARM 的全部四个异常等级。理解这条链需要知道：TrustZone 把 CPU 分为 Normal World（EL0/EL1）和 Secure World（S-EL0/S-EL1/EL3），Trustlet 运行在 S-EL0（受限安全模式），而 ARM Trusted Firmware 运行在 EL3（最高特权）。Quarkslab 的攻击需要连续穿透三道边界，每一步都需要前一步提供的能力：
+
 ```
 用户态 (EL0)
    │  发送精心构造的命令
@@ -476,6 +516,8 @@ Kinibi Micro-Kernel (S-EL1)    ← 漏洞 3: SVE-2019-16665
    ▼
 ARM Trusted Firmware (EL3)     ← 最终: 任意代码执行
 ```
+
+下表对应上图的三个漏洞，分别说明攻击的组件、漏洞类型和利用方式。注意漏洞 1 和 2 本身并不罕见（栈溢出 + 命令注入），真正精妙的是漏洞 3——利用 Kinibi 内核的 mmap 实现缺陷，把 EL3 的代码页映射为可写，然后直接修改 ARM Trusted Firmware 的代码：
 
 **三个漏洞详解**：
 
@@ -586,7 +628,7 @@ cd ../tainting
 
 ## 五、武器库全景
 
-Quarkslab 的开源工具不是孤立的——它们构成了一个**联动的攻击平台**，每个工具承担流水线上的一环：
+前面逐个介绍了 Quarkslab 的每项研究突破，但这些工具并不是散落的独立项目——它们构成了一个**联动的攻击平台**，设计上可以像 Unix 管道一样串接。下图按「收集 → 分析 → 恢复 → 辅助 → 靶场」五层功能来组织，帮助读者快速理解：当你要攻击一个白盒实现时，应该从哪个工具开始，数据流向何处，最终在哪里拿到密钥。
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -603,6 +645,10 @@ Quarkslab 的开源工具不是孤立的——它们构成了一个**联动的�
 │  DBI)   │  编码)       │ (BGE 代数)   │  移植)       │          │
 └─────────┴──────────────┴──────────────┴──────────────┴──────────┘
 ```
+
+一个典型的攻击流水线是这样的：先用 **LIEF** 把 Android SO 迁移到 Linux → 用 **Tracer** (或 **QBDI**) 跑 2000 次收集内存 trace → 用 **Daredevil** 做 DCA 统计分析定位密钥相关地址 → 如果 DCA 失败则切 DFA 路线：修改查找表注入 fault → 用 **JeanGrey** 从密文对恢复第 10 轮密钥 → 用 **Stark** 反推原始密钥 → 完成。**Deadpool** 则是上述全过程的练兵场，里面有十几个不同难度的白盒实现可供练手。
+
+下表列出每个工具的仓库地址和基本信息，方便直接 clone 使用：
 
 | 仓库 | Stars | 语言 | 首次发布 | 最近更新 |
 |------|-------|------|---------|---------|
