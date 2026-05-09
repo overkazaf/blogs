@@ -1,0 +1,64 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title SMC 世界切换完整流程
+
+participant "Android App\n(EL0)" as App #e2e8f0
+participant "Linux Kernel\nTEE Driver (EL1)" as Kernel #cbd5e1
+participant "Secure Monitor\nATF (EL3)" as Monitor #fecaca
+participant "TEE OS Kernel\n(S-EL1)" as TEEOS #86efac
+participant "Trusted App\n(S-EL0)" as TA #bbf7d0
+
+App -> Kernel : ioctl(/dev/tee0, cmd, params)
+note right
+  params 包含:
+  - commandID
+  - paramTypes (4×4bits)
+  - params[4] (memref/value)
+  - shared memory 物理地址
+end note
+
+Kernel -> Kernel : 分配 shared memory\n复制 params 到共享页
+
+Kernel -> Monitor : **SMC #0**\nX0=Function ID\nX1=session handle\nX2=shared mem phys addr
+note right #fecaca
+  CPU 陷入 EL3
+  **所有 EL1 寄存器被保存**
+  SCR_EL3.NS = 1 → 0
+end note
+
+Monitor -> Monitor : 保存 Normal World 上下文\n(X0-X30, SP_EL1, ELR_EL1, SPSR_EL1)
+
+Monitor -> Monitor : 恢复 Secure World 上下文\n设置 SCR_EL3.NS = 0
+
+Monitor -> TEEOS : **ERET** 到 S-EL1\n(恢复的 PC = TEE OS 入口)
+
+TEEOS -> TEEOS : 解析 shared memory\n定位目标 TA
+
+TEEOS -> TA : 调用 TA_InvokeCommandEntryPoint\n(commandID, paramTypes, params[4])
+note right #bbf7d0
+  **攻击者可控输入:**
+  - commandID
+  - paramTypes
+  - params[].memref.buffer
+  - params[].memref.size
+  - params[].value.a / .b
+  - shared memory 内容
+end note
+
+TA -> TA : 处理命令\n← **漏洞触发点**
+
+TA --> TEEOS : 返回 TEE_SUCCESS / TEE_ERROR
+TEEOS --> Monitor : **SMC** 返回
+Monitor --> Monitor : 保存 Secure World 上下文\n恢复 Normal World 上下文\n设置 SCR_EL3.NS = 1
+Monitor --> Kernel : **ERET** 到 EL1
+Kernel --> App : ioctl 返回
+
+@enduml

@@ -1,0 +1,41 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title Samsung Exynos 物理内存布局 (Galaxy S7/S9)
+
+map "Physical Memory Map" as MEM {
+  0x00000000 => bootrom (ROM, 不可修改)
+  0x02020000 => SRAM (BL1/BL2 早期启动)
+  0x40000000 => DRAM 起始
+  0x40000000~0x5FFFFFFF => Normal World (Linux Kernel + userspace)
+  0x60000000~0x6FFFFFFF => 共享内存 (Shared Buffer)
+  0x70000000~0x7FFFFFFF => Secure World DRAM
+  0x70000000 => Kinibi Micro-Kernel (.text + .data)
+  0x70100000 => Trustlet 加载区 (SEM, VALIDATOR, Widevine...)
+  0x70200000 => Secure Driver 加载区
+  0xFE500000 => **EL3 ATF 代码段** (.text, RX)
+  0xFE510000 => **EL3 ATF 数据段** (.data, RW)
+  0xFE512440 => **mmap 黑名单** (在 ATF .data 段内)
+  0xFE520000 => EL3 栈
+  0xFFFFFFFF => 地址空间顶部
+}
+
+note bottom of MEM
+  **TZASC 硬件控制器** 在总线级别强制:
+  - NS 总线主设备 (Linux) 只能访问 0x40000000-0x6FFFFFFF
+  - S 总线主设备 (TEE) 可以访问全部地址空间
+  - EL3 修改 TZASC → 重新划分边界
+
+  **Quarkslab 2019 攻击路径:**
+  S-EL1 mmap(0xfe512440) → 清零黑名单
+  → mmap(0xfe500000) → 修改 EL3 代码
+end note
+
+@enduml

