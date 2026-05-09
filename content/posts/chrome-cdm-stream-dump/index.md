@@ -4,7 +4,7 @@ slug: "chrome-cdm-stream-dump-widevine-vtable-hook"
 date: 2026-05-04
 lastmod: 2026-05-04
 draft: false
-tags: ["widevine", "drm", "chrome", "CDM", "reverse-engineering", "LD_PRELOAD", "vtable-hook", "white-box-aes", "stream-capture"]
+tags: ["widevine", "DRM", "chrome", "CDM", "reverse-engineering", "LD_PRELOAD", "vtable-hook", "white-box-cryptography", "stream-capture", "linux", "AES", "key-blinding"]
 categories: ["security-research"]
 description: "在 Chrome Linux Widevine CDM 4.10.2934 上尝试 13 种密钥提取方法全部失败后，通过 LD_PRELOAD vtable hook 实现解密后视频流捕获的完整工程记录"
 toc: true

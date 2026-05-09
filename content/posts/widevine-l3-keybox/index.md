@@ -4,7 +4,7 @@ slug: "widevine-l3-keybox-mass-production"
 date: 2026-04-29
 lastmod: 2026-04-30
 draft: false
-tags: ["widevine", "drm", "reverse-engineering", "DFA", "white-box-aes", "cryptography"]
+tags: ["widevine", "DRM", "reverse-engineering", "DFA", "white-box-cryptography", "cryptography", "AES", "keybox", "unicorn", "emulation", "android", "SideChannelMarvels"]
 categories: ["security-research"]
 description: "通过差分故障攻击(DFA)提取Widevine L3白盒AES密钥，实现keybox离线量产的完整逆向工程记录"
 image: "https://overkazaf.github.io/blogs/images/widevine/pipeline.png"

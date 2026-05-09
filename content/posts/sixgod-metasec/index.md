@@ -4,7 +4,7 @@ slug: "douyin-sixgod-metasec-unidbg-reverse-engineering"
 date: 2026-03-29
 lastmod: 2026-03-30
 draft: false
-tags: ["reverse-engineering", "android", "douyin", "metasec", "unidbg", "OLLVM", "signature", "bytedance"]
+tags: ["reverse-engineering", "android", "douyin", "metasec", "unidbg", "OLLVM", "signature", "bytedance", "JNI", "emulation", "anti-debug", "VM-protection", "frida"]
 categories: ["security-research"]
 description: "通过 unidbg 仿真抖音 libmetasec_ml.so，突破 OLLVM+VM+JIT 三层防护，完整提取六神签名（X-Gorgon/X-Khronos/X-Argus/X-Ladon/X-Helios/X-Medusa）的逆向工程记录"
 toc: true

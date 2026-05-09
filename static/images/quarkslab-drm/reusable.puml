@@ -1,0 +1,65 @@
+@startmindmap
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title 可复用知识点矩阵：从 Quarkslab 十年研究中提炼的 5 个攻击范式
+
+* Quarkslab\n可复用知识
+** <&terminal> 白盒密码分析
+*** DCA (统计侧信道)
+**** 输入: 可执行白盒 + DBI
+**** 产出: 密钥字节候选
+**** 适用: 任何标准 AES 白盒
+**** 工具: Tracer + Daredevil
+*** DFA (故障注入)
+**** 输入: 可修改的查找表
+**** 产出: 第10轮密钥
+**** 适用: T-table 白盒
+**** 工具: JeanGrey / DarkPhoenix
+*** BGE (代数攻击)
+**** 输入: 白盒查找表数据
+**** 产出: 原始密钥
+**** 适用: 静态表提取场景
+**** 工具: BlueGalaxyEnergy
+** <&layers> 跨平台迁移
+*** LIEF 二进制改造
+**** 输入: Android SO / iOS dylib
+**** 产出: Linux 可执行 ELF
+**** 适用: 脱离真机分析
+*** unidbg / Unicorn 仿真
+**** 输入: ARM SO + JNI 桩
+**** 产出: 可控执行环境
+**** 适用: 复杂 JNI 依赖
+** <&shield> TEE TA 逆向
+*** Kinibi MCLF 分析
+**** 输入: Samsung 固件 Trustlet
+**** 工具: Ghidra + MCLF loader
+*** QSEE ELF 分析
+**** 输入: Qualcomm 固件 TA
+**** 工具: IDA + QSEE scripts
+*** Fuzzing TA
+**** 方法: AFL x Unicorn
+**** 目标: command handler
+** <&bolt> Boot Chain 攻击
+*** bootrom 入口
+**** MTKClient (MediaTek)
+**** EDL mode (Qualcomm)
+*** bootloader 利用
+**** 解析器漏洞 (JPEG/PNG)
+**** 签名绕过 (Odin/fastboot)
+*** EL3 泄露
+**** SMC handler OOB
+**** 物理内存映射
+** <&magnifying-glass> 自动化漏洞发现
+*** GPCheck 静态分析
+**** 输入: 闭源 TA 二进制
+**** 方法: 污点分析 type-confusion
+**** 适用: 任何 GP API TA
+
+@endmindmap

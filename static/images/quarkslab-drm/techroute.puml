@@ -1,0 +1,72 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title Quarkslab 十年技术路线图：五条攻击向量的演进与汇聚
+
+|#dcfce7| 白盒密码分析 (Crypto)
+start
+#dcfce7:2016: DCA
+硬件 DPA → 软件 trace
+(CHES Best Paper);
+#dcfce7:2016: DFA
+单字节 fault → 密钥恢复;
+#dcfce7:2020: Collision Attack
+QBDI + 碰撞分析;
+#dcfce7:2023: DarkPhoenix
+DFA + 外部编码;
+#dcfce7:2024: BGE v2
+代数攻击 + shuffled;
+
+|#fefce8| 二进制工具链 (Tooling)
+:2015: Triton DSE
+符号执行框架;
+:2016: SideChannelMarvels
+5 件套发布;
+:2017: LIEF + QBDI
+跨平台二进制操作 + DBI;
+:2018: LIEF × SCM
+Android SO → Linux;
+
+|#fecaca| TEE 攻击 (TEE Exploit)
+:2019: Samsung TrustZone
+Kinibi 逆向 S6-S9;
+note right #fffbeb
+  BH USA 2019
+  EL3 代码执行
+end note
+:2020: 漏洞利用链
+S-EL0 → S-EL1 → EL3;
+
+|#f3e8ff| Android 全栈 (Full Stack)
+:2023: Android FBE
+Gatekeeper TA + Weaver
+REcon 2023;
+:2024: Boot Chain
+4 CVE USB→EL3→SecureWorld
+**BH USA 2024**;
+note right #fffbeb
+  Keystore 密钥泄露
+  Widevine L1 私钥可达
+end note
+
+|#e0e7ff| 知识复用出口 (Reusable)
+:可复用 ①: DFA/DCA 方法论
+→ 任何白盒 AES 目标;
+:可复用 ②: LIEF 跨平台迁移
+→ 任何 Android SO;
+:可复用 ③: TEE TA 逆向范式
+→ QSEE / Kinibi / TEEGRIS;
+:可复用 ④: Boot Chain 攻击模式
+→ MediaTek / Qualcomm SoC;
+:可复用 ⑤: GPCheck 类型混淆检测
+→ 任何 GP API TA;
+stop
+
+@enduml
