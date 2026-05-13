@@ -1,0 +1,81 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title Streaming ISO BMFF: 零缓冲解密架构
+
+participant "Apple CDN\n(HLS)" as CDN #fefce8
+participant "StreamReader\n(HTTP iter)" as SR #f1f5f9
+participant "Box Parser\n(header only)" as BP #dbeafe
+participant "aria\n(FairPlay)" as ARIA #fecaca
+participant "Disk\n(output.m4a)" as DISK #dcfce7
+
+CDN -> SR : HTTP stream
+note over SR
+  只保持 32KB 读缓冲
+  不缓存完整响应
+end note
+
+== ftyp box (小, ~32B) ==
+SR -> BP : read(8) -> header
+BP -> BP : type=ftyp, size=32
+SR -> DISK : buffer + write
+
+== moov box (小, ~8KB) ==
+SR -> BP : read(8) -> header
+BP -> BP : type=moov, size=8192
+SR -> BP : read(8184) -> payload
+note over BP
+  解析: trex defaults
+  解析: alac cookie
+  解析: stsd enca/sinf
+  **内存: ~8 KB**
+end note
+BP -> DISK : write moov
+
+== moof box #1 (小, ~2KB) ==
+SR -> BP : read(8) -> header
+BP -> BP : type=moof, size=2048
+SR -> BP : read(2040) -> payload
+note over BP
+  解析: tfhd -> desc_index
+  解析: trun -> sample_sizes[]
+  例: [8224, 8224, 8224, ...]
+  **内存: ~2 KB**
+end note
+BP -> DISK : write moof
+
+== mdat box #1 (大, ~30MB) ==
+SR -> BP : read(8) -> header
+BP -> BP : type=mdat, size=30MB
+note over BP #dcfce7
+  **不读完整 payload!**
+  按 sample_sizes[] 逐个读取
+end note
+BP -> DISK : write mdat header (8B)
+
+loop 每个 sample (e.g. 2000 次)
+  SR -> BP : read(sample_size)\n例: 8224 bytes
+  BP -> ARIA : send(4B len + cipher)
+  ARIA -> BP : recv(plaintext)
+  BP -> DISK : write(plaintext)
+  note over BP
+    **内存: ~16 KB**
+    (1 sample, 立即释放)
+  end note
+end
+
+== 后续 moof + mdat 重复 ==
+
+note over SR, DISK
+  **峰值内存: moov(8KB) + moof(2KB) + 1 sample(16KB) = ~26 KB**
+  vs 原始方案: 整个 M4S(60MB) + 全部明文(60MB) + output(60MB) = **180 MB**
+end note
+
+@enduml

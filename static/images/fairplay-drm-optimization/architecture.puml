@@ -1,0 +1,90 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title 优化后的 Apple Music ALAC 解密架构
+
+actor "Client" as C #e2e8f0
+
+rectangle "HTTP API\n(Flask :8899)" as API #dbeafe {
+  card "/search" as S1
+  card "/song/<id>" as S2
+  card "/album/<id>" as S3
+  card "/download/<id>" as S4
+  card "/album/<id>/download" as S5
+}
+
+rectangle "Core Pipeline (am_alac)" as CORE #dcfce7 {
+  rectangle "Metadata Layer" as META {
+    card "apple_api.py" as A1
+    card "m3u8_select.py" as A2
+  }
+  rectangle "ALAC Path" as ALAC {
+    card "streaming_bmff.py\n(streaming ISO BMFF)" as B1
+    card "aria_rpc.py\n(TCP pipelined)" as B2
+    card "m4a_writer.py\n(in-place patch)" as B3
+  }
+  rectangle "AAC Path" as AAC {
+    card "aac_decrypt.py\n(Widevine CDM)" as C1
+  }
+  card "decryptor.py\n(persistent session\nprefetch pipeline)" as D1
+}
+
+rectangle "DRM Backends" as DRM #fecaca {
+  card "aria\n(FairPlay chroot\nwhite-box AES)" as E1
+  card "pywidevine\n(CDM L3)" as E2
+  card "mp4decrypt\n(Bento4)" as E3
+}
+
+cloud "Apple" as APPLE #fefce8 {
+  card "Catalog API" as F1
+  card "WebPlayback\n+ License" as F2
+  card "HLS CDN" as F3
+}
+
+C --> API
+
+S1 --> A1
+S2 --> A1
+S3 --> A1
+S4 --> D1
+S5 --> D1
+
+D1 --> B1 : ALAC
+D1 --> C1 : AAC
+
+B1 --> B2 : sample-by-sample\nstreaming
+B2 --> E1 : TCP 47010
+B1 --> B3 : in-place\nmdat patch
+
+C1 --> E2 : PSSH
+C1 --> E3 : key
+
+A1 --> F1 : HTTPS
+A2 --> F3 : HLS
+B1 --> F3 : streaming GET
+C1 --> F2 : license
+E1 --> F2 : FairPlay SKD
+
+note right of B1 #dcfce7
+  **Streaming BMFF**
+  Peak memory: ~11 MB
+  (vs 181 MB before)
+  Parses box headers on-the-fly
+  Never holds full M4S in RAM
+end note
+
+note right of B2 #dcfce7
+  **TCP Pipelining**
+  writer/reader dual-thread
+  TCP_NODELAY + 256KB buf
+  **57x** faster than Go-style
+end note
+
+@enduml
