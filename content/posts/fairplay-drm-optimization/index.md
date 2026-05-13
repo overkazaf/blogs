@@ -1,7 +1,7 @@
 ---
 title: "从 193 秒到 3.4 秒 - Apple FairPlay DRM 解密管线的六阶段优化全记录"
 slug: "fairplay-drm-decrypt-pipeline-optimization"
-date: 2026-05-14
+date: 2026-05-13
 lastmod: 2026-05-14
 draft: false
 tags: ["DRM", "FairPlay", "apple-music", "optimization", "TCP", "streaming", "ISO-BMFF", "white-box-cryptography", "reverse-engineering", "Python", "performance"]
