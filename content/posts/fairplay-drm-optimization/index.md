@@ -241,7 +241,57 @@ with httpx.stream("GET", stream_url) as resp:
 
 ---
 
-## 八、评测结果
+## 八、三条 DRM 解密路径的对比
+
+本项目同时实现了三条不同的解密路径，它们在安全模型、速度、内存和密钥获取方式上有本质差异。理解这些差异有助于在实际场景中做出正确的工程选择。
+
+### 8.1 路径总览
+
+| 维度 | **FairPlay (aria TCP)** | **Widevine CDM (pywidevine)** | **白盒 AES 密钥提取 (未实现)** |
+|------|------------------------|------------------------------|--------------------------|
+| **DRM 体系** | Apple FairPlay Streaming (FPS) | Google Widevine L3 | FairPlay 白盒逆向 |
+| **保护机制** | 白盒 AES (libCoreFP.so) | 软件 CDM + License Server | 理论上的标准 AES-NI |
+| **密钥获取** | 不可见——密钥始终在白盒内部 | PSSH → CDM challenge → License → content key (明文) | DFA/DCA 提取 → 明文 AES-128 key |
+| **解密位置** | aria 进程内部（chroot 沙箱） | 本地 `mp4decrypt --key 1:{hex}` | 本地 OpenSSL AES-128-CBC |
+| **解密速度** | **18 MB/s**（白盒 AES 上限） | **瞬时**（AES-NI，>5 GB/s）| 理论 **>5 GB/s** |
+| **内存峰值** | 11 MB（流式 BMFF） | ~20 MB（下载 + 解密） | ~1 MB（流式 AES） |
+| **音频格式** | ALAC Hi-Res (88.2/96/192 kHz, 24-bit) | AAC 256 kbps | ALAC（如果能拿到 key） |
+| **关键瓶颈** | aria 白盒 AES 计算速度 | Apple License Server 往返 | **密钥不可提取** |
+| **可行性** | ✅ 可用 | ✅ 可用 | ❌ 不可用（第三代白盒） |
+
+### 8.2 为什么三条路径并存
+
+**FairPlay (ALAC)**：Apple 对 Hi-Res Lossless 内容只通过 FairPlay 分发——Widevine 拿不到 ALAC variant。这意味着想要最高音质必须走 FairPlay 路径，哪怕它慢 100 倍。
+
+**Widevine CDM (AAC)**：Apple 的 webplayback API 对 AAC 256k 流同时提供 Widevine PSSH。通过 pywidevine 拿到明文 content key 后，`mp4decrypt` 瞬间完成解密。适合对音质要求不高但需要快速批量的场景。
+
+**白盒 AES 密钥提取**：理论上的完美方案——如果能从 `libCoreFP.so` 的白盒中提取出 AES-128 原始密钥，就可以绕过 TCP 协议层，用硬件 AES-NI 做本地解密。速度从 18 MB/s 跳到 5+ GB/s，等于 300x 提升。但笔者的攻击实验（§七）证明这条路走不通。
+
+### 8.3 与笔者其他 DRM 研究的关联
+
+这三条路径恰好映射到笔者博客系列中的三个研究维度：
+
+| 本项目路径 | 对应的博客文章 | 关联 |
+|-----------|-------------|------|
+| FairPlay 白盒 AES 不可攻破 | [Quarkslab 白盒密码破译武器库](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/) | Quarkslab 的 DFA/DCA/BGE 工具链在本项目中全部失效——证实了第三代白盒的有效性 |
+| FairPlay 白盒 AES 不可攻破 | [ARM TrustZone EL0→EL3 攻击链](https://overkazaf.github.io/blogs/posts/arm-trustzone-el0-to-el3-attack-chain-anatomy/) | 当白盒不可攻破时，下一步是攻击 TEE 层——但 Apple Music for Android 不使用 TrustZone |
+| Widevine CDM L3 密钥提取 | [Widevine L3 keybox DFA 量产](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) | Widevine L3 的白盒 AES 是**第一代**（T-table），DFA 可轻松攻破；FairPlay 是**第三代**，攻击完全失效 |
+| Chrome CDM 白盒不可提取 | [Chrome CDM 流捕获](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) | Chrome CDM 4.10.2934 与 `libCoreFP.so` 类似——都是第三代白盒，密钥从不以可观测形式存在。笔者在 CDM 上被迫转向流捕获，在 FairPlay 上被迫转向工程优化 |
+
+### 8.4 白盒代际对照
+
+| 白盒世代 | 代表 | 特征 | 可用攻击 | 本博客验证 |
+|---------|------|------|---------|-----------|
+| **第 0 代** | 明文密钥 | 密钥直接在内存中 | 内存搜索 | — |
+| **第 1 代** | Widevine L3 (build 4464) | T-table 实现，S-box 可观测 | DFA ✅ DCA ✅ BGE ✅ | [Widevine L3 文章](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) |
+| **第 2 代** | T-table + 外部编码 | 输入/输出编码层 | DarkPhoenix ✅ BGE v2 ✅ | [Quarkslab 文章](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/) §4.6-4.7 |
+| **第 3 代** | Chrome CDM 4.10.2934 / **Apple libCoreFP.so** | 无 T-table，密钥 blinding | DFA ✗ DCA ✗ BGE ✗ | **本文 §七** + [CDM 文章](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) |
+
+> 笔者在 Widevine L3 上用 150 个 fault 秒级恢复了 ROOT_KEY，但在 `libCoreFP.so` 上 600 个 fault 零突破。两者的差距不是量级——是**代际**。这也解释了为什么本项目的优化重心从「破解密码学」转向「优化工程管线」：当密码学不可攻破时，**提升管道效率是唯一的加速手段**。
+
+---
+
+## 九、评测结果
 
 ### 8.1 单首 50 轮统计
 
@@ -274,14 +324,14 @@ with httpx.stream("GET", stream_url) as resp:
 
 ---
 
-## 九、最终架构
+## 十、最终架构
 
 ![优化后架构](https://overkazaf.github.io/blogs/images/fairplay-drm-optimization/architecture.png)
 *完整的 HTTP API 服务架构：上层 Flask API 提供搜索/详情/下载端点，中层 Core Pipeline 双路解密（ALAC via FairPlay + AAC via Widevine），底层 DRM Backends 与 Apple 服务通信。绿色标注了两个核心优化点：Streaming BMFF（11MB 内存）和 TCP Pipelining（57x 速度）。*
 
 ---
 
-## 十、致谢
+## 十一、致谢
 
 本文工作基于以下开源项目和社区贡献：
 
@@ -293,7 +343,7 @@ with httpx.stream("GET", stream_url) as resp:
 
 ---
 
-## 十一、结论
+## 十二、结论
 
 1. **TCP Nagle 算法是最被低估的性能杀手**——在「高频小包 + 大包交替」的协议模式下，一个 `setsockopt` 调用就能带来 52x 提速
 2. **流式 ISO BMFF 解析是处理大文件的正确方式**——box header 的自描述结构天然支持 on-the-fly 解析，无需将整个容器加载到内存
@@ -304,4 +354,51 @@ with httpx.stream("GET", stream_url) as resp:
 
 ---
 
-*本文的完整代码已开源在 [GitHub](https://github.com/anthropics/am-alac-research)（敏感信息已清除）。全部优化均在 AMD EPYC 7501 (2 cores / 4GB RAM) 的 Debian 12 服务器上验证。*
+*本文的完整代码已开源在 [GitHub](https://github.com/overkazaf/aria)（敏感信息已清除）。全部优化均在 AMD EPYC 7501 (2 cores / 4GB RAM) 的 Debian 12 服务器上验证。*
+
+---
+
+## 参考文献与资源
+
+### 本博客系列
+
+| 文章 | 关联 |
+|------|------|
+| [学习拉马努金提高注意力的解题模式 — Widevine L3 keybox DFA 量产](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) | 第一代白盒 AES 的 DFA 实战；本文中 FairPlay 第三代白盒的对照组 |
+| [十三次碰壁之后 — Chrome CDM 流捕获](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) | 第三代白盒（Chrome CDM）的 13 种攻击全部失败；与本文 FairPlay 白盒结论一致 |
+| [铸剑者的十年 — Quarkslab 白盒密码破译武器库](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/) | DFA/DCA/BGE 工具链的完整研究综述；本文白盒攻击使用了 Quarkslab 的方法论 |
+| [从用户态到上帝模式 — ARM TrustZone EL0→EL3 攻击链](https://overkazaf.github.io/blogs/posts/arm-trustzone-el0-to-el3-attack-chain-anatomy/) | TEE 层面的 DRM 攻击路径；当白盒不可攻破时的下一步方向 |
+
+### 开源项目
+
+| 项目 | 贡献 | 链接 |
+|------|------|------|
+| zhaarey/wrapper | Apple Music FairPlay chroot 方案原创者 | [GitHub](https://github.com/zhaarey/wrapper)（已归档） |
+| WorldObservationLog/wrapper | 维护分支，Docker 支持，预编译二进制 | [GitHub](https://github.com/WorldObservationLog/wrapper) |
+| WorldObservationLog/AppleMusicDecrypt | Apple Music 解密工具 | [GitHub](https://github.com/WorldObservationLog/AppleMusicDecrypt) |
+| pywidevine | Widevine CDM Python 实现 | [GitHub](https://github.com/devine-dl/pywidevine) |
+| Bento4 | ISO BMFF 工具集（mp4decrypt） | [GitHub](https://github.com/niconiconico/bento4) |
+| Quarkslab SideChannelMarvels | 白盒密码分析工具链 | [GitHub](https://github.com/SideChannelMarvels) |
+| Quarkslab DarkPhoenix | DFA + 外部编码攻击 | [GitHub](https://github.com/SideChannelMarvels/DarkPhoenix) |
+| Quarkslab BlueGalaxyEnergy | BGE 代数攻击 | [GitHub](https://github.com/SideChannelMarvels/BlueGalaxyEnergy) |
+
+### 技术规范
+
+| 规范 | 说明 |
+|------|------|
+| [ISO 14496-12 (ISO BMFF)](https://www.iso.org/standard/83102.html) | MP4 / fragmented MP4 容器格式 |
+| [ISO 23001-7 (CENC)](https://www.iso.org/standard/68042.html) | Common Encryption 标准 |
+| [RFC 8216 (HLS)](https://tools.ietf.org/html/rfc8216) | HTTP Live Streaming |
+| [RFC 896 (Nagle Algorithm)](https://tools.ietf.org/html/rfc896) | TCP Nagle 算法 — 本文优化的核心对象 |
+| [Apple FairPlay Streaming](https://developer.apple.com/streaming/fps/) | FairPlay DRM 官方文档 |
+| [GlobalPlatform TEE API](https://globalplatform.org/specs-library/) | TEE Internal Core API（与白盒 AES 的 TEE 部署相关） |
+
+### 学术论文
+
+| 论文 | 与本文关联 |
+|------|---------|
+| Bos et al., "Differential Computation Analysis" (CHES 2016, Best Paper) | DCA 方法论——本文白盒扫描的理论基础 |
+| Dusart et al., "Differential Fault Analysis on AES" (2002) | DFA 方法论——本文 fault injection 的理论基础 |
+| Billet et al., "Cryptanalysis of a White Box AES" (2004) | BGE 攻击——验证 FairPlay 是否可被代数攻击 |
+| Busch et al., "GlobalConfusion: TrustZone TA 0-Days by Design" (USENIX Security 2024) | GP API type-confusion 漏洞——TEE 层面的替代攻击路径 |
+| Cerdeira et al., "ReZone: Disarming TrustZone" (USENIX Security 2022) | TEE 特权削减——防御视角 |
