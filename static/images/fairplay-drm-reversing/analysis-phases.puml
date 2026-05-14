@@ -1,0 +1,74 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title FairPlay DRM 逆向分析四阶段
+
+|#dbeafe| Phase 1: 静态分析
+start
+:Jadx 反编译 Apple Music APK
+搜索 FootHill 关键字;
+:发现 FootHillDecryptionKey 类
+Gemini 分析其 Java 层调用流程;
+note right #fffbeb
+  关键发现:
+  - defaultKeyFormat = "com.apple.streamingkeydelivery"
+  - defaultPreFetchKeyUri = "skd://..."
+  - fpsCert/persistentKey/decryptContext
+end note
+:IDA Pro 加载 libandroidappmusic.so
+radare2 过滤 foothill|decrypt 函数;
+:定位三个核心切入点:
+A: decryptContext
+B: _decryptContextWithPersistentKey
+C: _decryptContextWithCkcKey;
+
+|#dcfce7| Phase 2: 动态调试
+:Frida hook decryptContext
+观察调用链路;
+:7k+ 导出函数太多
+Gemini 分组 + 分组 hook;
+note right #dcfce7
+  技巧: 将 7k+ 函数分成
+  1k 个一组, 区分 _ZN 前缀
+  16 轮手动拦截 + grep 汇总
+end note
+:最终定位解密核心:
+**NfcRKVnxuKZy04KWbdFu***;
+:确认 5 个入参:
+ref, decryptContentType(0x05),
+v7(buffer), v8(buffer), v9(size);
+
+|#fefce8| Phase 3: 参数还原
+:getPersistentKey: 9 个参数
+对比 Java/arm 函数定义;
+:decryptContext: 3 个参数
+foothillPContext/session/persistentKey;
+:kdContext: 1 个参数
+返回 = SVFootHillPContext + 24;
+:NfcRKV***: 5 个参数
+ref=kdContext 双重指针
+in-place 解密确认;
+
+|#fecaca| Phase 4: 验证与 dump
+:Frida dump 解密前后 buffer
+写入 .bin 文件;
+:对比: 解密前后大小一致
+与应用内下载的 m4a 比较;
+:确认: 流式解密成功
+原始数据 = 裸 ALAC 样本序列;
+note right #fecaca
+  **关键结论:**
+  FairPlay 解密 = in-place AES
+  输出 = 裸 ALAC samples
+  需要 M4A 容器重封装
+end note
+stop
+
+@enduml

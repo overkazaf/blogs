@@ -46,7 +46,7 @@ math: false
 
 ### 2.1 笔者的逆向经历
 
-笔者在此之前已经通过 Frida 动态插桩分析过 Apple Music for Android 的 FairPlay DRM 实现，并基于 unidbg 仿真框架和 rootfs chroot 技术成功还原了完整的解密流程。核心思路与 [zhaarey/wrapper](https://github.com/zhaarey/wrapper)（现已归档）和 [WorldObservationLog/wrapper](https://github.com/WorldObservationLog/wrapper) 类似：将 Apple 自家的 Android 二进制（`/system/bin/main`，链接 `libCoreFP.so` / `libCoreLSKD.so` / `libandroidappmusic.so`）丢进 Linux 的 chroot 沙箱，通过 TCP 协议与外部编排层通信，让 Apple 自己的 FairPlay 实现完成解密——不自研密码学，只做协议还原与工程编排。
+在 [Part 1（逆向篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-frida-reversing/) 中，笔者已经通过 Frida 动态插桩 + IDA Pro 静态分析，完整还原了 Apple Music for Android 的 FairPlay DRM 解密调用链——从 Java 层 `FootHillDecryptionKey` 追踪到 Native 层的 5 个关键函数，定位了白盒 AES 入口 `NfcRKVnxuKZy04KWbdFu***`，并成功 dump 了加密/解密 buffer。在此基础上，笔者基于 unidbg 仿真框架和 rootfs chroot 技术还原了完整的解密流程。在 [aria](https://github.com/overkazaf/aria) 项目中，笔者将 Apple 自家的 Android 二进制（`/system/bin/main`，链接 `libCoreFP.so` / `libCoreLSKD.so` / `libandroidappmusic.so`）丢进 Linux 的 chroot 沙箱，通过 TCP 协议与外部编排层通信，让 Apple 自己的 FairPlay 实现完成解密——不自研密码学，只做协议还原与工程编排。
 
 这条路线走通之后，笔者在实际使用中碰到了严重的性能瓶颈：**一首 3 分钟的 Hi-Res 歌曲（60MB）需要 193 秒才能解密完成**。考虑到批量场景下可能需要处理数百首歌，这个速度完全不可接受。
 
@@ -335,8 +335,7 @@ with httpx.stream("GET", stream_url) as resp:
 
 本文工作基于以下开源项目和社区贡献：
 
-- **[zhaarey/wrapper](https://github.com/zhaarey/wrapper)** 和 **[WorldObservationLog/wrapper](https://github.com/WorldObservationLog/wrapper)** — 提供了 FairPlay chroot 运行时的基础架构
-- **[WorldObservationLog/AppleMusicDecrypt](https://github.com/WorldObservationLog/AppleMusicDecrypt)** — Apple Music 解密工具
+- **[aria](https://github.com/overkazaf/aria)** — 本项目的开源仓库，包含 FairPlay chroot 运行时、TCP 解密服务和完整的优化管线代码
 - **[Quarkslab SideChannelMarvels](https://github.com/SideChannelMarvels)** — DFA/DCA 白盒密码分析工具链（笔者在[综述文章](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/)中详细介绍了其十年演进）
 - **[pywidevine](https://github.com/devine-dl/pywidevine)** — Widevine CDM Python 实现
 - **[Bento4/mp4decrypt](https://github.com/niconiconico/bento4)** — CENC 解密工具
@@ -373,9 +372,7 @@ with httpx.stream("GET", stream_url) as resp:
 
 | 项目 | 贡献 | 链接 |
 |------|------|------|
-| zhaarey/wrapper | Apple Music FairPlay chroot 方案原创者 | [GitHub](https://github.com/zhaarey/wrapper)（已归档） |
-| WorldObservationLog/wrapper | 维护分支，Docker 支持，预编译二进制 | [GitHub](https://github.com/WorldObservationLog/wrapper) |
-| WorldObservationLog/AppleMusicDecrypt | Apple Music 解密工具 | [GitHub](https://github.com/WorldObservationLog/AppleMusicDecrypt) |
+| aria | FairPlay chroot 运行时 + TCP 解密服务 + 优化管线 | [GitHub](https://github.com/overkazaf/aria) |
 | pywidevine | Widevine CDM Python 实现 | [GitHub](https://github.com/devine-dl/pywidevine) |
 | Bento4 | ISO BMFF 工具集（mp4decrypt） | [GitHub](https://github.com/niconiconico/bento4) |
 | Quarkslab SideChannelMarvels | 白盒密码分析工具链 | [GitHub](https://github.com/SideChannelMarvels) |

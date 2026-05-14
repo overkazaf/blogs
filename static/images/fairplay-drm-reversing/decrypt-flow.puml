@@ -1,0 +1,82 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title FairPlay DRM 解密流程：从播放请求到明文 ALAC
+
+participant "播放器\n(ExoPlayer)" as Player #e2e8f0
+participant "FootHillDecryptionKey\n(Java)" as FHDK #dbeafe
+participant "SVFootHillSessionCtrl\n(Native)" as SFHSC #dcfce7
+participant "SVPastisDecryptor\n(Native)" as SVP #fefce8
+participant "NfcRKVnxuKZy***\n(白盒 AES)" as N #fecaca
+participant "Apple Server\n(FPS License)" as Apple #f3e8ff
+
+== 初始化阶段 ==
+
+Player -> FHDK : getKey(adamId)
+FHDK -> FHDK : getFpsCert()\n获取 FairPlay 证书
+FHDK -> SFHSC : instanceEv()\n获取 SessionCtrl 单例
+SFHSC --> FHDK : 0xb400007cb984a2f0
+
+== 密钥获取阶段 ==
+
+FHDK -> SFHSC : getPersistentKey(\n  adamId, keyUrl, keyFormat,\n  keyVersion, keyServerUrl,\n  keyServerProtocolType,\n  keyCert)
+SFHSC -> Apple : FPS SPC (Server Playback Context)
+Apple --> SFHSC : FPS CKC (Content Key Context)
+SFHSC --> FHDK : persistentKey\n(持久化密钥)
+
+note right of SFHSC #fffbeb
+  9 个参数:
+  a1=persistentKeyPtr
+  a2=svFootHillSessoinCtrl
+  a3=adamId
+  a4=keyUrl
+  a5=keyFormat
+  a6=keyVersion
+  a7=keyServerUrl
+  a8=keyServerProtocolType
+  a9=keyCert
+end note
+
+== 解密上下文创建 ==
+
+FHDK -> SFHSC : decryptContext(\n  a1, a2, a3)
+note right #dcfce7
+  a1=指针数据
+  a2=会话实例
+  a3=persistentKey
+end note
+SFHSC --> FHDK : decryptContext 指针
+
+== 获取 kdContext ==
+
+FHDK -> SFHSC : kdContext(foothillPContext)
+note right #dcfce7
+  return = foothillPContext + 24
+end note
+SFHSC --> FHDK : kdContext 指针
+
+== 逐样本解密 ==
+
+loop 每个加密 ALAC sample
+  Player -> SVP : decryptSample(SVAudioSample)
+  SVP -> SVP : 检查 this[8] 有效性
+  SVP -> SVP : 获取 buffer/size
+  SVP -> N : **NfcRKVnxuKZy04KWbdFu***()\n  ref=kdContext双重指针\n  decryptContentType=0x05\n  v7=buffer (输入)\n  v8=buffer (输出, 原地)\n  v9=size
+  N -> N : **白盒 AES 解密**\n(libCoreFP.so 内部)
+  N --> SVP : 返回 0 (成功)
+  note right of N #fecaca
+    in-place 解密:
+    输入输出共用 buffer
+    明文直接覆盖密文
+  end note
+  SVP --> Player : sample 已原地解密
+end
+
+@enduml
