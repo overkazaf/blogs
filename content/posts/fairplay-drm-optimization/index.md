@@ -1,5 +1,5 @@
 ---
-title: "从 193 秒到 3.4 秒 - Apple FairPlay DRM 解密管线的六阶段优化全记录"
+title: "3.4 秒：一条 TCP 选项改变的 57 倍 - FairPlay DRM 解密管线优化实录"
 slug: "fairplay-drm-decrypt-pipeline-optimization"
 date: 2026-05-13
 lastmod: 2026-05-14

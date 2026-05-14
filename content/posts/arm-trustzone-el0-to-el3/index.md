@@ -1,5 +1,5 @@
 ---
-title: "从用户态到上帝模式 - ARM TrustZone EL0→EL3 攻击链的完整解剖"
+title: "四层特权，四条链，一个目标 - ARM TrustZone EL0→EL3 攻击实录"
 slug: "arm-trustzone-el0-to-el3-attack-chain-anatomy"
 date: 2026-05-09
 lastmod: 2026-05-09
