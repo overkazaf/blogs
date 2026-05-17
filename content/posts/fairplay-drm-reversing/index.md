@@ -11,6 +11,12 @@ toc: true
 math: false
 ---
 
+> **读完本文，你将获得：**
+> - 掌握从 Java 层追踪到 Native 层的 Frida 动态插桩方法论（分组 hook + 二分定位）
+> - 理解 FairPlay DRM 在 Android 上的完整解密调用链：5 个函数、4 个阶段
+> - 学会识别 in-place 解密模式（输入输出共用 buffer）——这是 sample-AES 的典型特征
+> - 获得一套可复用的"7000+ 导出函数中精确定位目标"的逆向工程流程
+
 ## 〇、摘要
 
 本文记录了笔者对 Apple Music for Android（v3.6.0-beta）FairPlay DRM 实现的完整逆向分析过程。目标是理解 Apple 如何在 Android 平台上保护 ALAC 无损音频，并找到从播放流中提取明文音频数据的技术路径。

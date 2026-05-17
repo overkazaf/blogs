@@ -11,6 +11,12 @@ toc: true
 math: false
 ---
 
+> **读完本文，你将获得：**
+> - 从硬件寄存器层面理解 ARM EL0→EL3 四层特权的切换机制和攻击面
+> - 掌握 TEE 安全研究的核心漏洞模式：共享内存越界、SMC 参数注入、Trustlet 逻辑漏洞
+> - 通过四条真实攻击链（Quarkslab / Project Zero / 360 Alpha Lab）学习完整的提权方法论
+> - 理解为什么攻破 TrustZone 意味着攻破 Widevine L1 / 支付安全 / 生物识别的信任根基
+
 ## 〇、摘要
 
 在[前文](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/)中，笔者梳理了 Quarkslab 十年来的白盒密码与 DRM 攻防研究。当白盒密码学防护升级到第三代（密钥从不以可观测形式存在）时，攻击者被迫转向更底层——**攻击 TEE 本身**。本文正是这条路线的技术深潜。

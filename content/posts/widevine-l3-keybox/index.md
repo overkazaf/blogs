@@ -12,6 +12,12 @@ toc: true
 math: false
 ---
 
+> **读完本文，你将获得：**
+> - 理解白盒 AES 的核心弱点，以及差分故障攻击（DFA）为什么能从中提取密钥
+> - 掌握从"定位注入点 → 故障注入 → 密钥恢复"的完整 DFA 攻击方法论
+> - 了解 Widevine L3 CDM 的 keybox 结构和 provisioning 验证流程
+> - 学会用 Unicorn 仿真 + SideChannelMarvels 工具链搭建自己的白盒分析环境
+
 ## 〇、摘要
 
 本文记录了对 Widevine L3 白盒 AES 实现的完整逆向工程过程，目标是实现 keybox 的离线量产。笔者在 [Neodyme 团队工作](https://neodyme.io/en/blog/widevine_l3)的基础上，独立完成了以下突破：
