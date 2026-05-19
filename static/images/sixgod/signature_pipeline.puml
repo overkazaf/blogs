@@ -1,35 +1,78 @@
 @startuml
 skinparam backgroundColor #FFFFFF
-skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontName Helvetica
 skinparam defaultFontSize 12
 skinparam shadowing false
 skinparam roundCorner 8
-skinparam rectangleBackgroundColor #f1f5f9
 skinparam rectangleBorderColor #3b82f6
 skinparam arrowColor #3b82f6
 skinparam arrowThickness 2
 
-title <font size=16><b>六神签名生成管线</b></font> (cmd=0x2000006)
+title 六神签名并行生成管线 (cmd=0x2000006)
 
-rectangle "<font size=13><b>输入</b></font>\nURL + Body\nDevice Info\nTimestamp" as IN #e0f2fe
+rectangle "**请求输入**\nURL + Query\nBody MD5\nDevice FP\nTimestamp" as INPUT #e0f2fe
 
-rectangle "<font color=#7c3aed><b>X-Argus</b> (最复杂)</font>\nSM3 Hash (截断6B)\n-> Protobuf (20+字段)\n-> Simon-128/256 (72轮)\n-> XOR (8B前缀)\n-> AES-128-CBC\n-> Base64" as ARG #f3e8ff
+rectangle "**X-Argus** [5星]\n百眼巨人\n设备指纹+风控" as ARG #f3e8ff
+rectangle "**X-Gorgon** [3星]\n戈尔贡\n核心请求签名" as GOR #e0f2fe
+rectangle "**X-Khronos** [1星]\n克洛诺斯\n时间戳" as KHR #f1f5f9
+rectangle "**X-Ladon** [3星]\n拉冬\n设备绑定" as LAD #e0f2fe
+rectangle "**X-Helios** [4星]\n赫利俄斯\n环境验证" as HEL #fefce8
+rectangle "**X-Medusa** [5星]\n美杜莎\n主验证参数" as MED #fefce8
 
-rectangle "<b>X-Gorgon</b>\nMD5(URL+Body+Cookie)\n-> 置换表/XOR\n-> RBIT+NOT 链式混淆" as GOR #e0f2fe
+rectangle "SM3 Hash\n(截断 6B)" as A1 #f3e8ff
+rectangle "Protobuf\n(20+ 字段)" as A2 #f3e8ff
+rectangle "Simon-128/256\n(72 轮)" as A3 #f3e8ff
+rectangle "XOR\n(8B 前缀)" as A4 #f3e8ff
+rectangle "AES-128-CBC" as A5 #f3e8ff
+rectangle "Base64\ndP3HaQ==" as A6 #f3e8ff
 
-rectangle "<b>X-Khronos</b>\nUnix 时间戳 (秒)" as KHR #f1f5f9
+rectangle "MD5\n(URL+Body)" as G1 #e0f2fe
+rectangle "置换表+XOR" as G2 #e0f2fe
+rectangle "RBIT+NOT\n8404a048..." as G3 #e0f2fe
 
-rectangle "<b>X-Ladon</b>\nSpeck-128/128 密码\n设备绑定密钥" as LAD #e0f2fe
+rectangle "time()\n1774714228" as K1 #f1f5f9
 
-rectangle "<b>X-Helios</b>\n设备环境指纹\n<font color=#94a3b8>算法待确认</font>" as HEL #fef3c7
+rectangle "Speck-128/128\n(设备密钥)" as L1 #e0f2fe
+rectangle "Base64\nu2iHQA==" as L2 #e0f2fe
 
-rectangle "<b>X-Medusa</b>\n主验证参数\n三段结构\n<font color=#94a3b8>算法待确认</font>" as MED #fef3c7
+rectangle "环境指纹加密\n(算法待确认)\na3fWDn..." as H1 #fefce8
 
-IN --> ARG
-IN --> GOR
-IN --> KHR
-IN --> LAD
-IN --> HEL
-IN --> MED
+rectangle "三段结构加密\n(算法待确认)\ncf3HaV..." as M1 #fefce8
+
+rectangle "**HTTP Headers**\n6 签名一次性输出" as OUTPUT #dcfce7
+
+INPUT --> ARG
+INPUT --> GOR
+INPUT --> KHR
+INPUT --> LAD
+INPUT --> HEL
+INPUT --> MED
+
+ARG --> A1
+A1 --> A2
+A2 --> A3
+A3 --> A4
+A4 --> A5
+A5 --> A6
+
+GOR --> G1
+G1 --> G2
+G2 --> G3
+
+KHR --> K1
+
+LAD --> L1
+L1 --> L2
+
+HEL --> H1
+
+MED --> M1
+
+A6 --> OUTPUT
+G3 --> OUTPUT
+K1 --> OUTPUT
+L2 --> OUTPUT
+H1 --> OUTPUT
+M1 --> OUTPUT
 
 @enduml
