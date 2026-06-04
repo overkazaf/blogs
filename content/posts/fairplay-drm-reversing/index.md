@@ -2,7 +2,7 @@
 title: "五个函数，一条链 - Apple FairPlay DRM 的 Frida 逆向全记录"
 slug: "fairplay-drm-frida-reversing"
 date: 2026-05-10
-lastmod: 2026-05-13
+lastmod: 2026-06-04
 draft: false
 tags: ["FairPlay", "DRM", "apple-music", "Frida", "reverse-engineering", "IDA-Pro", "radare2", "Android", "ALAC", "white-box-cryptography", "native-hook"]
 categories: ["security-research"]
@@ -385,7 +385,7 @@ dec_1809814459.bin  47M  2025-05-05 21:56
 
 解密完成后的原始数据只是裸 ALAC 音频样本序列，没有包含任何容器格式的元素，播放器无法识别如何解析和播放这些原始数据。因此，客户端程序还需要收集所有解密后的 ALAC 数据块，组装成完整的音频数据流通过 M4A 容器封装才可正确使用。
 
-这正是 [Part 2（优化篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-decrypt-pipeline-optimization/) 要解决的问题——笔者在 [aria](https://github.com/overkazaf/aria) 项目中，基于 rootfs chroot 方案将 Apple 自家的 FairPlay 实现封装到 TCP 服务中（m3u8 RPC 端口 20020，解密端口 10020），并通过 ISO BMFF 容器解析 + TCP 管线化实现了 57x 的速度提升和 94% 的内存优化。
+这正是 [Part 2（优化篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-decrypt-pipeline-optimization/) 要解决的问题——笔者在 [aria](https://github.com/overkazaf/aria) 项目中，基于 rootfs chroot 方案将 Apple 自家的 FairPlay 实现封装到 TCP 服务中（m3u8 RPC 端口 47020，解密端口 47010），并通过 ISO BMFF 容器解析 + TCP 管线化实现了 57x 的速度提升和 94% 的内存优化。
 
 ---
 

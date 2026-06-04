@@ -1,0 +1,54 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+
+title Nagle 卡顿 vs TCP_NODELAY 管线化: 同一条解密链的两种时序
+
+participant "解密客户端\n(Python)" as C #f1f5f9
+participant "aria 解密服务\n(FairPlay, :47010)" as A #fecaca
+
+== Phase 0: 逐样本同步, 被 Nagle 拖垮 (193s) ==
+
+loop 4346 个 sample, 逐个串行
+  C -> A : 4B 长度头 (小包)
+  note over C, A #fecaca
+    Nagle 扣住小尾包 (前序数据未 ACK)
+    对端 delayed ACK 压着不回, 等捎带
+    => 双方互等 ~40ms (TCP_DELACK_MIN)
+  end note
+  C -> A : 密文 (定时器超时后才发出)
+  A -> C : 明文
+end
+
+note over C, A #fecaca
+  **每 sample ≈ 44ms × 4346 ≈ 193s, 吞吐仅 0.3 MB/s**
+end note
+
+== Phase 1-2: TCP_NODELAY + 双线程管线化 (3.4s) ==
+
+note over C #dcfce7
+  writer 线程: 关 Nagle (TCP_NODELAY)
+  不等回复连续发, semaphore 限深 64
+end note
+C ->> A : len + 密文 #1
+C ->> A : len + 密文 #2
+C ->> A : len + 密文 #3 ...
+note over A #dcfce7
+  全双工: 发送与接收重叠
+  reader 线程独立接收明文
+end note
+A -->> C : 明文 #1
+A -->> C : 明文 #2
+A -->> C : 明文 #3 ...
+
+note over C, A #dcfce7
+  **57x: 193s -> 3.4s, 吞吐 0.3 -> 18.1 MB/s**
+end note
+
+@enduml

@@ -2,7 +2,7 @@
 title: "3.4 秒：一条 TCP 选项改变的 57 倍 - FairPlay DRM 解密管线优化实录"
 slug: "fairplay-drm-decrypt-pipeline-optimization"
 date: 2026-05-13
-lastmod: 2026-05-14
+lastmod: 2026-06-04
 draft: false
 tags: ["DRM", "FairPlay", "apple-music", "optimization", "TCP", "streaming", "ISO-BMFF", "white-box-cryptography", "reverse-engineering", "Python", "performance"]
 categories: ["security-research"]
@@ -66,10 +66,10 @@ math: false
 
 ```
 1. Apple Music API → 获取 song metadata + enhanced HLS URL
-2. aria m3u8 RPC (TCP 20020) → 获取 master playlist
+2. aria m3u8 RPC (TCP 47020) → 获取 master playlist
 3. 解析 master playlist → 选 ALAC variant → 提取 SKD key URIs
 4. 下载加密 M4S (fragmented MP4, ~60MB for Hi-Res)
-5. 逐样本发送到 aria (TCP 10020) → FairPlay 解密 → 接收明文
+5. 逐样本发送到 aria (TCP 47010) → FairPlay 解密 → 接收明文
 6. 写入 ALAC m4a 输出
 ```
 
@@ -88,6 +88,9 @@ io.ReadFull(conn, decryptedChunk)                                // 等明文
 一首 Hi-Res 歌曲有 ~4346 个 sample，每个 round-trip 耗时 44ms → 总计 **193 秒**。
 
 **根因**：Go 的 `net.Dial` 默认不设置 `TCP_NODELAY`，TCP 的 Nagle 算法将每个 4 字节长度头缓冲 40ms 后才发送（等待凑满一个 MSS 或收到前一个包的 ACK）。
+
+![Nagle 卡顿 vs TCP_NODELAY 管线化的时序对比](https://overkazaf.github.io/blogs/images/fairplay-drm-optimization/nagle-vs-pipeline.png)
+*上半区（红）Phase 0：逐样本同步——每个 4B 长度头被 Nagle 扣住、对端 delayed ACK 压着不回，双方互等 ~40ms 定时器超时，单 sample ≈ 44ms，×4346 → 193s。下半区（绿）Phase 1-2：`TCP_NODELAY` 立即发包 + writer/reader 双线程全双工管线化，发送与接收重叠，整曲降至 3.4s（57x，吞吐 0.3 → 18.1 MB/s）。同样的 round-trip 模式也存在于 §十一 列出的 `zhaarey/wrapper` 等 Apple Music 工具中，这张图的优化路径可直接复用。*
 
 ---
 
@@ -341,10 +344,19 @@ with httpx.stream("GET", stream_url) as resp:
 
 本文工作基于以下开源项目和社区贡献：
 
+**核心工具链：**
+
 - **[aria](https://github.com/overkazaf/aria)** — 本项目的开源仓库，包含 FairPlay chroot 运行时、TCP 解密服务和完整的优化管线代码
 - **[Quarkslab SideChannelMarvels](https://github.com/SideChannelMarvels)** — DFA/DCA 白盒密码分析工具链（笔者在[综述文章](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/)中详细介绍了其十年演进）
 - **[pywidevine](https://github.com/devine-dl/pywidevine)** — Widevine CDM Python 实现
 - **[Bento4/mp4decrypt](https://github.com/niconiconico/bento4)** — CENC 解密工具
+
+**Apple Music 生态相关逆向项目**（与本文 aria 路径同属 FairPlay 体系，读者可横向参照其架构与优化空间）：
+
+- **[zhaarey/apple-music-downloader](https://github.com/zhaarey/apple-music-downloader)** — Go 实现的 Apple Music ALAC / Dolby Atmos 下载器，社区最活跃的一支；其解密同样依赖一个独立的 wrapper 守护进程，是本文优化思路的天然落地对象
+- **[zhaarey/wrapper](https://github.com/zhaarey/wrapper)** — FairPlay 解密 wrapper，在容器/安卓环境内运行 Apple 自家解密、通过本地 TCP 端口暴露解密服务。**这与本文 aria 的 TCP 解密服务（解密端口 `47010`、m3u8 RPC `47020`）是同一架构**——意味着本文的 TCP_NODELAY（§三）与双线程管线化（§四）可以直接套用到该类工具上，把逐样本 round-trip 的 40ms Nagle 延迟一并消除
+- **[WorldObservationLog/AppleMusicDecrypt](https://github.com/WorldObservationLog/AppleMusicDecrypt)** — Python 实现，用 Frida hook 安卓 Apple Music 客户端做实时解密，与笔者 [Part 1（逆向篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-frida-reversing/) 的 native hook 路线可互为印证
+- **[glomatico/gamdl](https://github.com/glomatico/gamdl)** — Apple Music 下载器，走 Web 播放器 + Widevine CDM 路径，与本文 §八 的 Widevine (AAC) 快速路径相对应
 
 ---
 
@@ -384,6 +396,15 @@ with httpx.stream("GET", stream_url) as resp:
 | Quarkslab SideChannelMarvels | 白盒密码分析工具链 | [GitHub](https://github.com/SideChannelMarvels) |
 | Quarkslab DarkPhoenix | DFA + 外部编码攻击 | [GitHub](https://github.com/SideChannelMarvels/DarkPhoenix) |
 | Quarkslab BlueGalaxyEnergy | BGE 代数攻击 | [GitHub](https://github.com/SideChannelMarvels/BlueGalaxyEnergy) |
+
+### Apple Music 生态逆向项目
+
+| 项目 | 角色 | 与本文的关联 | 链接 |
+|------|------|------------|------|
+| zhaarey/apple-music-downloader | Apple Music ALAC / Dolby Atmos 下载器（Go） | 主流下载器，依赖独立 wrapper 解密守护进程 | [GitHub](https://github.com/zhaarey/apple-music-downloader) |
+| zhaarey/wrapper | FairPlay 解密 wrapper，本地 socket 暴露解密服务 | **架构等同本文 aria（解密端口 47010）**，可直接套用 §三/§四 优化 | [GitHub](https://github.com/zhaarey/wrapper) |
+| WorldObservationLog/AppleMusicDecrypt | Frida hook 安卓 Apple Music 实时解密（Python） | 与 Part 1 逆向篇的 native hook 路线互证 | [GitHub](https://github.com/WorldObservationLog/AppleMusicDecrypt) |
+| glomatico/gamdl | Apple Music 下载器，Widevine CDM 路径（Python） | 对应本文 §八 的 Widevine (AAC) 快速路径 | [GitHub](https://github.com/glomatico/gamdl) |
 
 ### 技术规范
 
