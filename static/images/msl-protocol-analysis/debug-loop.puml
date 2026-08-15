@@ -1,0 +1,49 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #2563eb
+skinparam arrowThickness 2
+skinparam rectangle {
+  BorderColor #475569
+  BackgroundColor #f8fafc
+}
+
+title MSL 逆向调试闭环
+
+rectangle "Hook 官方 App" as A #dbeafe
+rectangle "捕获真实对象" as B #dbeafe
+rectangle "导出 wire bytes" as C #dbeafe
+rectangle "在自研客户端复现" as D #fef3c7
+rectangle "CBOR decode + field diff" as E #dcfce7
+rectangle "修正类型 / 顺序 / padding" as F #ffedd5
+rectangle "HTTP 200 + 可解密响应" as G #bbf7d0
+rectangle "沉淀为图表 / 表格 / 测试样例" as H #ede9fe
+
+A -right-> B : MessageHeader\nCryptoSession\nOkHttp / SSL_write
+B -right-> C : MasterToken\nUserIdToken\nheaderdata\npayload chunk
+C -down-> D : 构建 nfmsl.py\n或 MslClient
+D -left-> E : 对比 Netflix bytes\n和自研 bytes
+E -left-> F : 定位 502 / 204035\n106039 / 205032
+F -up-> D : 改一处再跑
+D -down-> G : 通过服务器验收
+G -right-> H : 经验固化
+
+note bottom of E #ecfdf5
+  最有效的调试单位是"一段 CBOR bytes",
+  不是"某个 Java 类名"。
+  类名会混淆, wire format 不会说谎。
+end note
+
+note bottom of F #fff7ed
+  典型坑:
+  CryptoSession 无 padding;
+  byte string 写成 text;
+  token 与 session key 不匹配;
+  Android 与 Web endpoint 混用。
+end note
+
+@enduml

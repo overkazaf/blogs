@@ -1,0 +1,62 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam arrowColor #2563eb
+skinparam arrowThickness 2
+skinparam ParticipantBackgroundColor #f8fafc
+skinparam ParticipantBorderColor #475569
+skinparam NoteBackgroundColor #fffbeb
+skinparam NoteBorderColor #f59e0b
+skinparam SequenceGroupBorderColor #94a3b8
+skinparam SequenceGroupBackgroundColor #f8fafc
+
+title licensedManifest: 清单与 License 合并链路
+
+participant "Research Client\nnfmsl.py / MslClient" as C
+participant "Widevine CDM" as CDM
+participant "MSL Builder\nCBOR + crypto" as MSL
+participant "Netflix MSL Server" as N
+participant "Manifest Result" as R
+
+== Precondition ==
+C -> N : MSL Key Exchange
+N --> C : MasterToken + session keys / key ids
+C -> C : User auth\nUIT or HTTP cookie context
+
+== Step 1: License Challenge ==
+C -> CDM : getKeyRequest(PSSH / initData)
+CDM --> C : challenge bytes
+
+== Step 2: Build Payload ==
+C -> MSL : build licensedManifest payload\nviewableId + profiles + drmType=widevine\nchallengeBase64
+MSL -> MSL : CBOR encode headerdata\nGZIP payload if needed
+MSL -> MSL : AES-CBC encrypt\nHMAC-SHA256 sign
+
+== Step 3: Send ==
+MSL -> N : POST encrypted MSL message\nmastertoken + header envelope + payload chunk
+N -> N : verify HMAC\ncheck token binding\nparse payload
+N --> MSL : encrypted MSL response
+
+== Step 4: Decode ==
+MSL -> MSL : verify + decrypt + decompress
+MSL --> C : JSON result
+C -> R : extract video_tracks\naudio_tracks\nlicense response
+
+== Step 5: Install / Verify ==
+alt Android playback
+  C -> CDM : provideKeyResponse(license)
+  CDM --> C : content keys installed internally
+else Python research verification
+  C -> C : parse license with local CDM\nrecord KID:key in lab notes
+end
+
+note over C,N #fffbeb
+  这条链路的关键不是单独请求 license,
+  而是把 Widevine challenge 放进 MSL payload,
+  让 manifest、license、CDN profile 在同一条已认证通道里返回。
+end note
+
+@enduml

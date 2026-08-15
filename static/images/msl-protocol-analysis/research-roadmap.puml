@@ -1,0 +1,51 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #2563eb
+skinparam arrowThickness 2
+skinparam activity {
+  BorderColor #475569
+  BackgroundColor #f8fafc
+  DiamondBackgroundColor #e0f2fe
+  DiamondBorderColor #0369a1
+}
+
+title Netflix MSL 逆向路线总览
+
+start
+
+:Phase 0\n问题拆分\n先判断目标是 DRM 白盒、播放路径,\n还是服务端协议;
+
+:Phase 1\nChrome CDM 路径验证\nBoringSSL hook / S-box 扫描 / aesenc trap\n均不能稳定拿到内容密钥;
+note right #fff1f2
+  经验: 先排除错误战场。
+  如果底层白盒不可观测,
+  就不要继续把时间砸在黑盒里。
+end note
+
+:Phase 2\nRave / Hearo / nfmsl.py 对照\n把三种现成路线拆成登录、MSL、CDM、播放四层;
+
+:Phase 3\nNetflix APK 动态抓包\nHook MessageHeader、CryptoSession、OkHttp/SSL_write\n捕获真实 token 与 wire bytes;
+
+:Phase 4\nCBOR 线格式复原\n对齐 Header、Payload、MasterToken、UIT、integer key、bytes/text 类型;
+note right #ecfdf5
+  真正的突破点不是 magic key,
+  而是服务器能接受的 wire format。
+end note
+
+:Phase 5\nnfmsl.py / MslClient 重写\n用最小客户端复现 key exchange、manifest、licensedManifest;
+
+:Phase 6\n链路验证与经验沉淀\n把 502 / 204035 / 106039 / 205032\n转化为可诊断的协议状态;
+note right #f0fdfa
+  经验吸收:
+  分层、对照、抓包、最小复现、字节级 diff,
+  比凭直觉猜字段可靠。
+end note
+
+stop
+
+@enduml

@@ -1,0 +1,49 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #2563eb
+skinparam arrowThickness 2
+skinparam rectangle {
+  BorderColor #334155
+  BackgroundColor #f8fafc
+}
+
+title HTTPS / MSL / Widevine 的嵌套关系
+
+rectangle "Netflix Client\nWeb / Android / nfmsl.py" as CLIENT #e0f2fe
+
+rectangle "HTTPS\nTransport Envelope" as HTTPS #f1f5f9 {
+  rectangle "MSL Message\nApplication Security Layer" as MSL #dbeafe {
+    rectangle "Header Envelope\nMasterToken + encrypted headerdata + HMAC" as HDR #bfdbfe
+    rectangle "Payload Chunk\nEncrypted application data + HMAC" as PAY #bfdbfe
+    rectangle "Application Payload\nmanifest / licensedManifest / license" as APP #dcfce7
+    rectangle "Widevine Challenge / License\nnested binary protobuf" as WV_PAY #fef3c7
+  }
+}
+
+rectangle "Widevine CDM\nMediaDrm / pywidevine" as CDM #ede9fe
+rectangle "Netflix MSL Server" as SERVER #fee2e2
+rectangle "Netflix License Service" as LIC #ffedd5
+
+CLIENT -down-> HTTPS : POST body
+HTTPS -right-> SERVER : TLS only transports\nMSL still encrypts/signs
+MSL -down-> CDM : Key Exchange phase:\nCDM supplies MSL session keys
+MSL -down-> LIC : License phase:\nMSL transports Widevine license request
+LIC -left-> CDM : License response installs\ncontent keys in CDM
+
+note bottom of MSL #eff6ff
+  MSL 解决的是"应用层可信信道":
+  会话密钥、消息加密、签名、重放保护、用户/设备 token。
+end note
+
+note bottom of CDM #faf5ff
+  Widevine 在 Netflix 链路里有双重角色:
+  先作为 MSL Key Exchange 的密钥来源,
+  再作为内容 License 的消费者。
+end note
+
+@enduml

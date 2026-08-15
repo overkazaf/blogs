@@ -1,0 +1,61 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam arrowColor #2563eb
+skinparam arrowThickness 2
+skinparam ParticipantBackgroundColor #f8fafc
+skinparam ParticipantBorderColor #475569
+skinparam NoteBackgroundColor #fffbeb
+skinparam NoteBorderColor #f59e0b
+skinparam SequenceGroupBorderColor #94a3b8
+skinparam SequenceGroupBackgroundColor #f8fafc
+
+title MSL Key Exchange 两条路线对比
+
+participant "Client" as C
+participant "RSA / Software Crypto" as RSA
+participant "Widevine CDM" as CDM
+participant "Netflix MSL Server" as N
+
+== Web / Rave / Chrome JSON: ASYMMETRIC_WRAPPED ==
+
+group ASYMMETRIC_WRAPPED
+  C -> RSA : Generate RSA-2048 keypair
+  C -> N : Handshake\nentityauthdata=NONE\nkeyrequestdata=RSA public key
+  N --> C : MasterToken\nRSA-wrapped JWK encryptionkey/hmackey
+  C -> RSA : RSA-OAEP decrypt JWK
+  RSA --> C : Plain AES key + HMAC key
+end
+
+note over C,RSA
+  优点: 独立、软件可控、容易调试。
+  限制: Web/Cadmium 路线通常受画质策略约束。
+end note
+
+== Android / Hearo / MslClient: WIDEVINE ==
+
+group WIDEVINE / WIDEVINE_APPID
+  C -> CDM : MediaDrm.openSession()
+  C -> CDM : getKeyRequest(initData,\n"application/xml", OFFLINE)
+  CDM --> C : Widevine challenge
+  C -> N : Handshake\nentityauthdata=WIDEVINE_APPID\nkeyrequestdata=challenge
+  N --> C : MasterToken\ncdmkeyresponse + encryptionkeyid/hmackeyid
+  C -> CDM : provideKeyResponse(cdmkeyresponse)
+  CDM --> C : CryptoSession keys installed
+end
+
+note over C,CDM
+  优点: 接近官方 Android 链路, 可借真实设备能力。
+  难点: 密钥不一定导出, 需要 CryptoSession.encrypt/sign/decrypt 作为 oracle。
+end note
+
+== After Handshake ==
+
+C -> C : Build encrypted headerdata + payload
+C -> N : mastertoken + encrypted header + payload + HMAC
+N --> C : encrypted MSL response
+
+@enduml

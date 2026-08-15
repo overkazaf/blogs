@@ -1,0 +1,60 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 12
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam arrowColor #2563eb
+skinparam rectangle {
+  BorderColor #475569
+  BackgroundColor #f8fafc
+}
+skinparam package {
+  BorderColor #64748b
+  BackgroundColor #f1f5f9
+}
+
+title MSL CBOR Wire Format 核心结构
+
+package "HTTP Body: MSL Message" as BODY {
+  rectangle "Header Envelope\nCBOR tag 0xD9D9F7" as HE #dbeafe {
+    rectangle "33 headerdata\nEncrypted envelope bytes" as H33 #bfdbfe
+    rectangle "16 signature\nHMAC-SHA256 bytes" as H16 #bfdbfe
+    rectangle "32 mastertoken\n{15 tokendata, 16 signature}" as H32 #bbf7d0
+  }
+
+  rectangle "Payload Chunk\nCBOR tag 0xD9D9F7" as PC #ffedd5 {
+    rectangle "64 payload\nEncrypted envelope bytes" as P64 #fed7aa
+    rectangle "16 signature\nHMAC-SHA256 bytes" as P16 #fed7aa
+  }
+}
+
+package "Encrypted Envelope" as ENV {
+  rectangle "6 ciphertext\nAES-CBC encrypted bytes" as E6 #fbcfe8
+  rectangle "7 sha256\nfixed hash marker" as E7 #fbcfe8
+  rectangle "8 keyid\nempty or key id" as E8 #fbcfe8
+  rectangle "9 iv\n16-byte random IV" as E9 #fbcfe8
+}
+
+package "Decrypted Header Important Keys" as KEYS {
+  rectangle "20 sender / ESN" as K20 #e0f2fe
+  rectangle "22 messageid" as K22 #e0f2fe
+  rectangle "24 timestamp" as K24 #e0f2fe
+  rectangle "14 sequencenumber" as K14 #e0f2fe
+  rectangle "18 useridtoken" as K18 #dcfce7
+  rectangle "36 capabilities" as K36 #dcfce7
+}
+
+H33 ..> ENV : decrypt envelope
+P64 ..> ENV : decrypt envelope
+ENV ..> KEYS : headerdata becomes\ninteger-key map
+
+note bottom of BODY #fffbeb
+  调试时最容易错的不是 AES/HMAC 算法,
+  而是值类型: bytes 不能写成 text,
+  headerdata 不能直接内联 map,
+  handshake signature 应是空 byte string。
+end note
+
+@enduml
