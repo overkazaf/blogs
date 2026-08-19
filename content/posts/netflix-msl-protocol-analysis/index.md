@@ -4,9 +4,9 @@ slug: "netflix-msl-protocol-reverse-engineering"
 date: 2026-08-15
 lastmod: 2026-08-19
 draft: false
-tags: ["Netflix", "MSL", "DRM", "Widevine", "reverse-engineering", "CBOR", "Frida", "Android", "MediaDrm", "protocol-analysis"]
+tags: ["Netflix", "MSL", "DRM", "Widevine", "reverse-engineering", "CBOR", "Frida", "Android", "MediaDrm", "protocol-analysis", "ChinaDRM"]
 categories: ["security-research"]
-description: "围绕 Netflix Message Security Layer (MSL) 的协议逆向记录：为什么 HTTPS 之上还要再套一层加密信道、encrypt-then-MAC 到底签的是什么、CBOR integer key 编码的字节细节，以及 MasterToken/UserIdToken 的绑定关系"
+description: "围绕 Netflix Message Security Layer (MSL) 的协议逆向记录：为什么 HTTPS 之上还要再套一层加密信道、encrypt-then-MAC 到底签的是什么、CBOR integer key 编码的字节细节、MasterToken/UserIdToken 的绑定关系，以及 MSL 相对国内外流媒体与音乐加密方案（爱奇艺/腾讯视频/优酷/ChinaDRM/网易云/QQ音乐）强在哪"
 image: "https://overkazaf.github.io/blogs/images/msl-protocol-analysis/research-roadmap.png"
 toc: true
 math: false
@@ -67,13 +67,23 @@ Netflix 播放链路常被一句话概括为「HTTPS 里发 Widevine license」�
 ![HTTPS / MSL / Widevine 的嵌套关系](https://overkazaf.github.io/blogs/images/msl-protocol-analysis/protocol-stack.png)
 *HTTPS 负责传输；MSL 负责应用层加密、签名、token、重放保护；Widevine 在 Netflix 链路里有双重角色：先为 MSL Key Exchange 提供会话密钥，再通过 MSL 通道获取内容 license。*
 
-既然已经有 TLS，为什么还要在里面重新做一遍加密、签名、防重放？这不是冗余，而是 MSL 存在的理由，也是理解整条链路的起点。笔者把它归纳成三条：
+既然已经有 TLS，为什么还要在里面重新做一遍加密、签名、防重放？要回答「为什么这么设计」，得先看 Netflix 面对的**威胁模型**，因为每一个设计选择都是对其中一条约束的回应：
 
-1. **信道要绑定到「这台被 provision 过的设备」，而不是「某个 TLS 客户端」。** TLS 只证明「对端持有某张 CA 签发的证书」，且经常在 CDN / 代理处终止。MSL 的 `MasterToken` 把信道绑定到设备的加密身份（ESN + 设备密钥），于是服务端得到的是一条端到端、认证到具体设备的通道——这条通道即使穿过任意数量的 TLS 中间节点也不会被削弱。
-2. **会话密钥来自 DRM/RSA，而不是 TLS 握手。** MSL 自带 Key Exchange（见 §五），会话密钥经由 Widevine CDM 或 RSA 建立，和 PKI/CA 那套信任根解耦。内容安全的信任链因此独立于传输层的证书体系——TLS 被 MITM 或证书被信任，并不等于 MSL 会话被攻破。
-3. **加密、签名、防重放下沉到消息本身。** 每条 MSL 消息自带 `messageid` / `sequencenumber`（§四），重放保护挂在消息上而非连接上。于是同一套信封能跨 HTTP、WebSocket、离线场景复用，也能在无状态的服务端集群间流转。
+- **客户端在攻击者手里。** 设备被 root / 越狱 / 魔改是常态，客户端里的任何静态密钥都应视为已泄露。
+- **传输路径上普遍存在 TLS 拦截。** 企业、校园、运营商的透明代理装了受信根证书，对它们而言 TLS 就是明文；Open Connect CDN 边缘也会终止 TLS。**「有 HTTPS」不等于「Netflix 和设备之间没人能读」。**
+- **服务端是无状态大集群。** 不可能为每个请求做一次有状态的会话查找。
+- **设备形态极多。** TV、机顶盒、游戏机、手机、Web，网络栈千差万别，安全实现却要尽量只写一套。
+- **内容价值高。** 需要 per-play 授权、可撤销、可灰度、可轮换密钥。
 
-理解了「MSL 是自成一体的应用层信道」，就能理解它和 Widevine 之间那个容易看晕的**互相依赖**结构：
+MSL 的每一条设计，都是在回答上面某一条：
+
+1. **信道绑定到「这台被 provision 过的设备」，而不是「某个 TLS 客户端」。** TLS 只证明「对端持有某张 CA 签发的证书」。MSL 的 `MasterToken` 把信道绑定到设备的加密身份（ESN + 设备密钥，根植于 Widevine 的硬件信任根）。于是**偷到一个 bearer token 不够用**——你还得有那台设备的加密身份，才能让服务端认这条会话。这是对「客户端在攻击者手里」的回应。
+2. **会话密钥来自 DRM / RSA，不来自 TLS 握手。** MSL 自带 Key Exchange（见 §五），`Kenc`/`Khmac` 经 Widevine CDM 或 RSA 建立，和 PKI / CA 信任根解耦。**这样一来，TLS 被拦截代理解密、甚至根证书被信任，MSL 这一层依旧是密文**——攻击者拿到的是一段自己解不开的 CBOR。这是对「TLS 拦截」的回应。
+3. **加密、签名、防重放下沉到消息本身。** 每条消息自带 `messageid` / `sequencenumber`（§四），重放保护挂在消息上而非连接上。于是同一套信封能跨 HTTP、WebSocket、离线场景复用——一套安全实现覆盖所有设备形态。这是对「设备形态极多」的回应。
+4. **token 是服务端签发的自包含凭证。** `MasterToken` 里的会话密钥用服务端主密钥封装（§六），任意一台服务器只要有主密钥就能校验、解封，**不需要粘性会话、不需要跨机查表**。这是对「无状态大集群」的回应。
+5. **身份与会话分离，支持轮换。** 设备身份（ESN + 设备密钥）是长期根，`MasterToken` 带 `renewalwindow` / `expiration` 是短期会话；会话密钥可以频繁轮换而无需重新 provision 设备。这是对「密钥要可轮换」的回应。
+
+一句话概括这套设计的本质：**Netflix 不信任 TLS、不信任客户端、也不想让服务端有状态，于是把「机密性 + 完整性 + 防重放 + 设备身份 + 用户身份」全部塞进了一个自包含、可跨机校验的应用层消息里。** 理解了「MSL 是自成一体的应用层信道」，就能理解它和 Widevine 之间那个容易看晕的**互相依赖**结构：
 
 ```text
 建立 MSL 会话时：
@@ -425,7 +435,117 @@ MasterToken / UIT / session key 是否来自同一会话（§六）
 
 ---
 
-## 十、结语：这次逆向真正沉淀下来的东西
+## 十、横向对比：MSL 强在哪，代价是什么
+
+把 MSL 放回行业里对比，才看得清它到底买到了什么。下面依次对照四类：主流国外流媒体、国内长视频三家（爱奇艺 / 腾讯视频 / 优酷）、国内音乐 App，最后用一张谱系图和一张表收口。
+
+贯穿全节的其实只有一根轴——**信任边界画在哪**。先把结论画出来，后面再逐类展开：
+
+![内容保护的信任边界谱系](https://overkazaf.github.io/blogs/images/msl-protocol-analysis/trust-boundary-spectrum.png)
+*同一根轴上，信任边界从「文件」一路移到「设备加密身份」。越往下，单点破解能撬动的杠杆越小。国内长视频三家沿这条线整体下移，但爬到的高度不同；MSL 独特在把 manifest / 授权也纳入了设备绑定的信封。*
+
+### 10.1 vs 主流流媒体：差别在「信任边界画在哪」
+
+绝大多数流媒体（HLS/DASH + Widevine/PlayReady/FairPlay 的组合，Disney+、Prime Video、YouTube TV 等大多如此）的安全架构是**两段式**：
+
+- **控制面**（manifest、码率、CDN 地址、播放授权）走 **HTTPS + bearer token**（OAuth/cookie/JWT）；
+- **密钥面**（内容密钥）走 **EME → CDM** 的标准 DRM license 交换。
+
+这套组合对付网络攻击者完全够用——TLS 保证传输，DRM 保证密钥不落地。但它的**信任边界画在「token」上**：服务端信任持有合法 token 的人，而 token 往往是可从客户端会话里抠出来的 bearer 凭证。Netflix 的不同之处在于，它把控制面也塞进了设备绑定的 MSL 信道，于是信任边界从「token」下移到了「设备的加密身份」。
+
+| 维度 | 主流方案（HLS/DASH + DRM） | Netflix MSL |
+|------|---------------------------|-------------|
+| 控制面（manifest/授权） | HTTPS + bearer token，明文 JSON | 塞进 MSL：加密 + 签名 + 设备绑定 |
+| 信任边界 | 落在 token 上（bearer，可复制） | 落在设备加密身份上（ESN + 设备密钥） |
+| 密钥来源 | 标准 EME/CDM license 交换 | 自带 Key Exchange，可由 CDM 驱动（§五） |
+| 抗 TLS 拦截 | 依赖 TLS；代理装了根证书就能读控制面 | 控制面在 MSL 里仍是密文 |
+| manifest 与 license | 两次独立请求 | `licensedManifest` 合并进一个授权信封（§七） |
+| 单点破解后果 | 拿到 token 即可重放控制面 | 还需设备身份 + 活的 CDM，token 不够 |
+| 代价 | 实现简单、标准化、生态成熟 | 协议复杂、需自研客户端栈、维护成本高 |
+
+要公平地说：**多数厂商是「故意」选简单方案的**。HLS/DASH + 标准 DRM 有成熟的播放器、打包器、CDN 生态，接入成本低；MSL 那套是 Netflix 用工程复杂度换来的纵深防御，只有内容价值、设备规模、反滥用压力都到 Netflix 量级，这笔投入才划算。YouTube 走的是另一条路——用 JS VM 混淆流地址签名（`n` 参数、cipher），偏「反爬对抗」而非形式化的设备绑定协议，本质是 obfuscation，和 MSL 有 spec、可证明的路子不是一个范式。
+
+### 10.2 vs 国内长视频三家：同一条演进路线，爬到了不同高度
+
+国内长视频三家（爱奇艺、腾讯视频、优酷）既不能和音乐归一档，也不能三家归一档。为把这一节写准，笔者交叉核对了三家的公开资料与社区逆向工作——**凡无法一手证实的，都在下文明确标注为推断**（各平台官方从未公开逐清晰度的 DRM 矩阵，容器内部常量在中文资料里多互相矛盾，这里一律不引用）。看下来的图景是：三家走的是同一条演进路线，但爬到的高度不同。
+
+**第一代（历史）：私有容器 + 弱加密/伪加密。** 这一代的"加密"主要是容器混淆 + 私有解码器封锁，挡普通用户、挡不住确定性攻击者：
+
+- **优酷 `.kux`**：本质是分段重排的 FLV 容器（大头部区 + 256KB 对齐分段、内层仍是标准 FLV）。社区转换工具几乎都直接调用优酷自带的 `ffmpeg` 做 `-c copy` **流拷贝、零转码**——这等于证明底层码流**根本没做密码学加密**，只靠"标准播放器不认这个容器"设卡，强度≈0。
+- **爱奇艺 `.qsv`**：文件头以 ASCII `QIYI VIDEO` 开头、约 90 字节头部 + 加密索引区，**每个分片只有前 1KB 被轻量加扰**，其余原样。社区工具离线 remux 即可还原。但要注意这是**历史方案**——爱奇艺客户端 v10+ 下载的 QSV 已换新加密，老工具失效。
+- **腾讯 `.qlv`（早期缓存 `.tdl`）**：更早的分段缓存甚至是明文，`copy /b` 直接拼接就能还原；`.qlv` 是加密容器，但商业转换器只对特定旧客户端版本有效。保护随版本明显增强。
+
+**第二代（现状）：服务端签名授权 + 商业/自研 DRM。** 三家都上了真 DRM，但侧重差别很大：
+
+- **爱奇艺——投入最重的一家。** 据其 DRM 团队公开文章，架构是"两条腿"：自研 **iQIYI DRM-S**（Native Code 实现）+ **MultiDRM**（集成 Widevine / PlayReady / FairPlay / Intertrust）。设备侧**硬件级（TrustZone / TEE 里的 DRM TrustApp）与软件级（白盒密码 + 代码混淆）并存**，按设备能力选择。它 2018 年通过 ChinaDRM 实验室认证（国内首个），自研 DRM-S 还过了 Riscure、Farncombe 认证。"安卓只给 720P、iPhone 给更高清"的争议，技术根因正是硬件级 DRM（如需 TEE 的 Widevine L1）在不同设备上的可用性差异。
+- **腾讯视频——ChinaDRM 自研派。** 消费端主线是自研 **ChinaDRM（遵循 ChinaDRM 2.0 参考实现）**，2020 年由其点播平台负责人公开介绍。Web 端的密钥链路值得单独看：客户端用 **WASM 生成 `cKey` 请求签名** → 服务端 `getvinfo` 接口鉴权后下发播放地址 → DRM license 服务器下发解密密钥。**注意 `cKey` 是请求防篡改签名，不是内容密钥**——这点后面对比 MSL 时是关键。（另外要区分：腾讯云对外卖的商业级 DRM 是 B2B 产品，≠ 腾讯视频 App 内部方案。）
+- **优酷——更靠"签名 URL"的一家。** 自家内容大量走"服务端授权 + 时效签名 CDN URL"（UPS 接口 + `ckey` 签名 + 会员 cookie），多数分段是明文，所以 you-get 这类工具能长期抓到——它的护城河是那个反复加固、频繁失效的**签名算法**，而非内容加密本身。真·商业 DRM 走阿里云 VOD 能力（官方支持 HLS-AES-128 / 阿里私有加密 / Widevine + FairPlay），但优酷 App 具体用哪种、覆盖哪些清晰度**未公开**。阿里是 ChinaDRM 标准的参编方，但"优酷线上已部署 ChinaDRM"无一手证据。
+
+有两点必须诚实说明，否则容易高估"国内视频已被破解"的程度：一是**社区那些 `you-get`/`iqiyi-parser`/`webvideo-downloader` 多是"走下发接口拿播放流"的下载器/解析器，而不是对已加密文件的离线解密器**；二是**硬件级 L1（TEE）路径至今是社区破不动的**，能破的基本都是软件级 L3 或纯签名授权那一层。
+
+那么，爬到第二代最高处的国内长视频（爱奇艺 DRM-S、腾讯 ChinaDRM），和 MSL 还差在哪？差在**信任边界的覆盖范围**：它们把**密钥 / license 层**做成了设备绑定（TEE），但控制面（manifest、授权接口）仍是 **HTTPS + token + 客户端签名**。腾讯的 `cKey` 是国内最接近 MSL 的一例——客户端用 WASM 对请求做密码学签名——但它终究是**对一个明文 HTTPS 请求的防篡改签名**，不是把整条控制面塞进一个设备绑定、密钥来自 DRM 的**加密信封**。所以 §二 那句"偷 token 不够、控制面也要设备身份"，对国内长视频（哪怕用了 ChinaDRM / DRM-S 的那部分）依然是 MSL 独有的性质。
+
+| 平台 | 历史容器 | 现状 DRM 主线 | 设备绑定 | 控制面签名/授权 |
+|------|----------|---------------|----------|-----------------|
+| **爱奇艺** | `.qsv`（每段前 1KB 弱加扰） | 自研 DRM-S + MultiDRM，过 ChinaDRM/Riscure/Farncombe 认证 | 硬件 TEE + 白盒并存 | HTTPS + token（+ 签名） |
+| **腾讯视频** | `.qlv` / 早期 `.tdl`（明文可拼接） | 自研 ChinaDRM 2.0 | 分级：硬件 L1 / 软件 L3 | `cKey`(WASM 签名) + `getvinfo` 鉴权 |
+| **优酷** | `.kux`（伪加密，`-c copy` 即还原） | 阿里云 VOD DRM（覆盖未公开），多数走签名 URL | 弱（token + 软设备指纹），L1 无证据 | UPS 接口 + `ckey` 签名 |
+| **Netflix** | —（纯流式，不落文件） | Widevine + 自带 Key Exchange | 设备加密身份（硬件根） | 整条控制面塞进 MSL 信封 |
+
+> 主要依据：爱奇艺 DRM 团队《修炼之路 / 探索之路》及其官方认证公告、ChinaDRM 实验室资料、腾讯 2020 ChinaDRM 研讨会公开表态，以及 [you-get](https://github.com/soimort/you-get)、[bbtsdecrypt](https://github.com/ReiDoBrega/bbtsdecrypt) 等社区逆向项目。凡涉及各平台"具体用哪种 DRM / 逐清晰度映射 / 是否强制 L1"处，均为行业推断而非官方定论。
+
+### 10.3 vs 国内音乐加密：从「文件级静态加密」到「会话级活协议」
+
+和国内主流音乐 App 的加密方案（QQ 音乐 `.qmc`/`.mflac`、网易云 `.ncm`、酷狗 `.kgm` 等）一比，差距就不是「架构取舍」而是「代际」了。核心区别只有一句：**国内方案是「带客户端内置密钥的文件级加密」，MSL 是「无内置密钥的会话级协议」。**
+
+以文档最清楚的网易云 `.ncm` 为例，它的解密根本不需要联网：
+
+```text
+.ncm 文件结构（公开已知，unlock-music / ncmdump 均已实现）：
+  magic "CTENFDAM"
+  ├─ RC4 密钥块：每文件一个 key，但这个 key 用
+  │   硬编码 AES-128-ECB key  "hzHRAmso5kInbaxW"  解出   ← 密钥在客户端里
+  ├─ 元数据块：JSON，用另一个硬编码 AES key 解出
+  └─ 音频块：用上面的 per-file key 生成 RC4 keystream 异或
+
+=> 两把 AES 主密钥都是客户端里的固定常量。逆向一次，
+   此后所有 .ncm 文件都能【离线、永久、批量】解密。
+```
+
+QQ 音乐的 `.qmc`（旧版固定 XOR mask 表）/`.mflac`（文件尾附 per-file key，但派生算法在 native 库里）、酷狗的 `.kgm`（固定掩码表）本质完全一样：**密钥或密钥派生算法内置在客户端**，威胁模型只到「提高翻拷门槛」，挡不住确定性攻击者。一旦有人把客户端逆一遍，整个格式对所有人失效。
+
+MSL 在这几点上是结构性的强：
+
+| 维度 | 国内音乐加密（.ncm/.qmc/.kgm） | Netflix MSL |
+|------|-------------------------------|-------------|
+| 密钥归属 | 主密钥/算法**内置客户端**，可一次性提取 | **无内置内容密钥**，每会话现场 Key Exchange，Widevine 路线连 CDM 都不暴露明文 |
+| 联网要求 | 解密**完全离线**，与服务端无关 | 每次播放要**活的、被授权的**服务端往返（`licensedManifest`） |
+| 单次逆向的后果 | 得到**通用离线解密器**，一劳永逸 | 只得到「如何合法发起会话」，仍需授权账号 + 真实 CDM，拿不到万能钥匙 |
+| 撤销 / 灰度 / 限速 | 无（文件发出去就管不了了） | 服务端可**实时拒绝、撤销、限速、指纹识别** |
+| 设备绑定 | 无，文件 + App 即可 | 绑定到 provision 过的设备（硬件信任根） |
+| 安全范式 | security through obscurity，逆一次即崩 | 有 spec 的协议 + 硬件根，可轮换、可升级 |
+
+一句话：**破解国内音乐加密，是「拿到密钥后所有文件永久解密」；破解 MSL，是「学会如何像官方客户端一样合法发起一次会话」——后者每次都要服务端点头，且拿不到能离线解一切的万能钥匙。**
+
+不过同样要说公平话：两者**在解不同的题**。国内音乐 App 的目标是「可下载、可离线播放的文件，加一层轻摩擦防随手拷贝」，它天然要把可播放文件交到用户设备上，UX 和离线可用性优先于强安全；Netflix 从不打算给你一个可播放文件，它是纯流式、按次授权。所以这不是「国内厂商不会做」，而是产品形态决定了能做多强——想做强的国内方案（例如 Apple Music 的 FairPlay，硬件级、逐轨密钥交换）就已经站在 MSL/Widevine 这一端了，笔者在 [FairPlay 逆向那篇](https://overkazaf.github.io/blogs/posts/fairplay-drm-frida-reversing/)里拆过它的 `decryptContext` 链路，和 `.ncm` 那种静态异或完全不是一个量级。
+
+### 10.4 一张表看清整个谱系
+
+把开头那张谱系图落成文字，就是下面这张表。真正在移动的只有一件事——**信任边界画在哪**：从「文件」到「token」再到「设备加密身份」，越往下，单点破解能撬动的杠杆越小：
+
+| 方案 | 密钥归属 | 控制面信任边界 | 单次逆向的后果 |
+|------|----------|----------------|----------------|
+| 国内音乐 `.ncm`/`.qmc` | 客户端内置静态密钥 | 无（离线文件） | 通用离线解密器，一劳永逸 |
+| 国内长视频自研 `.qsv`/`.qlv`/`.kux` | 服务端下发 + token 校验 | token（bearer） | 逆外壳 + 持 token 即可取流 |
+| 国外 HLS/DASH + Widevine/FairPlay | 标准 CDM license 交换 | token（bearer） | 持 token 重放控制面，密钥仍需 CDM |
+| ChinaDRM / 硬件 Widevine | license，TEE/CDM 保护 | token（bearer） | 需破 TEE + 有效授权 |
+| **Netflix MSL** | 每会话 Key Exchange，CDM 内 | **设备加密身份** | 只学会「如何合法发起一次会话」，无万能钥匙 |
+
+国内方案不是「没做」，而是分布在这条谱系的不同位置：音乐停在最上一档，长视频爬到了中间，ChinaDRM 已经到了硬件 DRM 这一档。**MSL 的独特不在某一层的算法多强，而在它把控制面的信任边界一路压到了「设备加密身份」——这一步，目前无论国内外的主流流媒体大多没走。**
+
+---
+
+## 十一、结语：这次逆向真正沉淀下来的东西
 
 这篇 MSL 分析和前面的 Widevine / Chrome CDM 文章是同一条研究线的不同层面：
 

@@ -1,0 +1,48 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 10
+skinparam arrowColor #3b82f6
+skinparam arrowThickness 2
+skinparam rectangle {
+  BorderThickness 2
+}
+
+title 内容保护的信任边界谱系 —— 越往下，单点破解能撬动的杠杆越小
+
+rectangle "**① 国内音乐  .ncm / .qmc**\n信任边界 = **文件**（密钥内置客户端）\n单点破解 → 通用离线解密器，一劳永逸" as A #fecaca
+rectangle "**② 长视频·历史容器  .kux / .qsv / .qlv·.tdl**\n信任边界 = **文件**（容器混淆 / 伪加密）\n单点破解 → 离线 remux 还原（老版本；新版已失效）" as B #fed7aa
+rectangle "**③ 长视频·在线签名授权  cKey / UPS 签名 + 会员 cookie**\n信任边界 = **token + 请求签名**（服务端下发时效 URL）\n单点破解 → 逆签名算法 + 持 token 取下发流" as C #fef08a
+rectangle "**④ 长视频·商业 / 自研 DRM  爱奇艺 DRM-S · 腾讯 ChinaDRM · Widevine**\n信任边界 = **设备（硬件 TEE / TrustZone）**\n单点破解 → 需破 TEE + 有效授权（社区仅能破 L3 软件级）" as D #bbf7d0
+rectangle "**⑤ Netflix MSL  Widevine + 自带 Key Exchange**\n信任边界 = **设备加密身份**（连 manifest / 授权都在设备绑定信封里）\n单点破解 → 只学会「如何合法发起一次会话」，无万能钥匙" as E #e9d5ff
+
+A -down-> B
+B -down-> C
+C -down-> D
+D -down-> E
+
+note right of B #fffbeb
+第一代：私有容器 + 弱加密。
+挡的是普通用户，
+挡不住确定性攻击者。
+end note
+
+note right of D #ecfdf5
+国内长视频三家沿这条线整体下移，
+但爬到的高度不同：
+• 爱奇艺 = DRM-S + TEE + 白盒，过三重认证（最靠下）
+• 腾讯视频 = 自研 ChinaDRM 2.0（次之）
+• 优酷 = 多为签名 URL，商业 DRM 覆盖未公开（偏上）
+end note
+
+note right of E #f3e8ff
+第二代最高处仍与 MSL 有分野：
+国内长视频把「密钥 / license 层」做成设备绑定，
+控制面仍是 HTTPS + token + 签名；
+MSL 把控制面也纳入设备绑定信封。
+end note
+
+@enduml
