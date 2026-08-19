@@ -1,0 +1,50 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI,Helvetica,Arial,sans-serif"
+skinparam defaultFontSize 13
+skinparam defaultFontColor #1e293b
+skinparam shadowing false
+skinparam roundCorner 8
+skinparam sequenceMessageAlign center
+skinparam ArrowColor #3b82f6
+skinparam ArrowThickness 2
+skinparam ParticipantBorderColor #475569
+skinparam ParticipantBackgroundColor #f8fafc
+skinparam NoteBorderColor #f59e0b
+skinparam NoteBackgroundColor #fffbeb
+skinparam NoteFontColor #78350f
+
+title 腾讯视频 cKey 的 WASM 生成与校验链路（据社区逆向可观测边界）
+
+participant "JS 胶水层\nEmscripten glue" as JS #e0f2fe
+participant "WASM 模块\ngetckey（混淆黑盒）" as WASM #fefce8
+participant "getvinfo 服务\nvd.l.qq.com/proxyhttp" as SRV #dbeafe
+participant "DRM License 服务" as LIC #f3e8ff
+
+JS -> JS : 收集参数\nplatform / appVer / vid / guid / tm ...
+JS -> WASM : cwrap("getckey","string",[...])(参数)
+note over WASM #fefce8
+  内部：参数 + 时间戳校验
+  → 拼装 → 摘要/加密
+  自定义混淆，encryptVer 9.1
+  （旧版 8.1 曾是纯 JS 的 a()）
+  静态难读，实战靠边界 hook
+end note
+WASM --> JS : 返回 cKey 字符串
+JS -> SRV : getvinfo 请求\n（带 cKey + guid + logintoken）
+note over SRV #eff6ff
+  校验 cKey 防篡改
+  + 会员态鉴权
+  通过才下发
+end note
+SRV --> JS : vinfo（播放地址 url + pt）
+JS -> LIC : （DRM 内容）请求 license
+LIC --> JS : 下发解密密钥（TEE 内解）
+
+note across #f3e8ff
+  cKey 只签「请求」，不碰「内容密钥」——它是防重放/防篡改的请求签名。
+  对比 MSL：MSL 把整条控制面（含 manifest、授权）塞进设备绑定的加密信封，
+  而 cKey 只是给一个明文 HTTPS 请求盖了个客户端签名章。
+end note
+
+@enduml
