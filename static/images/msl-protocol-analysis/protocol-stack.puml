@@ -30,14 +30,15 @@ rectangle "Netflix MSL Server" as SERVER #fee2e2
 rectangle "Netflix License Service" as LIC #ffedd5
 
 CLIENT -down-> HTTPS : POST body
-HTTPS -right-> SERVER : TLS only transports\nMSL still encrypts/signs
-MSL -down-> CDM : Key Exchange phase:\nCDM supplies MSL session keys
+HTTPS -right-> SERVER : TLS protects transport\nMSL protects selected application messages
+MSL -down-> CDM : Key Exchange phase:\nCDM establishes session keys / key IDs
 MSL -down-> LIC : License phase:\nMSL transports Widevine license request
 LIC -left-> CDM : License response installs\ncontent keys in CDM
 
 note bottom of MSL #eff6ff
-  MSL 解决的是"应用层可信信道":
-  会话密钥、消息加密、签名、重放保护、用户/设备 token。
+  MSL 提供应用层安全原语:
+  会话密钥、消息加密/认证、可选非重放语义、实体/用户 token。
+  实际强度由认证、Key Exchange 与消息策略决定。
 end note
 
 note bottom of CDM #faf5ff

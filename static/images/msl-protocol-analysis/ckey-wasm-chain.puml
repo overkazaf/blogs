@@ -42,9 +42,9 @@ JS -> LIC : （DRM 内容）请求 license
 LIC --> JS : 下发解密密钥（TEE 内解）
 
 note across #f3e8ff
-  cKey 只签「请求」，不碰「内容密钥」——它是防重放/防篡改的请求签名。
-  对比 MSL：MSL 把整条控制面（含 manifest、授权）塞进设备绑定的加密信封，
-  而 cKey 只是给一个明文 HTTPS 请求盖了个客户端签名章。
+  cKey 只保护「请求」，不碰「内容密钥」；时间戳可参与时效校验。
+  对比 MSL：MSL 可将控制面放进与实体 / 用户 / session 绑定的加密信封；
+  Widevine 路径是否进一步硬件绑定，取决于设备等级与实际配置。
 end note
 
 @enduml
