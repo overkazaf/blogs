@@ -38,16 +38,11 @@ Chrome 生态里，最适合观察这类保护的位置不是普通网页 JavaSc
 
 下面这张图按 Cocoon AI 架构图规范绘制，展示 Chrome 原生媒体模块中 VMP 保护的核心流程：Web 页面通过 EME 触发 license 和解密请求，Renderer 与 CDM utility 进程通过 Mojo IPC 通信；CDM 内部由 host ABI 进入 VMP/白盒核心，关键状态被编码，完整性校验持续约束插桩行为，最终只有合法播放路径能在共享内存或视频管线中产生明文帧。
 
-{{< rawhtml >}}
-<div style="border:1px solid #334155;border-radius:8px;overflow:hidden;background:#020617;margin:1.5rem 0;">
-  <iframe
-    src="/blogs/images/chrome-vmp-protection/core-flow.html"
-    title="Chrome VMP Protection Flow"
-    loading="lazy"
-    style="width:100%;height:980px;border:0;display:block;background:#020617;">
-  </iframe>
-</div>
-{{< /rawhtml >}}
+{{< cocoon-diagram
+  src="images/chrome-vmp-protection/core-flow.html"
+  title="Chrome VMP Protection Flow"
+  height="980"
+>}}
 
 *Chrome 下 VMP 保护的核心流程：VMP 层把密钥处理和数据变换压入 VM 调度器、编码状态和完整性循环中；研究者能稳定看到的是进程边界、热点、编码后的状态和最终明文边界，而不是可直接复用的 key schedule。*
 

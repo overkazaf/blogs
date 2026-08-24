@@ -89,16 +89,11 @@ PlayReady 的公开设计里，有几处很鲜明的工程取舍：
 
 下图按 Cocoon AI `architecture-diagram` 规范绘制。箭头上蓝色数据大多可以公开分发；红色对象必须留在 KMS、License Server 或设备安全边界里；紫色是策略，它本身不保密，却决定客户端是否允许密钥被绑定和使用。
 
-{{< rawhtml >}}
-<div style="border:1px solid #334155;border-radius:8px;overflow:hidden;background:#020617;margin:1.5rem 0;">
-  <iframe
-    src="/blogs/images/playready-deep-dive/end-to-end-flow.html"
-    title="Microsoft PlayReady End-to-End Trust Architecture"
-    loading="lazy"
-    style="width:100%;height:1110px;border:0;display:block;background:#020617;">
-  </iframe>
-</div>
-{{< /rawhtml >}}
+{{< cocoon-diagram
+  src="images/playready-deep-dive/end-to-end-flow.html"
+  title="Microsoft PlayReady End-to-End Trust Architecture"
+  height="1110"
+>}}
 
 这张图里最值得注意的不是箭头，而是三条边界：
 

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chrome VMP Protection Architecture Diagram</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
   <style>
     * {
       margin: 0;
@@ -20,10 +20,13 @@
       min-height: 100vh;
       padding: 2rem;
       color: white;
+      overflow-x: hidden;
     }
 
     .container {
+      width: 100%;
       max-width: 1280px;
+      min-width: 0;
       margin: 0 auto;
     }
 
@@ -36,6 +39,7 @@
       align-items: center;
       gap: 1rem;
       margin-bottom: 0.5rem;
+      min-width: 0;
     }
 
     .pulse-dot {
@@ -55,12 +59,15 @@
       font-size: 1.5rem;
       font-weight: 700;
       letter-spacing: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .subtitle {
       color: #94a3b8;
       font-size: 0.875rem;
       margin-left: 1.75rem;
+      overflow-wrap: anywhere;
     }
 
     .diagram-container {
@@ -68,18 +75,20 @@
       border-radius: 1rem;
       border: 1px solid #1e293b;
       padding: 1.5rem;
-      overflow-x: auto;
+      max-width: 100%;
+      overflow: hidden;
     }
 
     svg {
       width: 100%;
-      min-width: 1080px;
+      height: auto;
+      min-width: 0;
       display: block;
     }
 
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
       gap: 1rem;
       margin-top: 2rem;
     }
@@ -89,6 +98,7 @@
       border-radius: 0.75rem;
       border: 1px solid #1e293b;
       padding: 1.25rem;
+      min-width: 0;
     }
 
     .card-header {
@@ -184,6 +194,21 @@
       background: rgba(51, 65, 85, 0.8);
       color: white;
       border-color: #475569;
+    }
+
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: 0.75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: 0.5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: 0.35rem; flex: 0 0 auto; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: 0.5rem 0 0; font-size: 0.7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: 0.35rem; border-radius: 8px; }
+      .cards { grid-template-columns: 1fr; gap: 0.75rem; margin-top: 1rem; }
+      .card { padding: 0.9rem; }
+      .footer { margin-top: 1rem; }
     }
 
     @media print {
@@ -415,6 +440,30 @@
   </div>
 
   <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({
+          type: 'cocoon-diagram:resize',
+          height: Math.ceil(root.getBoundingClientRect().height + padding)
+        }, window.location.origin);
+      });
+    }
+
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', (event) => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') {
+          reportEmbeddedSize();
+        }
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+
     async function captureReport() {
       const toolbar = document.querySelector('.toolbar');
       const wasExpanded = toolbar.classList.contains('expanded');

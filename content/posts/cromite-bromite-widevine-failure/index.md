@@ -137,16 +137,11 @@ Android path:
 
 下图按 Cocoon AI `architecture-diagram` 规范绘制，把 Chrome 进程边界、Cromite/Bromite 构建链和 Netflix/Widevine 信任链放在同一张图里。
 
-{{< rawhtml >}}
-<div style="border:1px solid #334155;border-radius:8px;overflow:hidden;background:#020617;margin:1.5rem 0;">
-  <iframe
-    src="/blogs/images/cromite-bromite-widevine/failure-path.html"
-    title="Cromite Bromite Widevine Failure Architecture"
-    loading="lazy"
-    style="width:100%;height:1050px;border:0;display:block;background:#020617;">
-  </iframe>
-</div>
-{{< /rawhtml >}}
+{{< cocoon-diagram
+  src="images/cromite-bromite-widevine/failure-path.html"
+  title="Cromite Bromite Widevine Failure Architecture"
+  height="1050"
+>}}
 
 *笔者最终拿到的不是一条 bypass path，而是一张 boundary map。所有失败路径最后都落到同一句话：没有建立一个被平台和服务端认可、能够消费 License 的 DRM 会话。*
 

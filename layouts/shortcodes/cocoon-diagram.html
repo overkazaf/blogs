@@ -1,0 +1,61 @@
+{{- $src := .Get "src" -}}
+{{- $title := .Get "title" | default "Architecture diagram" -}}
+{{- $fallbackHeight := .Get "height" | default "900" -}}
+<style>
+  .cocoon-diagram-embed {
+    width: 100%;
+    max-width: 100%;
+    margin: 1.5rem 0;
+    overflow: clip;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #020617;
+  }
+
+  .cocoon-diagram-embed iframe {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: {{ $fallbackHeight }}px;
+    border: 0;
+    background: #020617;
+    color-scheme: dark;
+  }
+
+  @media (max-width: 700px) {
+    .cocoon-diagram-embed {
+      margin: 1rem 0;
+    }
+  }
+</style>
+<div class="cocoon-diagram-embed">
+  <iframe
+    src="{{ $src | relURL }}"
+    title="{{ $title }}"
+    loading="lazy"
+    scrolling="no">
+  </iframe>
+</div>
+<script>
+  (() => {
+    const wrapper = document.currentScript.previousElementSibling;
+    const frame = wrapper && wrapper.querySelector('iframe');
+    if (!frame) return;
+
+    const frameOrigin = new URL(frame.src, window.location.href).origin;
+    const resizeFrame = (event) => {
+      const payload = event.data;
+      if (event.source !== frame.contentWindow || event.origin !== frameOrigin) return;
+      if (!payload || payload.type !== 'cocoon-diagram:resize') return;
+
+      const height = Number(payload.height);
+      if (!Number.isFinite(height) || height <= 0) return;
+      frame.style.height = `${Math.ceil(Math.max(320, Math.min(2400, height)))}px`;
+    };
+
+    window.addEventListener('message', resizeFrame);
+    frame.addEventListener('load', () => {
+      frame.contentWindow.postMessage({ type: 'cocoon-diagram:request-size' }, frameOrigin);
+    });
+  })();
+</script>
