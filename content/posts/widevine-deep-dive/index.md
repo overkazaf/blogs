@@ -2,7 +2,7 @@
 title: "一个 PSSH，为什么还拿不到 Key？ - Google Widevine 从 License Proxy 到 L1 的完整解剖"
 slug: "widevine-pssh-license-l1-deep-dive"
 date: 2026-08-22T14:00:00+08:00
-lastmod: 2026-08-24T17:05:00+08:00
+lastmod: 2026-08-24T17:18:00+08:00
 draft: false
 tags: ["Widevine", "DRM", "CENC", "CMAF", "ISOBMFF", "EME", "MediaDrm", "OEMCrypto", "L1", "PSSH", "protobuf", "security-research"]
 categories: ["security-research"]
@@ -23,7 +23,21 @@ math: false
 > - 用固定版本 Shaka Packager 对自有媒体做 CENC 实验，并用 Bento4、GPAC 与 PSSH parser 交叉检查结果
 > - 从攻击面而不是产品宣传评估 Widevine：L1 把风险压到了哪里，License Server 又可能怎样把整条链主动放空
 
-## 〇、摘要：我最初以为 protobuf 里总该有把 Key
+**阅读路线不必从头走到尾：**
+
+| 目标 | 推荐章节 | 可以先跳过 |
+|------|----------|------------|
+| 只想建立 Widevine 全局模型 | 一～三、九～十三 | Box 字段和实验命令 |
+| 正在实现 packager/parser | 四～八 | OTT 产品案例 |
+| 正在接 Chrome/Android 播放器 | 九～十三 | 研究论文和完整 Box 清单 |
+| 正在做 OTT 安全评审 | 十一～十五、十九 | 编译过程 |
+| 想搭建合法实验环境 | 十六～十九 | 产品业务对照 |
+
+## Part I：信令、容器与媒体数据
+
+从 PSSH 入口走到 CMAF/CENC 的逐 sample 字节映射。
+
+### 〇、摘要：我最初以为 protobuf 里总该有把 Key
 
 笔者第一次拆 Widevine PSSH 时，心态和拆 PlayReady PRO 时差不多：Base64 很长，里面又是二进制，真正的 License 或内容密钥大概就藏在深处。
 
@@ -51,7 +65,7 @@ Widevine 最容易制造的错觉就在这里：**协议里能被抓到的对象
 
 ---
 
-## 一、Widevine 不是“CDM 里做一次 AES”
+### 一、Widevine 不是“CDM 里做一次 AES”
 
 从播放器看，Widevine 的入口非常窄。Web 端是一个 Key System String：
 
@@ -69,7 +83,7 @@ Android 端则通常是一个 DRM UUID 加 `MediaDrm`。播放器创建 session�
 4. 内容密钥能否只在被认可的客户端状态中使用？
 5. 解密以后，压缩流、像素和显示输出还能经过哪些路径？
 
-### 1.1 六层模型
+#### 1.1 六层模型
 
 笔者把 Widevine 拆成六层：
 
@@ -86,7 +100,7 @@ Android 端则通常是一个 DRM UUID 加 `MediaDrm`。播放器创建 session�
 
 ---
 
-## 二、一张图看完 Widevine 的端到端信任链
+### 二、一张图看完 Widevine 的端到端信任链
 
 下图按 Cocoon AI `architecture-diagram` 规范绘制。蓝色是可以公开分发的媒体和元数据，红色是内容密钥与设备秘密，紫色是策略和授权状态。图中特意把 Partner License Proxy 单独画出来，因为这是理解 Widevine 服务端架构最关键、也最常被省略的一跳。
 
@@ -106,9 +120,9 @@ Android 端则通常是一个 DRM UUID 加 `MediaDrm`。播放器创建 session�
 
 ---
 
-## 三、从 MPD 到 protobuf：PSSH 里到底有什么
+### 三、从 MPD 到 protobuf：PSSH 里到底有什么
 
-### 3.1 DASH `ContentProtection`
+#### 3.1 DASH `ContentProtection`
 
 一个最小化的 Widevine DASH 信令大致如下：
 
@@ -133,7 +147,7 @@ Android 端则通常是一个 DRM UUID 加 `MediaDrm`。播放器创建 session�
 
 W3C 的 `cenc` Initialization Data 允许把一个或多个不同 SystemID 的 `pssh` box 串联起来交给 EME。这就是同一份 CENC 媒体能同时携带 Widevine、PlayReady 等多 DRM 初始化数据的基础。
 
-### 3.2 ISO BMFF `pssh` box
+#### 3.2 ISO BMFF `pssh` box
 
 PSSH v0 的核心布局：
 
@@ -149,7 +163,7 @@ data        data_size bytes
 
 PSSH v1 会在 `system_id` 后增加 `kid_count` 和 KID 数组。需要注意：v1 box 的 KID 列表与 Widevine protobuf 内部的 `key_id` 可以同时存在，它们属于不同层。实现 parser 时不能因为外层已有 KID 就跳过内层长度检查，也不能默认两处永远一致。
 
-### 3.3 `WidevinePsshData` 不是 License
+#### 3.3 `WidevinePsshData` 不是 License
 
 Shaka Packager 仓库公开了 Google 使用的 PSSH proto。略去注释后，结构可以概括为：
 
@@ -179,7 +193,7 @@ message WidevinePsshData {
 
 `KID` 可以出现在 MPD、`tenc`、PSSH v1 和 protobuf 里。它的工作是让系统知道“找哪把钥匙”，并不要求隐藏。`CK` 才是实际 AES 内容密钥，应留在 KMS、受保护 License 和客户端安全边界中。
 
-### 3.4 一个只读 metadata parser 应该检查什么
+#### 3.4 一个只读 metadata parser 应该检查什么
 
 在自有样本上做检查时，顺序最好固定：
 
@@ -195,9 +209,9 @@ PSSH 来自媒体和清单，本质上是攻击者可控输入。解析器的首
 
 ---
 
-## 四、CENC 数据面：加密相同，不等于安全相同
+### 四、CENC 与 ISO BMFF：先建立坐标系
 
-### 4.1 `cenc` 与 `cbcs`
+#### 4.1 `cenc` 与 `cbcs`
 
 Widevine 采用 ISO Common Encryption。现代工作流最常见的是：
 
@@ -208,7 +222,7 @@ Widevine 采用 ISO Common Encryption。现代工作流最常见的是：
 
 Google 的公开支持表明确显示，平台和系统版本对加密方案的支持不同。例如 Android 7+ 才进入官方 `cbcs` 支持范围，Media3 文档给出的 Widevine `cbcs` 最低要求是 Android 7.1 / API 25。打包时只看浏览器桌面测试通过，很容易在旧 Android、电视或嵌入式客户端上留下兼容性断层。
 
-### 4.2 一张图看清 Init Segment 与 Media Segment
+#### 4.2 一张图看清 Init Segment 与 Media Segment
 
 如果只按四字符名称背 box，`tenc`、`senc`、`saiz`、`saio` 很快就会混在一起。更有效的办法，是先把它们放回 ISO BMFF 的容器树，再沿引用关系找出“默认值、逐 sample 元数据和真正密文”分别位于哪里。
 
@@ -226,7 +240,7 @@ Google 的公开支持表明确显示，平台和系统版本对加密方案的�
 
 因此，`pssh` 不描述每个 sample 的字节布局，`senc` 也不负责告诉客户端去哪个 License Server。两者都叫“加密相关 box”，但处在完全不同的控制面。
 
-### 4.3 先理解 Box 与 FullBox
+#### 4.3 先理解 Box 与 FullBox
 
 ISO BMFF 是一棵带长度的 box 树。最普通的 box 头是：
 
@@ -256,7 +270,11 @@ flags     3 bytes
 | version/flags 未校验 | 按错误布局解释字段 |
 | unknown box 被错误拒绝 | 兼容性失败；正确做法通常是按长度安全跳过 |
 
-### 4.4 初始化段：`ftyp + moov` 定义稳定上下文
+---
+
+### 五、Init Segment：稳定默认值与 DRM 入口
+
+#### 5.1 `ftyp + moov` 定义稳定上下文
 
 典型 fragmented MP4/CMAF 初始化段可以抽象成：
 
@@ -302,7 +320,7 @@ moov
 
 `ftyp` 通过、codec 能识别、`pssh` 能解码，只说明容器和初始化信令基本成立。播放器还必须找到受保护 sample entry、有效 `tenc`，并在后续 fragment 中建立 sample 到 `mdat` 的映射。
 
-### 4.5 Protected Sample Entry：`encv/enca -> sinf -> tenc`
+#### 5.2 Protected Sample Entry：`encv/enca -> sinf -> tenc`
 
 加密视频通常把普通 codec sample entry 包在 `encv` 中，加密音频则使用 `enca`。真正的原始 codec 没有消失，而是由 `sinf/frma` 保存：
 
@@ -340,7 +358,11 @@ default_constant_iv           // when per-sample IV size is 0
 
 这里的 `default` 很关键。它不是“永远使用这组参数”，而是没有 sample group 覆盖时的 track 默认值。发生 key rotation 时，某些 sample 的有效 KID 可能来自 `sgpd(seig)`，而不是 `tenc.default_KID`。
 
-### 4.6 Media Segment：`moof` 描述，`mdat` 存密文
+---
+
+### 六、Media Segment：`moof` 描述，`mdat` 存密文
+
+#### 6.1 Fragment 的基础 Box 结构
 
 一个典型 fragmented media segment：
 
@@ -377,7 +399,9 @@ mdat
 
 `mdat` 不知道自己属于哪个 KID，也不知道哪些 NALU 字节保持 clear。它只是一段 payload。播放器必须先从 `tfhd/trun` 算出 sample 边界，再结合有效 encryption context 和 auxiliary info 才能正确解释。
 
-### 4.7 CMAF Fragment：从可寻址对象到低延迟 Chunk
+---
+
+### 七、CMAF Fragment：从可寻址对象到低延迟 Chunk
 
 CMAF 经常被一句“DASH 和 HLS 共用的 fMP4”带过，这句话方向没错，却省略了最关键的层级。CMAF 不是 codec、传输协议或 DRM；它是 ISO/IEC 23000-19 定义的**受约束 fragmented ISO BMFF 媒体格式**，让相同的媒体对象可以被 DASH、HLS 或其他交付协议引用。
 
@@ -389,7 +413,7 @@ CMAF 经常被一句“DASH 和 HLS 共用的 fMP4”带过，这句话方向没
   height="1160"
 >}}
 
-#### 4.7.1 六个名字分别处在哪一层
+#### 7.1 六个名字分别处在哪一层
 
 | CMAF 对象 | 核心含义 | 常见物理结构/映射 |
 |-----------|----------|-------------------|
@@ -415,7 +439,7 @@ CMAF Segment (addressable object)
 
 在最简单的单 Chunk Fragment 中，Segment、Fragment、Chunk 甚至可能落到同一组字节上；在低延迟直播中，一个较长 Segment 通常包含多个 Fragment 或 Chunk。DASH、HLS、MSE 和 CMAF 对“segment”的可寻址语义也不完全相同，所以看到 URL 名为 `segment_123.m4s`，不能反推里面必然只有一个 `moof`。
 
-#### 4.7.2 `moof + mdat` 是物理基础，不是完整语义判据
+#### 7.2 `moof + mdat` 是物理基础，不是完整语义判据
 
 DASH-IF 的公开 CMAF Ingest 文档专门提醒：`moof` 描述 `mdat` 中 sample 的播放和解码属性，一组 `moof/mdat` 根据对象结构和包含关系，可能被称为 CMAF Fragment，也可能是 CMAF Chunk。
 
@@ -429,7 +453,7 @@ DASH-IF 的公开 CMAF Ingest 文档专门提醒：`moof` 描述 `mdat` 中 samp
 
 W3C 的 MSE ISO BMFF byte-stream 约束进一步要求媒体段中的 `moof` 至少包含一个 `traf`，每个相关 `traf` 要有 `tfdt`，`trun` 引用的全部 sample 必须能在后续 `mdat` 中找到，并使用 movie-fragment relative addressing。浏览器不是“收到 `mdat` 就开始猜帧”，而是先消费 `moof` 建立 sample map，再按 offset 和 size 读取 payload。
 
-#### 4.7.3 Fragment 为什么是 ABR 切换边界
+#### 7.3 Fragment 为什么是 ABR 切换边界
 
 同一 Switching Set 内的 360p、720p、1080p Track 各自有独立 sample 和字节流，但 Fragment 边界需要在共同时间轴上对齐。典型切换过程是：
 
@@ -449,7 +473,7 @@ W3C 的 MSE ISO BMFF byte-stream 约束进一步要求媒体段中的 `moof` 至
 
 因此，Chunk 可以比 GOP 更短。Fragment 的第一个 Chunk 从随机访问 sample 开始，后续 Chunk 可以继续携带依赖同一 Fragment 早先参考帧的 sample。把每个 Chunk 都强行做成 IDR 会增加码率和编码损失，并不是低延迟的必要条件。
 
-#### 4.7.4 Chunk 为什么能降低直播延迟
+#### 7.4 Chunk 为什么能降低直播延迟
 
 传统 Segment 发布模型要等整个媒体段编码和封装完成后，才把对象暴露给播放器。Chunk 模型允许 packager 在一个短 sample 子集完成后就发布：
 
@@ -466,7 +490,7 @@ Apple 的 Low-Latency HLS 文档给出的说明性例子，是把 6 秒 parent s
 
 更小的 Chunk 也不会自动消除所有延迟。端到端延迟仍包含 encoder lookahead、GOP、packager flush、origin/CDN、manifest 可见性、网络抖动和播放器 buffer。只把 `segment_duration` 调小，却不改变发布、缓存和播放策略，常常只会制造更多小文件。
 
-#### 4.7.5 Widevine/CENC 如何跨越 Header 和 Fragment
+#### 7.5 Widevine/CENC 如何跨越 Header 和 Fragment
 
 CMAF 允许 sample 使用 MPEG Common Encryption。Widevine 在这条结构中的位置不是增加一个“Widevine Fragment”，而是把初始化与逐 sample 状态分散在两处：
 
@@ -484,7 +508,7 @@ CMAF Fragment / Chunk
 
 License Request/Response、设备 Provisioning 和 raw CK 都不属于 CMAF Fragment。即使每 200 ms 发布一个 Chunk，也不意味着每个 Chunk 都要请求一次 License；License 频率由 session、KID 集合、crypto period、renewal policy 和客户端缓存状态决定。工程上常把 key rotation 与 Segment/Fragment 边界对齐以降低状态复杂度，但仍应以实际 `tenc/seig/sbgp` 映射为准。
 
-#### 4.7.6 一个 Fragment parser 应验证什么
+#### 7.6 一个 Fragment parser 应验证什么
 
 在前文 Box 检查之外，CMAF 层还应增加这些跨对象约束：
 
@@ -501,7 +525,11 @@ License Request/Response、设备 Provisioning 和 raw CK 都不属于 CMAF Frag
 
 最后一条尤其重要。很多“偶发卡顿”“切清晰度黑屏”或“License 明明 usable 仍 decode error”的根因，不在 DRM，而在 manifest、Fragment timeline 和字节范围之间出现了一个 sample 的偏差。
 
-### 4.8 `saiz + saio + senc`：三个 box 如何拼成一条记录
+---
+
+### 八、样本加密元数据：从 IV 到 Key Rotation
+
+#### 8.1 `saiz + saio + senc`：三个 box 如何拼成一条记录
 
 这三个名称经常被一句“存 IV”带过，实际分工更精确：
 
@@ -538,7 +566,7 @@ trun
 
 Shaka Packager 当前的 fragmented MP4 写法让 `saio` 指向 `senc` 内的 sample encryption data，并把 `senc` 放在 `traf` 的末尾。但这是具体 muxer 的稳定实现行为，不应被 parser 偷换成“所有合法文件中 `senc` 必须永远位于最后”的无条件假设。
 
-### 4.9 `sgpd(seig) + sbgp`：key rotation 如何覆盖 `tenc`
+#### 8.2 `sgpd(seig) + sbgp`：key rotation 如何覆盖 `tenc`
 
 当一条 track 在不同 sample 范围使用不同 KID 时，重新写一个 `tenc` 不现实，因为 `tenc` 位于初始化段。CENC 使用 sample group 解决：
 
@@ -557,7 +585,7 @@ effective_encryption(sample) =
 
 因此，看到 MPD 或 `tenc` 中只有一个 default KID，不代表整个 segment 只使用一个 KID。要正确审计轮换，必须同时遍历 track/fragment level 的 `sgpd`、`sbgp`，并处理 group description index 的作用域。
 
-### 4.10 三组默认值的优先级
+#### 8.3 三组默认值的优先级
 
 fragmented MP4 的难点不仅是 box 多，还在于字段可以继承和覆盖。
 
@@ -586,7 +614,7 @@ encrypted sample entry encv/enca
 
 把这些继承关系写成明确的数据结构，比在解密循环里到处写 fallback 判断可靠得多。否则 parser 很容易在某个 optional flag 缺失时使用未初始化的 size、IV 或 KID。
 
-### 4.11 Box 级一致性检查清单
+#### 8.4 Box 级一致性检查清单
 
 对自己打包的文件，推荐按以下顺序检查：
 
@@ -605,7 +633,7 @@ encrypted sample entry encv/enca
 
 因此，“成功解析 PSSH”只证明你读懂了 DRM 初始化数据；“成功解析 `moov`”也只证明你得到了默认上下文。只有把 `moof` 的逐 sample mapping 和 `mdat` 字节范围一起验证，才算真正读懂了 CENC 数据面。
 
-### 4.12 多轨、多 KID 与密钥轮换
+#### 8.5 多轨、多 KID 与密钥轮换
 
 生产内容常见三种切分：
 
@@ -615,7 +643,7 @@ encrypted sample entry encv/enca
 
 这种切分不仅是密码学 hygiene，也让 License Service 能按设备能力和业务权利只签发一部分 key。服务端即使允许音频和 SD，也可以不给 UHD KID。客户端宣称支持 4K，并不意味着 License 里会出现 4K 对应的 key。
 
-### 4.13 多 DRM 的最弱路径效应
+#### 8.6 多 DRM 的最弱路径效应
 
 同一份 CMAF 资产可以让 Widevine 和 PlayReady 共用 CK，只放不同 PSSH/License 封装。这降低了存储和打包成本，也引入一个直接的安全后果：
 
@@ -625,7 +653,11 @@ encrypted sample entry encv/enca
 
 ---
 
-## 五、浏览器路径：EME 只接线，不交出 Key
+## Part II：客户端、设备身份与授权生命周期
+
+对照 Chrome、Android、Partner Proxy 和 Provisioning 四条状态线。
+
+### 九、浏览器路径：EME 只接线，不交出 Key
 
 在分别下钻 API 之前，先把 Chrome desktop 与原生 Android 放到同一张通信图里。两边的服务端 License loop 几乎同构，但本地调用会穿过完全不同的进程、HAL 与硬件边界。
 
@@ -643,7 +675,7 @@ encrypted sample entry encv/enca
 - Android 通过 `MediaDrm`、Binder、`DrmHal/CryptoHal` 和 AIDL vendor plugin 进入 Widevine/OEMCrypto；
 - 两边都先访问 Partner License Proxy，而不是从客户端直连 Widevine Cloud License Service。
 
-### 5.1 同一个 License Loop，两套本地 ABI
+#### 9.1 同一个 License Loop，两套本地 ABI
 
 | 阶段 | Chrome / EME | Android / MediaDrm |
 |------|--------------|--------------------|
@@ -657,7 +689,7 @@ encrypted sample entry encv/enca
 
 这张对照表也解释了一个常见误区：网络请求通常由应用层代码发出，不代表 License 是“发给 JavaScript”或“发给 Android App”的。应用只是协议搬运工；真正消费 response、建立 key status 和绑定 session 的是 CDM/DRM plugin。
 
-### 5.2 EME 的职责边界
+#### 9.2 EME 的职责边界
 
 浏览器侧典型流程：
 
@@ -674,7 +706,7 @@ navigator.requestMediaKeySystemAccess("com.widevine.alpha", configs)
 
 W3C EME 定义的是会话、消息、状态与能力协商，不定义 Widevine License 的生产字段，也不提供 `getRawKey()` 之类的 API。JavaScript 能看到的是 opaque message 和 key status；内容密钥是否能被软件进程触达，取决于具体 CDM 与平台安全实现，而不是网页权限。
 
-### 5.3 Chrome 里的进程边界
+#### 9.3 Chrome 里的进程边界
 
 Chromium 公开了 CDM shared-library interface，但正式 Widevine CDM 不是 Chromium 仓库里的完整开源实现。概念上可以分成：
 
@@ -707,7 +739,7 @@ session 通信是双向的：`CreateSessionAndGenerateRequest()` 把 init data �
 
 桌面软件 CDM 的现实约束也很清楚：如果密钥使用和解密长期发生在通用 CPU/普通进程，强混淆与完整性校验只能提高逆向成本，不能制造硬件隔离。ChromeOS、Android 和特定平台可能提供不同的硬件路径，因此“Chrome = L3”同样是过度概括。
 
-### 5.4 能力协商不是授权结果
+#### 9.4 能力协商不是授权结果
 
 EME configuration 里的 codec、robustness、persistent state 和 distinctive identifier 是客户端能力与隐私协商。服务端最终是否发 UHD/HDR key，还会结合设备状态、账号权利、内容策略和输出能力。
 
@@ -715,9 +747,9 @@ EME configuration 里的 codec、robustness、persistent state 和 distinctive i
 
 ---
 
-## 六、Android 路径：从 `MediaDrm` 到 OEMCrypto
+### 十、Android 路径：从 `MediaDrm` 到 OEMCrypto
 
-### 6.1 Framework 与 vendor plugin
+#### 10.1 Framework 与 vendor plugin
 
 AOSP 的 DRM 框架刻意保持实现无关。应用通过 `MediaDrm` 和 `MediaCrypto` 操作，`mediadrmserver` 创建 `DrmHal`/`CryptoHal`，再通过 AIDL DRM HAL 进入 vendor plugin。Android 13 起的新设备要求 binderized AIDL DRM HAL；Widevine 服务在设备 manifest 中通常以 `IDrmFactory/widevine`、`ICryptoFactory/widevine` 暴露。
 
@@ -736,7 +768,7 @@ Media3 / App
 
 加密 sample 可以一直保持密文，直到被送入 decoder。AOSP 还为 secure buffer 设计了跨 Binder 的 native handle 路径，目的就是避免高安全内容在普通应用地址空间里先变成明文再交给 codec。
 
-### 6.2 `IDrmPlugin` 与 `ICryptoPlugin` 为什么要分开
+#### 10.2 `IDrmPlugin` 与 `ICryptoPlugin` 为什么要分开
 
 AOSP 把控制面和数据面拆成两类 vendor interface：
 
@@ -766,7 +798,7 @@ AOSP 把控制面和数据面拆成两类 vendor interface：
 
 Provisioning 是另一条状态机。`NotProvisionedException` 或 provision-required event 出现时，应用取得 opaque `ProvisionRequest`，发送到其推荐 provisioning endpoint，再把 response 交回 `provideProvisionResponse()`。它解决设备凭据，不应和内容 License API 合并成一个“拿 key 请求”。
 
-### 6.3 `MediaDrm` 的公开安全枚举
+#### 10.3 `MediaDrm` 的公开安全枚举
 
 Android API 公开的不是简单三个等级，而是五种具体能力：
 
@@ -780,7 +812,7 @@ Android API 公开的不是简单三个等级，而是五种具体能力：
 
 `getSecurityLevel(sessionId)` 返回 session 当前级别，`requiresSecureDecoder(mime, level)` 则回答指定 codec/级别是否要求 secure decoder。这比读一个厂商字符串更适合做能力判断。
 
-### 6.4 L1/L2/L3 与 Android 枚举不能机械画等号
+#### 10.4 L1/L2/L3 与 Android 枚举不能机械画等号
 
 Widevine 业界常用的三层概念可以这样理解：
 
@@ -794,7 +826,7 @@ Widevine 业界常用的三层概念可以这样理解：
 
 最重要的一句是：**安全级别描述客户端执行能力，不直接定义内容分辨率。** `MediaDrm.openSession(level)` 的官方文档只说降低安全级别通常会被 License policy 限制到更低分辨率；“通常”不是“协议固定”。720p、1080p、4K 与 HDR 的门槛是服务方策略，不是 L1 字符串的数学函数。
 
-### 6.5 OEMCrypto 守的是什么
+#### 10.5 OEMCrypto 守的是什么
 
 Widevine 官方公开页只把 OEMCrypto、Keybox 和 Provisioning 标为设备集成组件，详细接口和合规要求属于授权资料。结合 AOSP 边界与公开研究，可以谨慎地描述其角色：
 
@@ -807,9 +839,9 @@ Widevine 官方公开页只把 OEMCrypto、Keybox 和 Provisioning 标为设备�
 
 ---
 
-## 七、License 控制面：为什么客户端不能直连 Google
+### 十一、License 控制面：为什么客户端不能直连 Google
 
-### 7.1 两种签发方式
+#### 11.1 两种签发方式
 
 Google 公开提供两种 Widevine License 签发模式：
 
@@ -830,7 +862,7 @@ Client request
 
 “License 生成后不可修改且针对请求设备个性化”意味着 Proxy 不能在返回途中随便把 SD License 改成 UHD，也不能把 A 设备响应换个 KID 后发给 B 设备。业务规则必须在签发前做完。
 
-### 7.2 Proxy 不是反向代理配置文件
+#### 11.2 Proxy 不是反向代理配置文件
 
 把 Proxy 只实现成 `POST /license -> upstream`，等于主动放弃 Widevine 架构给出的业务控制点。一个合格的授权面至少要绑定：
 
@@ -846,7 +878,7 @@ Client request
 
 最危险的实现不是“不懂 protobuf”，而是只验证 HTTP token，不验证 token、资产、KID 和设备证据是否属于同一授权上下文。
 
-### 7.3 生产 License 协议为何不应靠猜
+#### 11.3 生产 License 协议为何不应靠猜
 
 Widevine PSSH proto 和 Common Encryption Key API 的一部分在 Shaka Packager 中公开，但客户端生产 License message、设备证书、策略和 OEMCrypto 细节并没有形成一份等价于 PlayReady Header Specification 的完整公开规范。正式合作方应以 Widevine Portal、Proxy SDK 和 License Server SDK 随授权交付的文档为准。
 
@@ -854,9 +886,9 @@ Widevine PSSH proto 和 Common Encryption Key API 的一部分在 Shaka Packager
 
 ---
 
-## 八、Provisioning 与设备身份：License 到底发给谁
+### 十二、Provisioning 与设备身份：License 到底发给谁
 
-### 8.1 Provisioning 是 License 之前的信任建立
+#### 12.1 Provisioning 是 License 之前的信任建立
 
 Android `MediaDrm` 公开 API 明确区分 Provisioning 和 Key Request：
 
@@ -867,7 +899,7 @@ Android `MediaDrm` 公开 API 明确区分 Provisioning 和 Key Request：
 
 也就是说，Provisioning 不是“第一次 License 请求的别名”，而是向设备分发或更新设备唯一凭据的独立阶段。未 provision、凭据损坏或被撤销，都可能让后续授权直接失败。
 
-### 8.2 Keybox、设备证书和 L1 不应混成一个词
+#### 12.2 Keybox、设备证书和 L1 不应混成一个词
 
 公开 Widevine 概览把 Keybox 列为设备集成组件；历史 Android 研究又经常把设备身份根、keybox、WVD 文件和 provisioned certificate 混着说。更稳妥的边界是：
 
@@ -879,13 +911,13 @@ Android `MediaDrm` 公开 API 明确区分 Provisioning 和 Key Request：
 
 不同年代、平台和安全级别可能采用不同材料与封装。审计时应问“哪个 secret 是 root、存在哪里、如何更新和撤销”，而不是看到一个叫 keybox 的文件就断言掌握了整套设备信任。
 
-### 8.3 隐私边界
+#### 12.3 隐私边界
 
 设备身份越稳定，越容易成为跨站跟踪信号。Android 安全文档明确提到，浏览器中的 Widevine Client ID 会按应用包和 Web origin 返回不同值。EME 也把 distinctive identifier 与 persistent state 放进显式能力/权限模型。
 
 这说明 DRM 的隐私目标不是“设备没有身份”，而是尽量避免把同一个可链接标识无条件暴露给所有站点。公开研究已经指出浏览器实现偏差可能重新引入可链接性，因此隐私评审要覆盖浏览器/CDM 实现，而不能只看 EME 规范的理想流程。
 
-### 8.4 从 Provisioning 到 Secure Playback 的完整时序
+#### 12.4 从 Provisioning 到 Secure Playback 的完整时序
 
 把 Provisioning、License 和播放混在一张抓包时序里，很容易误判“第一次请求为什么没有 PSSH”，或者把设备证书响应当成内容 License。下面这张图把三段状态机拆开：
 
@@ -914,9 +946,9 @@ Android `MediaDrm` 公开 API 明确区分 Provisioning 和 Key Request：
 
 ---
 
-## 九、License 不只是一把 CK：时间、状态与输出
+### 十三、License Policy：时间、状态、输出与轮换
 
-### 9.1 Streaming、Offline 与 Release
+#### 13.1 Streaming、Offline 与 Release
 
 从 EME 和 `MediaDrm` 暴露的会话能力，可以把常见授权生命周期理解为：
 
@@ -928,13 +960,13 @@ Android `MediaDrm` 公开 API 明确区分 Provisioning 和 Key Request：
 
 离线 License 不是“把 Response 存个文件”。它还要处理设备绑定、安全时间、播放窗口、存储回滚、renewal 和 release。Android 提供 `getOfflineLicenseState()`、`removeOfflineLicense()` 等 API，本身就说明持久 License 是受 DRM 状态机管理的对象。
 
-### 9.2 Renewal 也是并发控制
+#### 13.2 Renewal 也是并发控制
 
 旧 Android API 中的 Secure Stop 曾用于确认 key session 生命周期；相关接口在 API 33 已被标记 deprecated，官方建议通过周期性 License renewal 管理并发播放。
 
 这揭示了一个实用设计：并发限制不必只靠“开始播放时计数 + 客户端退出时减一”。短租约和续租可以把掉线、进程崩溃和恶意不释放，转换成服务端可过期的 lease。代价是续租服务必须高可用，而且不能让网络抖动误伤正常播放。
 
-### 9.3 HDCP 与输出保护
+#### 13.3 HDCP 与输出保护
 
 Android `MediaDrm` 公开了 `getConnectedHdcpLevel()`、`getMaxHdcpLevel()`，错误码中也明确区分 `ERROR_INSUFFICIENT_OUTPUT_PROTECTION` 与 `ERROR_INSUFFICIENT_SECURITY`。这两类失败不应混为一谈：
 
@@ -943,11 +975,7 @@ Android `MediaDrm` 公开了 `getConnectedHdcpLevel()`、`getMaxHdcpLevel()`，�
 
 服务端策略还应考虑没有数字输出、显示热插拔、镜像、虚拟显示、远程桌面和 secure surface 变化。只在 License 签发瞬间检查一次 HDMI 状态，并不等于整个播放期间都满足输出保护。
 
----
-
-## 十、密钥轮换与 Live：把一次授权变成持续协议
-
-### 10.1 Crypto Period
+#### 13.4 Crypto Period：Live 把一次授权变成持续协议
 
 Shaka Packager 公开的 Widevine Common Encryption API 支持：
 
@@ -958,7 +986,7 @@ Shaka Packager 公开的 Widevine Common Encryption API 支持：
 
 在 Live 中，播放器需要在新 period 到来前拿到对应 key。轮换间隔太长，单次泄露窗口扩大；间隔太短，License QPS、CDM session 数、manifest 更新和边缘网络抖动会同时上升。
 
-### 10.2 轮换不等于自动撤销历史风险
+#### 13.5 轮换不等于自动撤销历史风险
 
 密钥轮换解决的是 blast radius 和时间分段，不会自动完成：
 
@@ -972,9 +1000,13 @@ Shaka Packager 公开的 Widevine Common Encryption API 支持：
 
 ---
 
-## 十一、哪些 OTT App 在使用 Widevine，它们实际保护什么
+## Part III：OTT 场景与安全评估
 
-### 11.1 先纠正“基于 Widevine 构建”这个说法
+先看主流服务如何使用，再按攻击面判断 Widevine 的真实边界。
+
+### 十四、哪些 OTT App 在使用 Widevine，它们实际保护什么
+
+#### 14.1 先纠正“基于 Widevine 构建”这个说法
 
 Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/overview) 直接列出了 Google Play、YouTube、Netflix、Disney+、Amazon Prime Video、HBO Max、Hulu、Peacock、Discovery+ 和 Paramount+。这足以证明它们是 Widevine 生态的公开合作方，但不能推出三个过度结论：
 
@@ -984,7 +1016,7 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 更准确的表述是：**这些 OTT 服务在 Chrome、Android、Android TV、Fire OS、部分智能电视等 Widevine 平台上，把 Widevine 作为多 DRM 交付矩阵中的一条内容保护路径。** 同一服务在 Apple 设备上通常需要 FairPlay，在 Windows、Xbox 或部分电视生态中还可能走 PlayReady。媒体资产可以共用 CENC/CMAF，License 和设备信任路径则按平台分开。
 
-### 11.2 十类公开确认的服务与典型场景
+#### 14.2 十类公开确认的服务与典型场景
 
 下表中的“Widevine 承载点”是根据公开架构做的边界映射，不代表服务商公开了每个内部 License 字段。具体功能会随地区、套餐、标题和设备变化。
 
@@ -1003,7 +1035,7 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 这里最值得观察的不是品牌数量，而是**同一个 DRM 状态机如何承载不同商业模型**。
 
-### 11.3 五种业务场景，五组不同的 License 重点
+#### 14.3 五种业务场景，五组不同的 License 重点
 
 **订阅 VOD。** Netflix、Disney+、Max 一类服务更关心套餐是否覆盖当前标题、设备是否允许目标分辨率、License 多久续一次，以及外接显示链是否满足 HDCP。Widevine 可以执行 key usage 与输出策略，但“用户有没有订阅”仍由 Partner Proxy 判断。
 
@@ -1015,7 +1047,7 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 **UHD/HDR 与 Living Room。** 高价值档位通常要求更强的 device robustness、secure decoder 和输出保护。YouTube 的公开 Living Room 设备要求把 1080p 以上 High Value Content 与 Widevine L1、secure hardware decode 和 HDCP 关联；Netflix 的帮助文档也把 4K 外接显示链与 HDCP 2.2 放在同一组前提中。这说明“拿到 License”与“允许输出目标画质”是两个独立门槛。
 
-### 11.4 Widevine 明确不负责什么
+#### 14.4 Widevine 明确不负责什么
 
 一次 OTT 安全评审如果只画 DRM，会漏掉更大的业务面：
 
@@ -1029,7 +1061,7 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 这些控制可以影响 Partner Proxy 是否签发、签发哪些 KID、License 多长、是否要求 L1/HDCP，却不是 Widevine CDM 自动提供的功能。反过来，业务 token 做得再复杂，也不能替代 secure key use 和 protected media path。
 
-### 11.5 评估一个 OTT App 时应该问什么
+#### 14.5 评估一个 OTT App 时应该问什么
 
 1. 当前平台实际选择了 Widevine、PlayReady 还是 FairPlay，是否存在降级路径？
 2. SD、HD、UHD/HDR、音频是否使用不同 KID 与不同安全策略？
@@ -1044,9 +1076,9 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 ---
 
-## 十二、从安全角度评估 Widevine
+### 十五、从安全角度评估 Widevine
 
-### 12.1 它真正做强的地方
+#### 15.1 它真正做强的地方
 
 Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需要同时成立的条件：
 
@@ -1059,13 +1091,13 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 它并不保证攻击不可能，而是努力把“复制一段响应即可无限扩散”变成高成本、设备相关、容易观测且可以撤销的对抗。
 
-### 12.2 网络攻击者
+#### 15.2 网络攻击者
 
 网络侧可以看到域名、时序、包长和加密媒体流量，但 HTTPS 保护 License Proxy 传输。即使在受控客户端上看到完整 Request/Response，设备个性化和 session 状态也应阻止把响应搬到另一设备直接使用。
 
 剩余风险主要在：TLS 终止点、代理日志、调试抓包配置、错误遥测、CDN token 和 License API 的认证授权。尤其要检查 APM 是否把 opaque License body 当“便于排障的 payload”持久化。
 
-### 12.3 控制 Web App 或普通 Android 进程的攻击者
+#### 15.3 控制 Web App 或普通 Android 进程的攻击者
 
 这类攻击者可以改 JavaScript、hook EME/`MediaDrm` 调用、观察 IPC 和网络，也可以伪造 UI 层 capability。对 L3，秘密和攻击者长期处于同一通用执行环境，安全性很大程度依赖实现复杂度、混淆、完整性与快速撤销。
 
@@ -1077,7 +1109,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 - secure decoder 和 protected surface 不能被替换成普通输出而保持同等授权；
 - TEE 调用严格校验 handle、长度、session 和 nonce。
 
-### 12.4 L1 把攻击面搬到了哪里
+#### 15.4 L1 把攻击面搬到了哪里
 
 “进入 TEE”是边界变化，不是安全证明。L1 的残余风险包括：
 
@@ -1091,7 +1123,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 这也是为什么安全等级不能只靠客户端上报。License Service 需要基于受认证的设备/实现状态做决策，并保留按 OEM、model、build、CDM version 和 credential 批次快速降级的能力。
 
-### 12.5 License Proxy 与 KMS 往往更脆
+#### 15.5 License Proxy 与 KMS 往往更脆
 
 | 风险 | 后果 | 防御重点 |
 |------|------|----------|
@@ -1105,7 +1137,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 客户端投入再多，KMS 返回接口如果能被普通应用凭据调用，或者 Proxy 能为任意 KID 附加宽松规则，整条硬件信任链都会被服务端主动绕开。
 
-### 12.6 公开研究给出的边界
+#### 15.6 公开研究给出的边界
 
 近年来的 Widevine 研究大致分成四类：
 
@@ -1118,9 +1150,13 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 ---
 
-## 十三、一个合法、可重复的 Widevine 实验室
+## Part IV：实验、参考实现与审计清单
 
-### 13.1 实验目标
+最后处理可复现实验、项目选型、多 DRM 对照与落地检查项。
+
+### 十六、一个合法、可重复的 Widevine 实验室
+
+#### 16.1 实验目标
 
 ```text
 自有 clear MP4
@@ -1133,7 +1169,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 raw key 实验只能验证 CENC 数据面和 Widevine 信令。它不会凭空生成受 Google 信任的 Device Credential、Cloud License 权限或生产 CDM。
 
-### 13.2 固定 Shaka Packager 版本
+#### 16.2 固定 Shaka Packager 版本
 
 本文固定 `v3.9.3`，避免 main branch 继续变化后命令和产物无法对齐：
 
@@ -1180,7 +1216,7 @@ cmake -B build-musl -G Ninja \
 
 为了让实验可复现，至少记录：tag、完整 commit、submodule revision、编译器版本、CMake 版本、host OS 和最终 `packager --version` 输出。
 
-### 13.3 打包自己的测试媒体
+#### 16.3 打包自己的测试媒体
 
 下面 KID/key 仅是公开文档占位值，只能用于自己生成的测试内容：
 
@@ -1213,7 +1249,7 @@ label=AUDIO:key_id=ffeeddccbbaa99887766554433221100:key=0f0e0d0c0b0a090807060504
 
 不要把实验 raw key 放进 shell history、CI 日志或生产命令。生产打包应从 KMS/Key Service 取得 key，并将 packager 身份限制为只访问当前 asset/track 所需材料。
 
-### 13.4 使用 Widevine Key Service 的参数边界
+#### 16.4 使用 Widevine Key Service 的参数边界
 
 Shaka Packager 支持 `--enable_widevine_encryption`，配合：
 
@@ -1228,7 +1264,7 @@ Shaka Packager 支持 `--enable_widevine_encryption`，配合：
 
 这组参数属于获得 Widevine 权限的内容提供方工作流。`signer` 与签名 key 是组织凭据，不是播放器侧 License，也不应出现在前端、示例仓库或普通构建日志中。没有正式 Cloud Service/合作方测试权限时，停留在 raw key + 自有内容实验即可。
 
-### 13.5 交叉检查产物
+#### 16.5 交叉检查产物
 
 ```bash
 ./build/packager/packager --dump_stream_info input=video_cenc.mp4
@@ -1251,7 +1287,7 @@ python3 build/packager/pssh-box.py \
 
 同一个 packager 同时负责写和读，可能让同一实现缺陷互相“证明正确”。用 Bento4、GPAC 和 Shaka 自带 PSSH 工具交叉验证，价值远高于换三种 Base64 网站。
 
-### 13.6 播放侧实验
+#### 16.6 播放侧实验
 
 浏览器可使用 Shaka Player，Android 可使用 Media3 ExoPlayer demo。实验应用只应负责：
 
@@ -1267,9 +1303,9 @@ observe key status, renewal, HDCP and decoder errors
 
 ---
 
-## 十四、参考项目地图：谁能证明哪一层
+### 十七、参考项目地图：谁能证明哪一层
 
-### 14.1 Google、Android 与标准
+#### 17.1 Google、Android 与标准
 
 | 项目/规范 | 层 | 用途 | 注意事项 |
 |-----------|----|------|----------|
@@ -1282,7 +1318,7 @@ observe key status, renewal, HDCP and decoder errors
 | [W3C EME](https://www.w3.org/TR/encrypted-media-2/) | Browser API | Key System、session、message、key status | 不定义 Widevine License payload |
 | [W3C CENC Init Data](https://www.w3.org/TR/eme-initdata-cenc/) | Init Data | 多 PSSH 串联与处理规则 | 连接 CENC 与 EME |
 
-### 14.2 打包、解析与播放
+#### 17.2 打包、解析与播放
 
 | 项目 | 角色 | Widevine 相关能力 | 推荐用法 |
 |------|------|--------------------|----------|
@@ -1298,7 +1334,7 @@ observe key status, renewal, HDCP and decoder errors
 
 FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Widevine CDM、License Client 或 OEMCrypto 实现。`ffprobe` 能列出 encrypted track，不等于“FFmpeg 支持 Widevine”。
 
-### 14.3 研究项目与论文
+#### 17.3 研究项目与论文
 
 | 项目/论文 | 范围 | 研究价值 | 边界 |
 |-----------|------|----------|------|
@@ -1313,7 +1349,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 
 ---
 
-## 十五、和 PlayReady 放在一起看
+### 十八、和 PlayReady 放在一起看
 
 | 维度 | Widevine | PlayReady |
 |------|----------|-----------|
@@ -1330,7 +1366,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 
 ---
 
-## 十六、实现和审计时最值得记住的十二条
+### 十九、实现和审计时最值得记住的十二条
 
 1. Widevine PSSH 的 SystemID 固定，但 PSSH 不是 License，更不是 CK。
 2. `key_id` 可以公开；它是索引，不是 AES key。
@@ -1347,7 +1383,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 
 ---
 
-## 十七、结语：真正的边界在 PSSH 之后
+### 二十、结语：真正的边界在 PSSH 之后
 
 回到开头那段 protobuf。
 
