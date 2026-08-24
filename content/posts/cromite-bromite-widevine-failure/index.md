@@ -1,35 +1,45 @@
 ---
-title: "Cromite / Bromite 不是 Widevine 后门 - 浏览器分叉、流导出与视频合成失败复盘"
+title: "源码都在手里，为什么还是过不了 Widevine？ - Cromite/Bromite 流导出失败全记录"
 slug: "cromite-bromite-widevine-stream-export-failure"
 date: 2026-08-23T04:15:00+08:00
-lastmod: 2026-08-23T04:15:00+08:00
+lastmod: 2026-08-24T01:30:00+08:00
 draft: false
 tags: ["Cromite", "Bromite", "Chromium", "Chrome", "Widevine", "Netflix", "EME", "DRM", "GN", "CENC", "security-research"]
 categories: ["security-research"]
-description: "从 Chromium 分叉的编译、GN 参数和媒体栈边界出发，复盘使用 Cromite/Bromite 获得 Widevine 能力、导出加密媒体流并合成视频为何失败，并分析 Netflix 在 MSL、EME/CDM、License、设备能力与安全输出上的分层保护。"
+description: "拿到 Chromium 源码、打开 proprietary codecs、改 UA、截 MSE、拼 fMP4，为什么仍然过不了 Widevine？一份从 Cromite/Bromite 编译链一路撞到 Netflix License 与安全输出边界的失败记录。"
 toc: true
 math: false
 ---
 
 > **读完本文，你将获得：**
-> - 看懂 Chrome/Chromium、Cromite/Bromite、EME、Widevine CDM 和平台 DRM 的职责边界
-> - 能按版本固定、补丁应用、GN 配置和 Ninja 目标复现 Cromite/Bromite 的构建过程
-> - 明确 `proprietary_codecs=true` 为什么不等于“启用 Widevine”
-> - 理解网络分片导出、MSE 截获、能力伪装和视频 remux 为什么都没有跨过内容密钥边界
-> - 从 MSL、License、设备能力、CENC、CDM 和安全输出六个层面评估 Netflix 的防护设计
+> - 看清 Chrome/Chromium、Cromite/Bromite、EME、Widevine CDM 和平台 DRM 到底是谁管谁
+> - 按版本、补丁、GN 参数和 Ninja 目标复现 Cromite/Bromite 的构建过程
+> - 弄明白为什么 “official build” 与 “Chrome codecs” 都不等于 Widevine
+> - 跟着六次碰壁，看网络抓流、MSE 截获、UA 伪装和视频 remux 分别死在哪一层
+> - 从 MSL、License、设备能力、CENC、CDM 和安全输出六条链评估 Netflix 的防护
 
-## 〇、摘要与研究边界
+## 〇、摘要：这条路线死在了编译之前
 
-这是一篇**失败路径复盘**，不是 DRM 绕过教程。目标是验证一个看似合理的假设：既然 Cromite 和 Bromite 都是可修改、可自行编译的 Chromium 分叉，那么是否可以通过改变媒体能力、EME 接口或网络管线，获得 Chrome 的 Widevine 播放能力，再把媒体流导出并合成为普通视频？
+事情的起点很简单。
 
-结论是否定的，而且失败点比“视频无法合成”更早：
+Chrome 的 Widevine CDM 是一个黑盒，直接改 Chrome 又太重。Cromite 和 Bromite 恰好站在中间：它们是 Chromium 分叉，源码在手里，补丁在手里，GN 参数也在手里。笔者最初把路线排得很顺：**编译浏览器 → 打开 proprietary codecs → 伪装 Chrome 能力 → 截获 Fetch/MSE 分片 → FFmpeg 合成视频**。
 
-1. **当前 Cromite 官方明确不支持 DRM 媒体**，因此通常在 `requestMediaKeySystemAccess("com.widevine.alpha", ...)` 的 Key System 能力发现阶段就无法建立 Widevine 会话。
-2. `proprietary_codecs=true` 和 `ffmpeg_branding="Chrome"` 只影响 H.264/AAC 等容器与编解码能力，不会生成 CDM、设备证书、Widevine provisioning、License 权限或安全输出能力。
-3. 即使能够在浏览器网络层或 MSE 入口导出 Netflix 分片，得到的仍是 CENC 加密的 fMP4 数据；拼接或 remux 只能重组容器，不能替代 CDM 解密。
-4. Netflix 的授权不是一个客户端布尔开关。Web Player、MSL 控制面、EME、Widevine CDM、License policy、设备安全等级、manifest/profile 和输出保护共同决定最终可播放的轨道。
+每一步单独看都很合理，连起来却犯了一个致命错误：笔者把“能改浏览器”误当成了“能控制 DRM 信任链”。
 
-本文对证据作如下分级，避免把推断写成 Netflix 内部事实：
+第一盆冷水来得比预想中快。还没等 Chromium 开始吃满 CPU，Cromite FAQ 里一句很短的回答就把路线从中间截断了：**Does Cromite support DRM media? No.**
+
+到这里，严格意义上的“绕过实验”已经在第 0 步失败。浏览器甚至没有建立 `com.widevine.alpha` 会话，后面的 License、内容密钥、解密帧和视频合成自然无从谈起。
+
+但这次失败没有白费。恰恰相反，它暴露了几个很容易混在一起的问题：
+
+1. 为什么 Bromite 旧文档里写过 protected media，而 Cromite 现在明确说不支持 DRM？
+2. 为什么 `proprietary_codecs=true`、`ffmpeg_branding="Chrome"` 都打开了，Widevine 还是不存在？
+3. Android 本身有 `MediaDrm`，为什么 Chromium 分叉不能自然继承设备上的 Widevine？
+4. 就算把 Netflix 的 fMP4 分片全部抓下来，为什么 FFmpeg 仍然只能得到一堆“结构正确的密文”？
+
+本文就是沿着这四个问题继续往下拆。它不是一份可工作的 DRM 绕过教程，而是一份**把错误假设逐层证伪的工程记录**。
+
+为了不把公开资料、实验观察和对 Netflix 的猜测搅成一锅，本文继续沿用三种证据等级：
 
 | 标记 | 含义 | 本文示例 |
 |------|------|----------|
@@ -37,13 +47,17 @@ math: false
 | **工程观察** | 来自本仓库前文或可在授权测试媒体上观察 | 网络/MSE 边界拿到的是加密分片；remux 后仍需密钥 |
 | **架构推断** | 根据协议行为和安全目标推导，未声称是生产内部实现 | Netflix 可能关联 CDM、平台、输出和会话遥测做风险决策 |
 
-> 本文写作期间没有在本机完成一次数小时级的 Chromium 全量编译。下面的构建流程来自 Cromite/Bromite 与 Chromium 官方构建资料，并按可复现性重新整理；版本、补丁应用和产物验证步骤均给出，但不把“文档可复现”冒充“本机已经构建成功”。
+> **关于“失败记录”的边界**：本文写作期间没有在本机完成一次数小时级的 Chromium 全量编译，也没有伪造一段“Netflix 成功起播后再失败”的日志。下面的构建命令来自 Cromite/Bromite 与 Chromium 官方 workflow，笔者逐项核对了版本、参数展开、目标和产物位置。失败结论建立在项目明确不提供 DRM、EME/CDM 架构边界以及 CENC 数据路径上，而不是一段想象出来的终端输出。
 
 ---
 
 ## 一、Chrome、Cromite、Bromite 与 Widevine 的真实边界
 
-最容易产生误判的地方，是把“浏览器源码可控”等同于“DRM 信任链可控”。实际架构至少分成四个所有权边界：
+“Cromite 是 Chromium fork”这句话只说对了一半。
+
+对的一半是：Blink、Fetch、MSE、EME glue、Mojo、媒体路由和大量 UI 都能改。错的一半是：Google Chrome 并不等于开源 Chromium 加一张图标，Widevine 更不是 `args.gn` 里一个等着打开的布尔值。
+
+笔者一开始忽略的，正是下面四个所有权边界：
 
 | 层 | Chrome/Chromium 中的对象 | 分叉能否直接修改 | 与 Widevine 的关系 |
 |----|--------------------------|------------------|--------------------|
@@ -52,24 +66,28 @@ math: false
 | **CDM/平台 DRM 层** | Widevine CDM、Android `MediaDrm`、provisioning | 通常不能由开源分叉重建 | 处理 challenge、License、密钥和解密策略 |
 | **服务端授权层** | Netflix MSL、manifest、License policy、账户与设备策略 | 不能 | 决定给什么轨道、什么 License、什么输出限制 |
 
-Chrome 是 Google 发布的产品，Chromium 是其主要开源代码基础。Cromite/Bromite 能修改 Chromium 的浏览器层，但不因此获得 Chrome 发行版附带或集成的专有组件、签名、设备凭据和服务端授权。
+Chrome 是 Google 发布的产品，Chromium 是其主要开源代码基础。Cromite/Bromite 能修改 Chromium 的浏览器层，但不会因为一次 `gn gen` 就凭空获得 Chrome 发行版集成的专有组件、签名、设备凭据和服务端授权。
 
 ### 1.1 Bromite 与 Cromite 不是同一个时代的安全基线
+
+笔者最先翻的是 Bromite，因为旧 README 里那句 **ask permission to play protected media** 实在太诱人。顺着这句话往下看，很容易脑补出一条不存在的路线：Bromite 已经有 DRM，只是默认关着；把权限和 codec 打开，也许就能起播。
+
+继续对版本和补丁后，这个判断站不住了。
 
 **Bromite** 是 Android Chromium 隐私分叉，提供去 Google 集成、广告过滤、反指纹和媒体相关补丁。其仓库当前 `build/RELEASE` 仍为 `108.0.5359.156`。它适合用来理解 Cromite 的历史来源和补丁演进，但不应作为 2026 年连接互联网的安全浏览器基线：Chromium 108 与当前浏览器安全修复之间已经有巨大版本差距。
 
 **Cromite** 是延续 Bromite 思路的活跃分叉，覆盖 Android、Linux 和 Windows。本文核验时其 `build/RELEASE` 为 `148.0.7778.168`。Cromite 不只是“换品牌的 Bromite”：补丁集合、平台范围、构建参数和当前 Chromium API 都已经变化，旧 Bromite 的结论不能直接套用。
 
-尤其需要注意两项公开事实：
+这里有两处特别容易被旧资料带偏：
 
 - Bromite 旧 README 中曾有“播放受保护媒体前询问权限”的功能描述，这只能说明历史 UI/权限行为，不能证明当前分叉包含可用 Widevine。
 - [Cromite FAQ](https://github.com/uazo/cromite/blob/master/docs/FAQ.md) 当前直接回答 DRM 支持为 **No**，理由涉及外部 DRM License 是否绑定设备及其删除语义不明确。
 
-因此，把 Cromite 当作“更容易插桩的 Chrome”是合理的研究起点；把它当作“自带可用 Widevine 的开源 Chrome”则是错误前提。
+所以，Cromite 可以是一把很好用的 Chromium 手术刀，却不是“自带 Widevine 的开源 Chrome”。这两个定位只差几个字，后面的研究路线却完全不同。
 
 ### 1.2 Chrome 下典型的 EME/CDM 进程架构
 
-Chrome 的具体类名和服务拆分会随 Chromium 版本变化，但从公开 EME 接口和 Chromium 多进程模型看，受保护媒体可以按以下稳定职责理解：
+确认项目状态后，笔者重新画了一遍 Chrome 的调用链。具体类名和服务拆分会随 Chromium 版本变化，但从公开 EME 接口和 Chromium 多进程模型看，受保护媒体始终绕不开下面这些角色：
 
 ```text
 Renderer process
@@ -101,15 +119,23 @@ Android path:
 | CDM utility/平台 DRM | challenge、License response、受保护 key state、decrypt 请求 | 页面可读的裸 key API |
 | Decoder/GPU/Surface | 解密后的压缩 sample 或解码帧，取决于安全等级 | 任意可复制的高价值输出 |
 
-桌面 Chrome 通常通过 CDM host 接口和隔离进程集成 Widevine；Android Chrome 更多依赖系统 `MediaDrm`、`MediaCrypto`/Crypto 与 `MediaCodec` 的安全能力。两条路径都不是 Blink 或 FFmpeg 单独完成的。
+桌面 Chrome 通常通过 CDM host 接口和隔离进程集成 Widevine；Android Chrome 更多依赖系统 `MediaDrm`、`MediaCrypto`/Crypto 与 `MediaCodec` 的安全能力。**两条路径都不是 Blink 或 FFmpeg 单独完成的。**
 
-对 Cromite/Bromite 而言，能够修改的是 renderer、browser/media glue、Mojo 路由和 build flag。若没有被该发行版支持的 Key System 注册、CDM/平台适配、provisioning 和 License 信任，调用链会停在 capability 或 session 初始化阶段。Android 系统里存在 `MediaDrm` API，也不代表任意 Chromium 分叉会自动、完整地把 Widevine 暴露给网页。
+对 Cromite/Bromite 而言，笔者真正能碰到的是 renderer、browser/media glue、Mojo 路由和 build flag。后面那段 Key System 注册、CDM/平台适配、provisioning 和 License 信任不成立，调用链就会停在 capability 或 session 初始化阶段。
+
+这也回答了一个很自然的问题：Android 系统里明明有 `MediaDrm`，为什么网页还是拿不到 Widevine？因为“系统存在 DRM 插件”和“这个浏览器发行版正确、完整、受支持地把插件暴露给 EME”之间，还有一整层产品集成与信任关系。API 在那里，不等于你的浏览器自动拥有使用权。
 
 ---
 
 ## 二、失败链路总览
 
-下面的架构图按 Cocoon AI 风格的 `architecture-diagram` 规范绘制。左侧是可控的 Chromium 分叉和构建链，中间是浏览器与 DRM 的信任边界，右侧是 Netflix 的控制面、License 和 CDN，底部是四条导出尝试及其失败原因。
+如果只记住本文的一张图，应该是下面这张。
+
+左边是笔者原以为“已经全部拿到手”的部分：Chromium 源码、Cromite/Bromite patch、GN 和 Ninja。中间是浏览器真正能控制的 EME 与媒体管线。再往右，颜色变成红色：Widevine CDM、设备 provisioning、License 和安全输出从这里开始不再听 `args.gn` 的。
+
+底部四个红框，就是这条路线最后留下的四种失败产物：加密 fMP4、CDM 前的密文、没有设备信任的能力伪装，以及无法随意读取的安全输出。
+
+下图按 Cocoon AI `architecture-diagram` 规范绘制，把 Chrome 进程边界、Cromite/Bromite 构建链和 Netflix/Widevine 信任链放在同一张图里。
 
 {{< rawhtml >}}
 <div style="border:1px solid #334155;border-radius:8px;overflow:hidden;background:#020617;margin:1.5rem 0;">
@@ -122,15 +148,21 @@ Android path:
 </div>
 {{< /rawhtml >}}
 
-*浏览器分叉能控制 EME 调用之前的网页和媒体管线，也能观察进入 MSE 的加密字节；但 CDM、设备身份、License policy 与安全输出位于另一组信任边界中。所有失败路径最终都卡在“没有获得可授权、可使用的内容密钥”。*
+*笔者最终拿到的不是一条 bypass path，而是一张 boundary map。所有失败路径最后都落到同一句话：没有建立一个被平台和服务端认可、能够消费 License 的 DRM 会话。*
 
 ---
 
 ## 三、Cromite 的可复现编译流程
 
+既然 FAQ 已经说了不支持 DRM，为什么还要把编译过程写这么细？
+
+因为这次研究最容易出现的第二个误判，就是拿一份旧 Bromite 的 `args.gn`、一篇几年前的 Chromium 教程和当前 Cromite master 拼在一起，编译失败后把锅甩给 Widevine。那不是 DRM 结论，只是版本污染。
+
+笔者对照 Cromite 当前 `HOW_TO_BUILD` 和 release workflow，把真正参与构建的版本、参数展开顺序、目标与产物重新走了一遍。下面这部分的目的不是证明 Widevine 可用，而是先把**浏览器本身是否按正确方式构建**这个变量排除掉。
+
 ### 3.1 先固定三组版本
 
-Chromium 分叉的构建不能只记录“拉取 master”。至少固定：
+第一条规则很朴素：不要只记录“拉取 master”。Chromium 这种体量的项目里，这句话几乎等于没有记录。至少固定：
 
 ```text
 Cromite patch commit  -> 决定补丁内容与顺序
@@ -138,7 +170,7 @@ build/RELEASE          -> 决定 Chromium 基线 tag
 depot_tools revision   -> 决定 fetch/gclient/gn 工具行为
 ```
 
-建议先记录版本，而不是立刻编译：
+笔者建议先把版本钉死，再让机器开始烧时间：
 
 ```bash
 git clone https://github.com/uazo/cromite.git cromite
@@ -155,7 +187,7 @@ printf 'version=%s\ncommit=%s\n' "$CROMITE_VERSION" "$CROMITE_COMMIT"
 
 ### 3.2 路线 A：使用官方 ready-to-build 容器
 
-这是最稳妥的复现方式。Cromite [HOW_TO_BUILD](https://github.com/uazo/cromite/blob/master/docs/HOW_TO_BUILD.md) 规定镜像格式为：
+如果目标是复现官方发布物，而不是研究 Chromium 构建系统本身，ready-to-build 容器是最稳妥的起点。Cromite [HOW_TO_BUILD](https://github.com/uazo/cromite/blob/master/docs/HOW_TO_BUILD.md) 规定镜像格式为：
 
 ```text
 uazo/cromite-build:(VERSION)-(COMMIT)
@@ -219,7 +251,9 @@ out/arm64/bin/chrome_public_apk install
 
 ### 3.3 路线 B：从 Chromium 基线手工应用补丁
 
-手工路线更适合审计补丁影响，但更容易因 Chromium/depot_tools 漂移失败。先按 [Chromium Android build instructions](https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md) 准备 `depot_tools` 和源码，再切换到 `build/RELEASE` 指定的 tag：
+容器路线解决的是“尽量和官方 CI 一样”；手工路线解决的是“我需要知道每个 patch 到底改了什么”。代价也很直接：Chromium、depot_tools 和 patch commit 只要漂移一个，`git am` 就会立刻给你颜色看。
+
+先按 [Chromium Android build instructions](https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md) 准备 `depot_tools` 和源码，再切换到 `build/RELEASE` 指定的 tag：
 
 ```bash
 mkdir chromium-work
@@ -243,7 +277,7 @@ sed 's/#.*//' "$CROMITE_ROOT/build/cromite_patches_list.txt" \
     done
 ```
 
-任何 patch 冲突都意味着“版本/commit/工具链至少有一项不匹配”。不应跳过失败 patch 后继续编译，因为很多后续 patch 依赖前面的 API、branding 或 build flag。
+这里不要“先跳过，后面再说”。任何 patch 冲突都意味着版本、commit、工具链至少有一项不匹配；很多后续 patch 又依赖前面的 API、branding 或 build flag。强行继续，最后即使 Ninja 产出 APK，也已经不是你以为的 Cromite。
 
 ### 3.4 生成 Android ARM64 配置
 
@@ -299,7 +333,18 @@ Windows 版使用 Linux 交叉构建时，还需要 Cromite `tools/images/win-sd
 
 ## 四、Cromite GN 参数逐组说明
 
-完整参数应以当前 commit 的 [`build/cromite.gn_args`](https://github.com/uazo/cromite/blob/master/build/cromite.gn_args) 为准。下面只列安全和媒体分析最相关的组。
+这次最危险的误导，不在某段 C++，而在几个看起来特别像答案的 GN 参数：
+
+```gn
+is_official_build = true
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+use_official_google_api_keys = false
+```
+
+第一次看到它们时，笔者也很容易把前 3 行连成一句话：**official Chrome build + proprietary codecs，也许 Widevine 就在后面。**
+
+实际上一行都不能这么读。完整参数应以当前 commit 的 [`build/cromite.gn_args`](https://github.com/uazo/cromite/blob/master/build/cromite.gn_args) 为准，下面逐组拆开。
 
 ### 4.1 构建形态
 
@@ -312,7 +357,7 @@ Windows 版使用 Linux 交叉构建时，还需要 Cromite `tools/images/win-sd
 | `chrome_pgo_phase` | 支持目标为 `2` | 使用 PGO 优化；要求相匹配的 profile 数据 |
 | `treat_warnings_as_errors` | `true` | 警告视为错误，减少补丁静默漂移 |
 
-`is_official_build=true` 的名字很容易误导。它表示 Chromium 的构建模式，不代表该二进制变成 Google Chrome，也不授予 Google API key、Widevine CDM 或 Netflix 支持资格。
+`is_official_build=true` 是这组参数里名字最唬人的一个。它表示 Chromium 的构建模式，不是 Google 给这份二进制盖了章，更不会附送 Google API key、Widevine CDM 或 Netflix 支持资格。
 
 ### 4.2 媒体与 codec
 
@@ -327,7 +372,9 @@ Windows 版使用 Linux 交叉构建时，还需要 Cromite `tools/images/win-sd
 | `enable_platform_hevc` | Android/Windows `true` | 启用平台 HEVC 路径 |
 | `enable_platform_encrypted_dolby_vision` | `false` | 不构建对应加密 Dolby Vision 平台路径 |
 
-这组参数解决的是“拿到明文样本后能否解析和解码”。Widevine 解决的是“谁有权把加密样本变成明文样本”。二者在媒体管线中相邻，但不是同一能力。
+这组参数解决的是“**拿到明文压缩 sample 之后**，浏览器能不能解析和解码”。Widevine 解决的是“**谁有权把密文 sample 变成明文 sample**”。
+
+两者在媒体管线里挨得很近，名字也都和“视频能不能播”有关，所以特别容易被混成一件事。可安全边界偏偏就夹在它们中间。
 
 ### 4.3 Google 集成、隐私与安全
 
@@ -339,13 +386,15 @@ Windows 版使用 Linux 交叉构建时，还需要 Cromite `tools/images/win-sd
 | `enable_request_header_integrity=false` | 关闭 Google Request Header Integrity | 不替代 CDM challenge/License 验证 |
 | `enable_bound_session_credentials=false` | 关闭浏览器绑定会话凭据能力 | 与 Widevine 设备 provisioning 不是同一层 |
 
-Windows 当前参数还设置 `is_cfi=false`、`use_cfi_cast=false`，而旧 Bromite Android 参数使用 `is_cfi=true`、`use_cfi_cast=true`。这说明两个项目不能只凭名称继承安全评价：必须按平台、版本和实际 GN 输出审计。
+还有一个细节很能说明问题：Windows 当前参数设置了 `is_cfi=false`、`use_cfi_cast=false`，旧 Bromite Android 参数却使用 `is_cfi=true`、`use_cfi_cast=true`。同一个家族、不同年代、不同平台，安全基线已经不是一回事。只说“它是 Bromite 的后继”没有审计价值，最终还是得看 `gn args --list --short` 的真实输出。
 
 ---
 
 ## 五、Bromite 的历史构建方式与风险
 
-Bromite 的构建模型与 Cromite 相同：
+Bromite 是这次考古里最容易让人产生希望、也最容易把人带沟里的部分。
+
+它的 README 同时出现过 protected media、all codecs included、Chrome branding 等字眼。单独摘出来，每一个都像“Widevine 只差最后一个开关”。把源码版本、GN 参数和补丁列表放回同一张桌面后，真实情况简单得多：Bromite 的构建模型与 Cromite 相同，仍然是 Chromium 基线加有序 patch，而不是一套自带 DRM 的浏览器内核。
 
 ```text
 Chromium RELEASE tag
@@ -394,83 +443,98 @@ use_cfi_cast = true
 use_official_google_api_keys = false
 ```
 
-这些参数仍然没有声明或实现 Widevine CDM。`all codecs included`、protected-media UI 和 DRM preprovisioning 补丁也不能证明存在可授权的 `com.widevine.alpha` 实现。
+笔者逐项对照后，没有在这里找到 Widevine CDM 的声明或实现。`all codecs included` 说的是 codec，protected-media UI 说的是权限交互，DRM preprovisioning 补丁说的是隐私策略。三个线索都和 DRM 沾边，却没有一个等价于“存在可授权的 `com.widevine.alpha`”。
 
-安全上更严重的问题是版本老化：本文核验到 Bromite 基线为 Chromium 108。即使历史 APK 能启动，它也不应被用于登录真实账户、加载不受信任网页或作为 Netflix 研究环境。合理用途是离线补丁考古、源码差分和构建系统研究。
+更现实的风险反而不是 Widevine，而是版本老化：本文核验到 Bromite 基线停在 Chromium 108。即使历史 APK 还能启动，也不该拿它登录真实账户、加载不受信任网页，更不该为了一个尚不存在的 DRM 开关，把旧浏览器暴露到今天的 Web 上。
 
----
-
-## 六、失败尝试复盘
-
-### 6.1 尝试一：打开 proprietary codecs
-
-**假设：** H.264/AAC/HEVC 能力打开后，Netflix 页面就会把浏览器视为 Chrome。
-
-**结果：** 只解决 codec capability，不解决 Key System。EME 标准把 `requestMediaKeySystemAccess()` 作为选择内容解密系统的入口；[W3C EME](https://www.w3.org/TR/encrypted-media-2/) 也明确说明 EME 不是 DRM 系统本身，除 Clear Key 基线外，实现其他 DRM 不是规范强制要求。
-
-**失败原因：** codec 是解码明文压缩数据的能力；CDM 是获取和使用内容密钥的受控组件。前者不能代替后者。
-
-### 6.2 尝试二：把 User-Agent 和能力声明伪装成 Chrome
-
-**假设：** 修改 UA、codec 列表或 manifest profile 请求即可获得 Chrome 轨道。
-
-**结果：** 客户端声明可能影响网页前端分支或 manifest 候选，但不能创建真实 CDM、设备 provisioning、可接受的 License challenge 或对应输出保护。
-
-**失败原因：** Netflix 公开的[浏览器支持矩阵](https://help.netflix.com/en/node/30081)列出 Chrome、Edge、Firefox、Opera、Safari 等产品，Cromite/Bromite 不在支持列表中。“Blink 行为相似”与“受支持且能完成 DRM 授权”是两件事。
-
-### 6.3 尝试三：在 Fetch/MSE 前导出媒体分片
-
-**假设：** 浏览器必须下载视频，抓到响应 body 或 `SourceBuffer.appendBuffer()` 参数就等于拿到视频。
-
-**结果：** 可以观察或导出的通常是 CENC 加密 fMP4。容器中可能仍有 `pssh`、`tenc`、`senc`、`saiz`、`saio` 等加密相关 box，但媒体 sample 不是明文。
-
-**失败原因：** MSE 负责时间线和 buffer，EME/CDM 负责受控解密。网络层和 MSE 输入位于 CDM 之前，导出的正是被设计为可公开缓存和传输的密文。
-
-### 6.4 尝试四：直接拼接音视频分片
-
-**假设：** 将 init segment 和 media segments 按顺序拼接，再交给 FFmpeg remux，即可生成 MP4。
-
-**结果：** 容器结构可能被修复，音视频时间戳也可能被重新组织，但 sample 仍然加密。播放器会继续要求 Key System 或报解码错误。
-
-**失败原因：** remux 只改变封装，不执行被授权的 CENC 解密。轨道选择、ABR 切换、时间戳、音视频同步确实是合成问题，但它们都排在密钥问题之后。
-
-### 6.5 尝试五：修改 EME glue 或跳过网页检查
-
-**假设：** Cromite 源码可控，可以让 `requestMediaKeySystemAccess()` 假装成功。
-
-**结果：** 伪造 JavaScript/浏览器层返回值最多创建一个“接口看似存在”的状态；后续 `MediaKeys`、session message、License update、decrypt 和 key status 仍需要真实 CDM 状态机。
-
-**失败原因：** EME 是控制接口，不是解密实现。跳过前端检查只会把失败点从 capability negotiation 推迟到 session 或 decrypt。
-
-### 6.6 尝试六：从解密后输出边界导出
-
-**假设：** 合法播放最终必须出现明文帧，因此可在 decoder/GPU/Surface 之前导出。
-
-**结果：** 这是理论上唯一跨过“加密分片”问题的方向，但 Cromite 当前因无 DRM 支持，实验并未到达该阶段。即使在有 DRM 的平台上，安全级别、secure decoder、Surface、GPU 和 HDCP 策略也可能限制明文 CPU 可见性。
-
-Android [`MediaDrm`](https://developer.android.com/reference/android/media/MediaDrm) 将安全能力区分为软件安全加密、软件安全解码、硬件安全加密、硬件安全解码和 `HW_SECURE_ALL`。最高等级下，密钥管理、密码运算、解码及压缩/未压缩媒体处理都可位于硬件支持的可信执行环境中。降低安全等级以操纵解密帧，通常又会被 License policy 限制到更低分辨率。
-
-**失败原因：** 浏览器层可修改不代表安全解码输出对 CPU 可读；而当前 Cromite 路线甚至没有建立 Widevine 会话。
+所以笔者最后给 Bromite 的定位是：**适合离线补丁考古，不适合在线 DRM 实验。**
 
 ---
 
-## 七、Netflix 如何分层设计与保护
+## 六、六条路线是怎样一条条死掉的
+
+先说明一下记录方式：由于 Cromite 在 Key System 阶段已经没有 Widevine，下面不是六段伪造的“运行日志”，而是笔者按攻击链逐层验证的六个假设。第一条由项目能力直接否定；后五条结合 EME/CENC 数据路径和前文 Chrome CDM 研究，回答“就算强行把失败点往后推，还会在哪里撞墙”。
+
+### 6.1 第一个诱饵：proprietary codecs
+
+最先让笔者产生错觉的是这两行：
+
+```gn
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+```
+
+H.264、AAC、HEVC 都有了，Netflix 页面是不是就会把它当 Chrome？
+
+不会。它们只解决 codec capability。EME 标准把 `requestMediaKeySystemAccess()` 作为选择内容解密系统的入口；[W3C EME](https://www.w3.org/TR/encrypted-media-2/) 也明确说明，EME 自己不是 DRM，除 Clear Key 基线外，规范并不要求浏览器实现其他 Key System。
+
+这次碰壁把两个问题彻底分开了：**codec 回答“明文怎么解码”，CDM 回答“你凭什么得到明文”。** 前一个参数开得再全，也不会生出后一个信任链。
+
+### 6.2 第二个诱饵：把自己说成 Chrome
+
+既然 codec 不够，下一个很自然的想法就是改 User-Agent、codec 列表和 manifest profile。毕竟网页应用里，大量兼容性判断就是字符串和能力探测。
+
+这条路不是完全没效果。客户端声明确实可能改变前端分支，甚至影响 manifest 候选。问题是它改变的只是“我说我是谁”，而不是“CDM 和设备证明我是谁”。真实 Widevine 会话还需要 Key System、CDM、device provisioning、License challenge 和输出能力。
+
+Netflix 公开的[浏览器支持矩阵](https://help.netflix.com/en/node/30081)列出 Chrome、Edge、Firefox、Opera、Safari 等产品，Cromite/Bromite 不在其中。**Blink 长得像 Chrome，不等于它获得了 Chrome 的 DRM 身份。**
+
+### 6.3 第三条路：浏览器总得下载视频吧？
+
+到这里，思路通常会从“骗过能力检查”转向“直接拿流”。逻辑听起来无懈可击：浏览器不下载数据就没法播放，那我在 Fetch response 或 `SourceBuffer.appendBuffer()` 前面截下来不就行了？
+
+这一步其实能拿到东西，而且往往拿得很完整：init segment、音频分片、视频分片、时间线信息都在。只是十六进制编辑器不会替你撒谎，里面仍然能看到 `pssh`、`tenc`、`senc`、`saiz`、`saio` 这些 CENC 痕迹，media sample 本身仍是密文。
+
+原因很直接：MSE 管 buffer 和时间线，EME/CDM 管受控解密。Fetch 和 `appendBuffer()` 都站在 CDM 前面。这里能截住的是 Netflix 本来就允许 CDN、代理和缓存节点搬运的数据，不是解密后的画面。
+
+### 6.4 第四条路：也许只是没拼对？
+
+抓到一堆 `.m4s` 后，最容易继续浪费时间的地方是 FFmpeg 参数。先接 init segment，再排 media segment；音视频分开 remux；修时间戳；对齐 ABR 切换点。容器甚至可能真的被修成一个结构漂亮的 MP4。
+
+然后播放器仍然要求 Key System，或者在第一个加密 sample 上报错。
+
+这一刻很容易误以为“还差一个 box”。其实 box 已经够了，缺的是 key。remux 能修封装、轨道和时间戳，却不会执行一次被授权的 CENC 解密。**视频合成不是主阻塞点，它只是排在密钥之后的工程问题。**
+
+### 6.5 第五条路：源码在手，干脆让 EME 返回成功
+
+Cromite 最诱人的地方又出现了：既然浏览器源码可改，能不能让 `requestMediaKeySystemAccess()` 假装支持 `com.widevine.alpha`，或者直接跳过网页的失败分支？
+
+当然可以让一个布尔值变绿，也可以伪造一个“接口看起来存在”的状态。但下一步 `MediaKeys` 要创建 session，session 要产生 message，License response 要进入 `update()`，key status 要由 CDM 更新，media sample 最后还要真的 decrypt。
+
+EME 是插座，不是发电机。把插座面板上的指示灯焊亮，只会把错误从 capability negotiation 推迟到 session 或 decrypt，不会让墙后面凭空多出一台 Widevine CDM。
+
+### 6.6 最后一条路：那就等它解密以后再拿
+
+前五条都绕不开内容密钥，于是只剩下一个真正跨过密文边界的方向：合法播放最终必须出现声音和画面，能否在 decoder、GPU 或 Surface 之前截获解密后的输出？
+
+这条思路在笔者前面的 Chrome CDM 研究中是有意义的，因为目标 Chrome 确实能建立 Widevine 会话，分析才有机会走到 CDM 输出边界。但放到 Cromite 上，链路在更早的位置已经断掉，根本没有“解密后”可供 hook。
+
+即使换到具备 DRM 的 Android 平台，事情也不会自动变简单。[`MediaDrm`](https://developer.android.com/reference/android/media/MediaDrm) 把安全能力区分为软件安全加密、软件安全解码、硬件安全加密、硬件安全解码和 `HW_SECURE_ALL`。最高等级下，密钥、密码运算、解码乃至未压缩媒体处理都可以留在硬件支持的可信执行环境中。为了操纵帧而主动降低安全等级，License policy 又通常会把内容限制到更低分辨率。
+
+所以最后一条路的结论不是“明文永远不存在”，而是：**浏览器源码可控，不代表高价值明文会出现在普通 CPU 可读的 buffer 里；而当前 Cromite 路线甚至没有资格走到这扇门前。**
+
+---
+
+## 七、Netflix 为什么不怕你改浏览器
+
+走完前面的失败链后，问题已经从“Cromite 能不能播放 Netflix”变成了另一个更有价值的问题：**Netflix 为什么敢把 Web Player、manifest 请求和加密分片都交给一个用户完全控制的浏览器？**
+
+答案不是它相信浏览器，而是它从来没有把授权押在浏览器的某一个字段上。笔者把这套设计拆成六层来看。
 
 ### 7.1 控制面：Web Player 与 MSL
 
-Netflix Web Player 负责登录态、设备/浏览器能力收集、播放会话、manifest 请求和 License 流程编排。本仓库的 [Netflix MSL 协议分析](/blogs/posts/netflix-msl-protocol-reverse-engineering/) 已说明：MSL 可以为控制消息提供实体认证、用户绑定、加密、完整性和可选防重放，但安全性取决于认证机制、密钥存放和服务端状态。
+第一层是 Web Player 和 MSL。Web Player 负责登录态、设备/浏览器能力收集、播放会话、manifest 请求和 License 流程编排。本仓库的 [Netflix MSL 协议分析](/blogs/posts/netflix-msl-protocol-reverse-engineering/) 已说明：MSL 可以为控制消息提供实体认证、用户绑定、加密、完整性和可选防重放，但安全性取决于认证机制、密钥存放和服务端状态。
 
-MSL 的作用不是直接加密每个视频 sample。它保护的是“谁在请求什么播放上下文、manifest 或 License 相关消息”，媒体数据本身通常由 CENC + CDM 链路保护。
+这里最容易犯的错误，是把 MSL 当成“Netflix 视频加密算法”。它保护的是“谁在请求什么播放上下文、manifest 或 License 相关消息”，不是亲自加密每个视频 sample。媒体数据走的是另一条 CENC + CDM 链。
 
 ### 7.2 能力面：manifest/profile 不是单一真值
 
-Netflix 可以根据浏览器、OS、codec、分辨率、HDR、DRM robustness 和输出能力选择候选轨道。客户端 profile 声明是输入之一，但服务端不应把它当成唯一可信事实。
+第二层是 manifest/profile。Netflix 可以根据浏览器、OS、codec、分辨率、HDR、DRM robustness 和输出能力选择候选轨道。客户端 profile 声明确实是输入之一，这也是修改 profile 有时能看到 manifest 变化的原因；但它不应该是唯一可信事实。
 
-**架构推断：** 生产系统很可能将客户端声明与 CDM challenge、License 请求、平台能力、账户策略和播放遥测做一致性检查。本文没有 Netflix 内部实现证据，因此只把这种联动作为符合安全目标的推断，而非已证实字段级规则。
+**架构推断：** 笔者认为生产系统很可能将客户端声明与 CDM challenge、License 请求、平台能力、账户策略和播放遥测做一致性检查。本文没有 Netflix 内部实现证据，所以这只是符合安全目标的工程推断，不是“已经逆出某个服务端字段”。
 
 ### 7.3 Key System：EME 只负责接线
 
-页面通过 EME 请求 `com.widevine.alpha`，浏览器检查候选 codec、session type、robustness 和 distinctive identifier/persistent state 等要求，再交给 CDM。此处至少有三种独立失败：
+第三层才轮到 EME。页面请求 `com.widevine.alpha`，浏览器检查候选 codec、session type、robustness 和 distinctive identifier/persistent state 等要求，再把工作交给 CDM。光是这一步就有三种完全不同的死法：
 
 ```text
 浏览器没有注册 Widevine Key System
@@ -478,25 +542,25 @@ CDM 存在但版本/ABI/平台集成不匹配
 CDM 能启动但设备 provisioning 或 License 被拒绝
 ```
 
-因此，“把某个二进制放进目录”或“让接口返回 true”都不足以形成完整信任链。
+所以，“把某个二进制放进目录”和“让接口返回 true”都只是把零件摆在桌上，还远没有形成一条能工作的信任链。
 
 ### 7.4 License 与设备能力
 
-CDM 生成的 challenge 可以携带实现和设备相关的受保护信息；License server 根据内容、账户、设备和策略返回 CDM 可消费的响应。Android 官方文档明确说明 provisioning server 可分发设备唯一凭据，设备 DRM 插件也暴露安全等级和 HDCP 等能力。
+第四层是 License 和设备能力。CDM 生成的 challenge 可以携带实现和设备相关的受保护信息；License server 根据内容、账户、设备和策略返回 CDM 可消费的响应。Android 官方文档明确说明 provisioning server 可分发设备唯一凭据，设备 DRM 插件也暴露安全等级和 HDCP 等能力。
 
-这解释了为什么浏览器 fork 不能只复制网络请求：License 不是通用内容密钥文件，而是发给特定 DRM 会话和策略环境的数据。
+这正是复制网络请求很难奏效的地方：License 不是一个谁拿到都能用的“通用内容密钥文件”，而是交给特定 DRM 会话和策略环境消费的数据。
 
 ### 7.5 数据面：CDN 可以公开分发密文
 
-Netflix CDN 的核心任务是高效分发 init segment 和加密媒体 segment。因为 CENC sample 在离开 CDN 时已经是密文，缓存、分片抓取和多 CDN 传输不需要信任终端网络。
+第五层反而最开放：CDN。它的任务就是高效分发 init segment 和加密 media segment。因为 CENC sample 离开 CDN 时已经是密文，缓存节点、代理和终端网络都不需要被信任。
 
-这一设计把“可扩展分发”与“授权解密”解耦：攻击者拿到全部分片并不等于拿到播放权。也正因如此，网络导出在工程上可以成功，而内容导出仍失败。
+这是一处很漂亮的工程解耦：分发可以尽量开放，解密必须严格授权。也正因如此，网络导出可以成功得非常彻底，内容导出却仍然停在原地。
 
 ### 7.6 解密、解码与输出保护
 
-License 成功后，CDM 将 key status 与 session 关联，并按 CENC subsample 信息解密。高价值轨道还可能要求更强 robustness、secure decoder 或输出保护。EME 规范允许 key 因输出限制而处于不可用状态；Android 的安全级别也表明“可解密”不等于“明文帧可由普通应用内存读取”。
+第六层是最靠近画面的地方：解密、解码和输出。License 成功后，CDM 将 key status 与 session 关联，并按 CENC subsample 信息解密。高价值轨道还可能要求更强 robustness、secure decoder 或输出保护。EME 规范允许 key 因输出限制而处于不可用状态；Android 的安全级别也表明“可解密”不等于“明文帧可由普通应用内存读取”。
 
-因此 Netflix 的防护不是一堵墙，而是串联约束：
+把六层连起来看，Netflix 的防护不是一堵厚墙，而是一串互相咬合的约束：
 
 ```text
 账户/会话
@@ -509,11 +573,15 @@ License 成功后，CDM 将 key status 与 session 关联，并按 CENC subsampl
   -> secure decode / output policy
 ```
 
-只修改其中一个客户端字段，不能同时满足后面的约束。
+笔者最初想改的 UA、codec 和 profile，只在这条链的最前面。后面任何一环不认账，前面的伪装就只是换了一张名片。
 
 ---
 
 ## 八、从安全角度评估这套设计
+
+从攻击者视角看，这套设计最有效的地方不是某一层“绝对不可破”，而是它迫使你不断换战场。
+
+改浏览器，只碰到 EME 外壳；抓网络，只拿到 CENC；骗 profile，还要面对 License；拿到 License，后面还有 CDM 与输出保护。每一层都不必单独做到完美，只要让上一层的低成本成果不能直接复用，整体成本就会被抬起来。
 
 ### 8.1 防守优势
 
@@ -528,7 +596,7 @@ License 成功后，CDM 将 key status 与 session 关联，并按 CENC subsampl
 
 ### 8.2 仍然存在的固有边界
 
-DRM 无法消除“授权播放最终产生声音和图像”这一事实。软件安全等级下，明文边界通常更接近可控用户态；硬件安全等级能把边界推向 TEE、secure decoder 和受保护 Surface，但不能改变最终必须显示给用户的语义。
+当然，这并不意味着 DRM 获得了某种“明文永不出现”的魔法。授权播放最终必须产生声音和图像。软件安全等级下，明文边界通常更接近可控用户态；硬件安全等级能把边界推向 TEE、secure decoder 和受保护 Surface，却不能改变画面最后要被人眼看到这个事实。
 
 这意味着安全目标应表述为：
 
@@ -537,7 +605,7 @@ DRM 无法消除“授权播放最终产生声音和图像”这一事实。软�
 - 让客户端篡改需要同时跨越浏览器、CDM、设备和服务端策略；
 - 通过会话、并发、异常请求和遥测控制大规模滥用。
 
-它不是“数学上保证任何终端都无法录制”。模拟输出、屏幕采集、受攻陷终端和实现漏洞仍属于残余风险，只是质量、规模和自动化成本不同。
+所以更准确的评价不是“Netflix 能保证任何终端都无法录制”，而是“它能把高质量、可规模化、可自动化的提取推到更昂贵的边界”。模拟输出、屏幕采集、受攻陷终端和实现漏洞仍然存在，只是质量、规模和自动化成本不同。
 
 ### 8.3 对 Cromite/Bromite 路线的最终判断
 
@@ -554,7 +622,7 @@ DRM 无法消除“授权播放最终产生声音和图像”这一事实。软�
 
 ## 九、合规的复现实验建议
 
-要验证本文的媒体管线结论，不需要也不应使用未授权的 Netflix 内容或尝试提取生产内容密钥。可以建立三组对照：
+这次路线虽然失败了，但完全可以把失败做成一个干净的三组对照实验，而且不需要碰任何未授权的 Netflix 内容或生产内容密钥：
 
 1. **普通 MP4/WebM**：验证 Fetch -> MSE -> decoder -> frame 的基本链路。
 2. **自有 Clear Key CENC 测试资产**：验证 `pssh`/init data、EME session、License response、加密分片和授权解密。
@@ -581,21 +649,25 @@ async function probeWidevine() {
 }
 ```
 
-这个探测只回答“浏览器是否能提供候选 Key System 配置”，不证明某个商业服务会签发 License，也不尝试绕过任何授权。
+这段 probe 很克制，它只回答一个问题：浏览器能否提供候选 Key System 配置。返回 `supported: true` 不代表 Netflix 会签发 License；返回 `false` 却足以告诉你，后面的抓流和 remux 还没资格开始。
 
 ---
 
 ## 十、结论
 
-Cromite/Bromite 的价值在于让 Chromium 浏览器层可审计、可修改、可构建；它们不是 Widevine 的开源替代品，也不是 Chrome DRM 信任链的后门。
+笔者最初想找的是一条 bypass path，最后得到的却是一张 boundary map。
 
-这次失败复盘最重要的技术结论有三个：
+这不是一句安慰话。安全研究里，知道一条路为什么走不通，往往比收集一堆“也许可以”的参数更有价值。Cromite/Bromite 让 Chromium 浏览器层可审计、可修改、可构建，这已经足够有用；但它们不是 Widevine 的开源替代品，也不是 Chrome DRM 信任链的后门。
+
+回头看，整次研究真正推翻了三个错觉：
 
 1. **编解码能力与 DRM 能力必须分开验证。** `ffmpeg_branding="Chrome"` 能改变 codec 配置，但不会创建 `com.widevine.alpha`、设备证书或 License 权限。
 2. **流导出成功不等于内容导出成功。** Fetch/MSE 前的分片本来就可以被缓存和复制，安全性建立在 CENC 密文和 CDM 授权解密上。
 3. **Netflix 的保护是跨层组合。** MSL 管控制消息，EME 负责标准接线，Widevine/平台 DRM 管密钥和安全级别，License/manifest 管服务端策略，secure decode/output 管明文边界。
 
-所以失败不是出在 FFmpeg 命令不够复杂，也不是视频合成参数不正确。真正的断点是：**浏览器分叉没有获得一个被平台和服务端共同认可、能够消费 License 并输出合规明文样本的 DRM 会话。**
+所以问题从来不是 FFmpeg 命令还不够复杂，也不是少拼了一个 MP4 box。真正的断点发生在视频合成之前很远的地方：**浏览器分叉没有获得一个被平台和服务端共同认可、能够消费 License 并输出合规明文 sample 的 DRM 会话。**
+
+源码在手，当然意味着你可以改很多东西。但 DRM 的意义恰恰是提醒你：**能改代码，不等于能改信任。**
 
 ---
 
