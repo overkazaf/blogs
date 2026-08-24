@@ -2,7 +2,7 @@
 title: "一个 PSSH，为什么还拿不到 Key？ - Google Widevine 从 License Proxy 到 L1 的完整解剖"
 slug: "widevine-pssh-license-l1-deep-dive"
 date: 2026-08-22T14:00:00+08:00
-lastmod: 2026-08-24T16:52:00+08:00
+lastmod: 2026-08-24T17:05:00+08:00
 draft: false
 tags: ["Widevine", "DRM", "CENC", "CMAF", "ISOBMFF", "EME", "MediaDrm", "OEMCrypto", "L1", "PSSH", "protobuf", "security-research"]
 categories: ["security-research"]
@@ -14,6 +14,7 @@ math: false
 > **读完本文，你将获得：**
 > - 分清 MPD、PSSH、WidevinePsshData、KID、CK 和 License，不再把一段 Base64 当成内容密钥
 > - 看懂 `moov/trak/stsd/sinf/tenc` 与 `moof/traf/saiz/saio/senc/mdat` 的完整层级和引用关系
+> - 分清 CMAF Header、Segment、Fragment 与 Chunk，理解低延迟发布、ABR 切换和 CENC 元数据如何落到同一条时间轴
 > - 看懂客户端为什么不能直接访问 Widevine License Service，以及合作方 License Proxy 真正承担什么职责
 > - 对照 Chrome 与 Android 双泳道通信图，理解 EME/Mojo/CDM 与 MediaDrm/AIDL HAL/OEMCrypto 两条接入路径
 > - 严格区分 Widevine L1/L2/L3、Android 五级安全枚举、分辨率授权和 HDCP 输出策略
@@ -376,7 +377,131 @@ mdat
 
 `mdat` 不知道自己属于哪个 KID，也不知道哪些 NALU 字节保持 clear。它只是一段 payload。播放器必须先从 `tfhd/trun` 算出 sample 边界，再结合有效 encryption context 和 auxiliary info 才能正确解释。
 
-### 4.7 `saiz + saio + senc`：三个 box 如何拼成一条记录
+### 4.7 CMAF Fragment：从可寻址对象到低延迟 Chunk
+
+CMAF 经常被一句“DASH 和 HLS 共用的 fMP4”带过，这句话方向没错，却省略了最关键的层级。CMAF 不是 codec、传输协议或 DRM；它是 ISO/IEC 23000-19 定义的**受约束 fragmented ISO BMFF 媒体格式**，让相同的媒体对象可以被 DASH、HLS 或其他交付协议引用。
+
+先看完整结构：
+
+{{< cocoon-diagram
+  src="images/widevine-deep-dive/cmaf-fragment-anatomy.html"
+  title="CMAF Fragment, Chunk and CENC Anatomy"
+  height="1160"
+>}}
+
+#### 4.7.1 六个名字分别处在哪一层
+
+| CMAF 对象 | 核心含义 | 常见物理结构/映射 |
+|-----------|----------|-------------------|
+| **Presentation** | 一组在 presentation timeline 上同步的音频、视频和字幕选择 | DASH MPD 或 HLS Master/Media Playlist 组织 |
+| **Switching Set** | 同一内容的替代编码，允许在约束满足时无缝切换 | 常映射到 DASH Adaptation Set；不同码率/分辨率各自仍是独立 track |
+| **Track** | 一条编码 rendition 的连续 sample 时间轴 | 一个 CMAF Header 加连续 Fragment；不把多个 representation 混进同一 track file |
+| **Header** | 初始化 track、codec、timescale、sample entry 和 fragment defaults | 实际播放路径通常对应 `ftyp + moov`，即 DASH/MSE 的 initialization segment |
+| **Segment** | 一个可寻址媒体对象，包含同一 track 的一个或多个连续 Fragment | 可以是独立 URL，也可以是大文件中的 byte range |
+| **Fragment** | 独立可解码、可作为切换/随机访问边界的时间区间 | 包含一个或多个 Chunk |
+| **Chunk** | 一个 Fragment 中连续 sample 的子集，也是低延迟逐步发布单位 | 通常以一组 fragment metadata 和 media data 形成可消费单元 |
+
+最容易混淆的是最后三项。可以把包含关系写成：
+
+```text
+CMAF Segment (addressable object)
+├── CMAF Fragment 0 (independent / switching boundary)
+│   ├── CMAF Chunk 0.0 (first sample subset)
+│   └── CMAF Chunk 0.1 (next sample subset)
+└── CMAF Fragment 1
+    ├── CMAF Chunk 1.0
+    └── CMAF Chunk 1.1
+```
+
+在最简单的单 Chunk Fragment 中，Segment、Fragment、Chunk 甚至可能落到同一组字节上；在低延迟直播中，一个较长 Segment 通常包含多个 Fragment 或 Chunk。DASH、HLS、MSE 和 CMAF 对“segment”的可寻址语义也不完全相同，所以看到 URL 名为 `segment_123.m4s`，不能反推里面必然只有一个 `moof`。
+
+#### 4.7.2 `moof + mdat` 是物理基础，不是完整语义判据
+
+DASH-IF 的公开 CMAF Ingest 文档专门提醒：`moof` 描述 `mdat` 中 sample 的播放和解码属性，一组 `moof/mdat` 根据对象结构和包含关系，可能被称为 CMAF Fragment，也可能是 CMAF Chunk。
+
+对一组可独立追加的媒体数据，最低限度的逻辑是：
+
+```text
+[styp] [emsg/prft] moof mdat
+                    │    └── encoded/encrypted sample bytes
+                    └── track, decode time, sample count/size/flags/offset
+```
+
+W3C 的 MSE ISO BMFF byte-stream 约束进一步要求媒体段中的 `moof` 至少包含一个 `traf`，每个相关 `traf` 要有 `tfdt`，`trun` 引用的全部 sample 必须能在后续 `mdat` 中找到，并使用 movie-fragment relative addressing。浏览器不是“收到 `mdat` 就开始猜帧”，而是先消费 `moof` 建立 sample map，再按 offset 和 size 读取 payload。
+
+#### 4.7.3 Fragment 为什么是 ABR 切换边界
+
+同一 Switching Set 内的 360p、720p、1080p Track 各自有独立 sample 和字节流，但 Fragment 边界需要在共同时间轴上对齐。典型切换过程是：
+
+```text
+720p Fragment N  --decode-->  boundary T
+                                │
+                                └── switch
+1080p Fragment N+1 --starts at boundary T with suitable random access sample
+```
+
+这里有四个容易被忽略的条件：
+
+1. `tfdt.baseMediaDecodeTime` 必须把各 track fragment 放到正确 decode timeline；
+2. `trun` 中的 duration 和 composition offset 必须让 sample 时间连续；
+3. 替代 Track 的 Fragment 边界要时间对齐，并满足 codec/config/profile 的 switching constraints；
+4. Fragment 起点要具备所需随机访问能力，而普通 Chunk 边界不自动等于新的 IDR/SAP。
+
+因此，Chunk 可以比 GOP 更短。Fragment 的第一个 Chunk 从随机访问 sample 开始，后续 Chunk 可以继续携带依赖同一 Fragment 早先参考帧的 sample。把每个 Chunk 都强行做成 IDR 会增加码率和编码损失，并不是低延迟的必要条件。
+
+#### 4.7.4 Chunk 为什么能降低直播延迟
+
+传统 Segment 发布模型要等整个媒体段编码和封装完成后，才把对象暴露给播放器。Chunk 模型允许 packager 在一个短 sample 子集完成后就发布：
+
+```text
+encode samples
+  -> write moof for current run
+  -> write matching mdat bytes
+  -> publish completed Chunk
+  -> player parses and queues it
+  -> parent Segment continues growing
+```
+
+Apple 的 Low-Latency HLS 文档给出的说明性例子，是把 6 秒 parent segment 拆成约 200 ms 的 Partial Segments/CMAF Chunks。数字本身不是固定标准值，真正的收益是播放器无需等待完整 parent segment。代价则是 box/header 开销、playlist 更新、HTTP/CDN 调度和播放器 append 次数上升。
+
+更小的 Chunk 也不会自动消除所有延迟。端到端延迟仍包含 encoder lookahead、GOP、packager flush、origin/CDN、manifest 可见性、网络抖动和播放器 buffer。只把 `segment_duration` 调小，却不改变发布、缓存和播放策略，常常只会制造更多小文件。
+
+#### 4.7.5 Widevine/CENC 如何跨越 Header 和 Fragment
+
+CMAF 允许 sample 使用 MPEG Common Encryption。Widevine 在这条结构中的位置不是增加一个“Widevine Fragment”，而是把初始化与逐 sample 状态分散在两处：
+
+```text
+CMAF Header
+  pssh                  -> DRM init data / KID hints
+  encv|enca/sinf/tenc   -> default KID, IV and pattern context
+
+CMAF Fragment / Chunk
+  sgpd(seig) + sbgp     -> optional KID/context override
+  saiz + saio + senc    -> per-sample IV and subsample metadata
+  trun                  -> sample byte ranges
+  mdat                  -> encrypted media bytes
+```
+
+License Request/Response、设备 Provisioning 和 raw CK 都不属于 CMAF Fragment。即使每 200 ms 发布一个 Chunk，也不意味着每个 Chunk 都要请求一次 License；License 频率由 session、KID 集合、crypto period、renewal policy 和客户端缓存状态决定。工程上常把 key rotation 与 Segment/Fragment 边界对齐以降低状态复杂度，但仍应以实际 `tenc/seig/sbgp` 映射为准。
+
+#### 4.7.6 一个 Fragment parser 应验证什么
+
+在前文 Box 检查之外，CMAF 层还应增加这些跨对象约束：
+
+1. Header 的 track ID、timescale、sample entry 和 `trex` 能否被每个 `tfhd` 正确引用；
+2. 同一 Track 的 `mfhd.sequence_number` 与 `tfdt` 是否按预期前进，是否出现重复、倒退或未声明 discontinuity；
+3. `trun` 的 sample duration 累计是否与下一 Chunk/Fragment 的 decode start 连续；
+4. `trun.data_offset`、sample size 总和与 `mdat` 边界是否一致；
+5. Fragment 起点是否满足 manifest 和 `sidx` 声明的 SAP/random-access 属性；
+6. Switching Set 中各 Track 的 Fragment boundary 是否在共同时间线上对齐；
+7. Segment/Fragment/Chunk 的 `styp` brands 是否与目标 CMAF profile 和 Header brands 兼容；
+8. `saiz/saio/senc` entry 数是否与 Chunk 中相关 sample 对齐；
+9. `sbgp/sgpd(seig)` 覆盖是否跨越错误 sample run，effective KID 是否能被当前 License 满足；
+10. manifest 声明的 Segment time/duration、实际 `tfdt/trun` 时间和 HTTP byte range 是否三方一致。
+
+最后一条尤其重要。很多“偶发卡顿”“切清晰度黑屏”或“License 明明 usable 仍 decode error”的根因，不在 DRM，而在 manifest、Fragment timeline 和字节范围之间出现了一个 sample 的偏差。
+
+### 4.8 `saiz + saio + senc`：三个 box 如何拼成一条记录
 
 这三个名称经常被一句“存 IV”带过，实际分工更精确：
 
@@ -413,7 +538,7 @@ trun
 
 Shaka Packager 当前的 fragmented MP4 写法让 `saio` 指向 `senc` 内的 sample encryption data，并把 `senc` 放在 `traf` 的末尾。但这是具体 muxer 的稳定实现行为，不应被 parser 偷换成“所有合法文件中 `senc` 必须永远位于最后”的无条件假设。
 
-### 4.8 `sgpd(seig) + sbgp`：key rotation 如何覆盖 `tenc`
+### 4.9 `sgpd(seig) + sbgp`：key rotation 如何覆盖 `tenc`
 
 当一条 track 在不同 sample 范围使用不同 KID 时，重新写一个 `tenc` 不现实，因为 `tenc` 位于初始化段。CENC 使用 sample group 解决：
 
@@ -432,7 +557,7 @@ effective_encryption(sample) =
 
 因此，看到 MPD 或 `tenc` 中只有一个 default KID，不代表整个 segment 只使用一个 KID。要正确审计轮换，必须同时遍历 track/fragment level 的 `sgpd`、`sbgp`，并处理 group description index 的作用域。
 
-### 4.9 三组默认值的优先级
+### 4.10 三组默认值的优先级
 
 fragmented MP4 的难点不仅是 box 多，还在于字段可以继承和覆盖。
 
@@ -461,7 +586,7 @@ encrypted sample entry encv/enca
 
 把这些继承关系写成明确的数据结构，比在解密循环里到处写 fallback 判断可靠得多。否则 parser 很容易在某个 optional flag 缺失时使用未初始化的 size、IV 或 KID。
 
-### 4.10 Box 级一致性检查清单
+### 4.11 Box 级一致性检查清单
 
 对自己打包的文件，推荐按以下顺序检查：
 
@@ -480,7 +605,7 @@ encrypted sample entry encv/enca
 
 因此，“成功解析 PSSH”只证明你读懂了 DRM 初始化数据；“成功解析 `moov`”也只证明你得到了默认上下文。只有把 `moof` 的逐 sample mapping 和 `mdat` 字节范围一起验证，才算真正读懂了 CENC 数据面。
 
-### 4.11 多轨、多 KID 与密钥轮换
+### 4.12 多轨、多 KID 与密钥轮换
 
 生产内容常见三种切分：
 
@@ -490,7 +615,7 @@ encrypted sample entry encv/enca
 
 这种切分不仅是密码学 hygiene，也让 License Service 能按设备能力和业务权利只签发一部分 key。服务端即使允许音频和 SD，也可以不给 UHD KID。客户端宣称支持 4K，并不意味着 License 里会出现 4K 对应的 key。
 
-### 4.12 多 DRM 的最弱路径效应
+### 4.13 多 DRM 的最弱路径效应
 
 同一份 CMAF 资产可以让 Widevine 和 PlayReady 共用 CK，只放不同 PSSH/License 封装。这降低了存储和打包成本，也引入一个直接的安全后果：
 
@@ -1266,3 +1391,9 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 26. [Netflix: Ultra HD and HDCP Requirements on Windows](https://help.netflix.com/en/node/23931)
 27. [Prime Video Usage Rules](https://www.primevideo.com/help/?language=en_US&nodeId=G202095500)
 28. [Disney+ Plans, 4K and Downloads](https://help.disneyplus.com/article/disneyplus-price)
+29. [ISO/IEC 23000-19:2024: CMAF for Segmented Media](https://www.iso.org/standard/85623.html)
+30. [Apple: About CMAF with HTTP Live Streaming](https://developer.apple.com/documentation/http-live-streaming/about-the-common-media-application-format-with-http-live-streaming-hls)
+31. [W3C ISO BMFF Byte Stream Format](https://www.w3.org/TR/mse-byte-stream-format-isobmff/)
+32. [DASH-IF Live Media Ingest Protocol](https://dashif.org/Ingest/)
+33. [DASH-IF Restricted Timing Model](https://dashif.org/Guidelines-TimingModel/)
+34. [Apple: Enabling Low-Latency HLS](https://developer.apple.com/documentation/http-live-streaming/enabling-low-latency-http-live-streaming-hls)
