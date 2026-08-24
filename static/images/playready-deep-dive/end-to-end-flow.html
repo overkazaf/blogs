@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microsoft PlayReady End-to-End Trust Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: #fff;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: 0; }
+    .subtitle { color: #94a3b8; font-size: .875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, .5);
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1120px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { background: rgba(15, 23, 42, .5); border: 1px solid #1e293b; border-radius: 8px; padding: 1.1rem; }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; }
+    .card li { margin-bottom: .375rem; }
+    .footer { text-align: center; margin-top: 1.25rem; color: #475569; font-size: .75rem; }
+    .toolbar { display: flex; gap: .5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle {
+      background: transparent; border: none; color: #475569; cursor: pointer;
+      font: inherit; font-size: 1.25rem; line-height: 1; padding: .25rem .5rem;
+      border-radius: 6px; transition: color .2s, background .2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, .8); border: 1px solid #334155; color: #94a3b8;
+      padding: .375rem .75rem; border-radius: 6px; font-family: inherit;
+      font-size: .75rem; cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, .8); color: #fff; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Microsoft PlayReady End-to-End Trust Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">Copy</button>
+            <button onclick="downloadPNG(this)">PNG</button>
+            <button onclick="downloadPDF(this)">PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">CENC signaling, client-bound licenses, SL3000 execution and protected output</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1400 760" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">PlayReady end-to-end data and trust flow</title>
+        <desc id="diagram-desc">Service, distribution, and client trust domains from packaging through license acquisition to protected rendering.</desc>
+        <defs>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Trust boundaries -->
+        <rect x="20" y="70" width="395" height="590" rx="12" fill="rgba(52,211,153,.025)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="94" fill="#34d399" font-size="12" font-weight="600">SERVICE TRUST DOMAIN</text>
+
+        <rect x="435" y="70" width="245" height="590" rx="12" fill="rgba(251,191,36,.025)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="453" y="94" fill="#fbbf24" font-size="12" font-weight="600">UNTRUSTED DELIVERY</text>
+
+        <rect x="700" y="70" width="680" height="590" rx="12" fill="rgba(34,211,238,.02)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="718" y="94" fill="#22d3ee" font-size="12" font-weight="600">CLIENT TRUST BOUNDARY</text>
+
+        <rect x="1002" y="332" width="350" height="244" rx="10" fill="rgba(251,113,133,.025)" stroke="#fb7185" stroke-width="1" stroke-dasharray="5,4"/>
+        <text x="1020" y="354" fill="#fb7185" font-size="11" font-weight="600">TEE / SL3000 PROTECTED PATH</text>
+
+        <!-- Arrows are deliberately drawn before component boxes -->
+        <path d="M 245 220 L 305 220" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="275" y="211" fill="#a78bfa" font-size="9" text-anchor="middle">policy</text>
+
+        <path d="M 225 360 L 260 360 L 260 250 L 303 250" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="267" y="293" fill="#fb7185" font-size="9">CK by KID</text>
+
+        <path d="M 395 547 L 405 547 L 405 265 L 397 265" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="411" y="466" fill="#a78bfa" font-size="9" transform="rotate(-90 411 466)">policy template</text>
+
+        <path d="M 245 340 L 305 340" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="275" y="331" fill="#fb7185" font-size="9" text-anchor="middle">{KID, CK}</text>
+
+        <path d="M 395 340 L 455 340" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="425" y="330" fill="#22d3ee" font-size="9" text-anchor="middle">publish</text>
+
+        <path d="M 555 380 L 555 432" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="568" y="408" fill="#22d3ee" font-size="9">cache</text>
+
+        <path d="M 655 470 L 730 470" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="692" y="459" fill="#22d3ee" font-size="9" text-anchor="middle">MPD + CENC</text>
+
+        <path d="M 825 430 L 825 382" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="838" y="407" fill="#94a3b8" font-size="9">init data</text>
+
+        <path d="M 920 335 L 1008 335" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="964" y="324" fill="#94a3b8" font-size="9" text-anchor="middle">EME / IPC</text>
+
+        <path d="M 1008 304 C 850 180, 520 160, 395 210" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="7,5" marker-end="url(#arrow-rose)"/>
+        <text x="692" y="159" fill="#fb7185" font-size="10" text-anchor="middle">1. signed challenge + client certificate + requested KIDs</text>
+
+        <path d="M 395 250 C 560 285, 760 250, 1008 320" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="7,5" marker-end="url(#arrow-violet)"/>
+        <text x="696" y="271" fill="#a78bfa" font-size="10" text-anchor="middle">2. signed client-bound XMR license + policy</text>
+
+        <path d="M 1108 375 L 1108 408" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="1121" y="398" fill="#fb7185" font-size="9">bind</text>
+
+        <path d="M 1208 455 L 1255 455" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="1231" y="444" fill="#fb7185" font-size="8" text-anchor="middle">samples</text>
+
+        <path d="M 1300 490 L 1300 525" fill="none" stroke="#f97316" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="1313" y="513" fill="#fb923c" font-size="9">HDCP / OPL</text>
+
+        <path d="M 920 470 L 1002 470" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="960" y="459" fill="#22d3ee" font-size="8" text-anchor="middle">CENC samples</text>
+
+        <!-- Service boxes: opaque underlay then semantic fill -->
+        <rect x="45" y="130" width="180" height="90" rx="6" fill="#020617"/>
+        <rect x="45" y="130" width="180" height="90" rx="6" fill="rgba(6,78,59,.45)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="135" y="157" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Entitlement Service</text>
+        <text x="135" y="180" fill="#94a3b8" font-size="9" text-anchor="middle">account / device / region</text>
+        <text x="135" y="197" fill="#a78bfa" font-size="9" text-anchor="middle">rights + policy profile</text>
+
+        <rect x="45" y="310" width="180" height="95" rx="6" fill="#020617"/>
+        <rect x="45" y="310" width="180" height="95" rx="6" fill="rgba(136,19,55,.42)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="135" y="337" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">KMS / Key Store</text>
+        <text x="135" y="360" fill="#fb7185" font-size="9" text-anchor="middle">secret: CK / key seed</text>
+        <text x="135" y="378" fill="#94a3b8" font-size="9" text-anchor="middle">KID -&gt; CK mapping</text>
+
+        <rect x="305" y="175" width="90" height="100" rx="6" fill="#020617"/>
+        <rect x="305" y="175" width="90" height="100" rx="6" fill="rgba(6,78,59,.45)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="350" y="201" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">License</text>
+        <text x="350" y="217" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Server</text>
+        <text x="350" y="239" fill="#a78bfa" font-size="8" text-anchor="middle">XMR + signature</text>
+        <text x="350" y="255" fill="#fb7185" font-size="8" text-anchor="middle">client binding</text>
+
+        <rect x="305" y="310" width="90" height="100" rx="6" fill="#020617"/>
+        <rect x="305" y="310" width="90" height="100" rx="6" fill="rgba(6,78,59,.45)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="350" y="337" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">CENC</text>
+        <text x="350" y="353" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Packager</text>
+        <text x="350" y="375" fill="#22d3ee" font-size="8" text-anchor="middle">PRO / PSSH</text>
+        <text x="350" y="391" fill="#94a3b8" font-size="8" text-anchor="middle">cenc / cbcs</text>
+
+        <rect x="45" y="492" width="350" height="110" rx="6" fill="#020617"/>
+        <rect x="45" y="492" width="350" height="110" rx="6" fill="rgba(76,29,149,.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="220" y="522" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">License Policy</text>
+        <text x="220" y="548" fill="#a78bfa" font-size="9" text-anchor="middle">MinimumSecurityLevel - OPL - expiration</text>
+        <text x="220" y="568" fill="#a78bfa" font-size="9" text-anchor="middle">persistence - secure clock - secure stop</text>
+        <text x="220" y="588" fill="#94a3b8" font-size="8" text-anchor="middle">Policy is visible; enforcement is trusted-client work</text>
+
+        <!-- Delivery boxes -->
+        <rect x="455" y="305" width="200" height="75" rx="6" fill="#020617"/>
+        <rect x="455" y="305" width="200" height="75" rx="6" fill="rgba(120,53,15,.38)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="555" y="332" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Manifest + Init Data</text>
+        <text x="555" y="353" fill="#22d3ee" font-size="9" text-anchor="middle">KID / PSSH / PRO / LA_URL</text>
+        <text x="555" y="368" fill="#94a3b8" font-size="8" text-anchor="middle">public routing metadata</text>
+
+        <rect x="455" y="432" width="200" height="75" rx="6" fill="#020617"/>
+        <rect x="455" y="432" width="200" height="75" rx="6" fill="rgba(120,53,15,.38)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="555" y="460" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">CDN / Object Store</text>
+        <text x="555" y="481" fill="#22d3ee" font-size="9" text-anchor="middle">encrypted CMAF segments</text>
+        <text x="555" y="496" fill="#94a3b8" font-size="8" text-anchor="middle">no content key required</text>
+
+        <!-- Client REE boxes -->
+        <rect x="730" y="430" width="190" height="80" rx="6" fill="#020617"/>
+        <rect x="730" y="430" width="190" height="80" rx="6" fill="rgba(8,51,68,.48)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="825" y="458" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Web App / Player</text>
+        <text x="825" y="480" fill="#94a3b8" font-size="9" text-anchor="middle">MSE + EME session routing</text>
+        <text x="825" y="497" fill="#22d3ee" font-size="8" text-anchor="middle">cannot export CK by API</text>
+
+        <rect x="730" y="300" width="190" height="82" rx="6" fill="#020617"/>
+        <rect x="730" y="300" width="190" height="82" rx="6" fill="rgba(8,51,68,.48)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="825" y="329" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Browser / MediaDrm</text>
+        <text x="825" y="351" fill="#94a3b8" font-size="9" text-anchor="middle">Key System negotiation</text>
+        <text x="825" y="368" fill="#94a3b8" font-size="8" text-anchor="middle">REE orchestration</text>
+
+        <rect x="1008" y="286" width="200" height="90" rx="6" fill="#020617"/>
+        <rect x="1008" y="286" width="200" height="90" rx="6" fill="rgba(136,19,55,.42)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1108" y="314" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">PlayReady Client</text>
+        <text x="1108" y="337" fill="#94a3b8" font-size="9" text-anchor="middle">certificate + challenge</text>
+        <text x="1108" y="355" fill="#fb7185" font-size="8" text-anchor="middle">SL / feature evidence</text>
+
+        <!-- TEE boxes -->
+        <rect x="1020" y="408" width="188" height="95" rx="6" fill="#020617"/>
+        <rect x="1020" y="408" width="188" height="95" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1114" y="434" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">License Bind + Crypto</text>
+        <text x="1114" y="456" fill="#fb7185" font-size="9" text-anchor="middle">private key / CK / secure clock</text>
+        <text x="1114" y="474" fill="#a78bfa" font-size="8" text-anchor="middle">MSL, OPL, expiry enforcement</text>
+        <text x="1114" y="489" fill="#94a3b8" font-size="8" text-anchor="middle">non-exportable state</text>
+
+        <rect x="1255" y="408" width="90" height="96" rx="6" fill="#020617"/>
+        <rect x="1255" y="408" width="90" height="96" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1300" y="435" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">Secure</text>
+        <text x="1300" y="451" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">Decoder</text>
+        <text x="1300" y="475" fill="#94a3b8" font-size="8" text-anchor="middle">protected</text>
+        <text x="1300" y="489" fill="#94a3b8" font-size="8" text-anchor="middle">surfaces</text>
+
+        <rect x="1248" y="525" width="104" height="38" rx="6" fill="#020617"/>
+        <rect x="1248" y="525" width="104" height="38" rx="6" fill="rgba(154,52,18,.36)" stroke="#f97316" stroke-width="1.5"/>
+        <text x="1300" y="549" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">Protected Output</text>
+
+        <!-- Legend, outside all trust boundaries -->
+        <text x="30" y="704" fill="#fff" font-size="10" font-weight="600">LEGEND</text>
+        <rect x="95" y="693" width="18" height="11" rx="2" fill="rgba(8,51,68,.48)" stroke="#22d3ee"/>
+        <text x="121" y="703" fill="#94a3b8" font-size="9">client / public data</text>
+        <rect x="275" y="693" width="18" height="11" rx="2" fill="rgba(6,78,59,.45)" stroke="#34d399"/>
+        <text x="301" y="703" fill="#94a3b8" font-size="9">service</text>
+        <rect x="378" y="693" width="18" height="11" rx="2" fill="rgba(76,29,149,.35)" stroke="#a78bfa"/>
+        <text x="404" y="703" fill="#94a3b8" font-size="9">policy</text>
+        <rect x="472" y="693" width="18" height="11" rx="2" fill="rgba(136,19,55,.42)" stroke="#fb7185"/>
+        <text x="498" y="703" fill="#94a3b8" font-size="9">secret / security boundary</text>
+        <line x1="690" y1="699" x2="725" y2="699" stroke="#64748b" stroke-width="2" stroke-dasharray="6,4"/>
+        <text x="735" y="703" fill="#94a3b8" font-size="9">control / license flow</text>
+        <line x1="900" y1="699" x2="935" y2="699" stroke="#22d3ee" stroke-width="2"/>
+        <text x="945" y="703" fill="#94a3b8" font-size="9">media / metadata flow</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>Signaling Is Not Enforcement</h3></div>
+        <ul>
+          <li>PRO and PSSH identify KIDs and license routing</li>
+          <li>Encrypted media remains CDN-cacheable</li>
+          <li>EME exposes sessions, never raw content keys</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>Trust Anchors</h3></div>
+        <ul>
+          <li>Server-side KMS and license signing material</li>
+          <li>Client certificate and protected private keys</li>
+          <li>TEE, secure clock, decoder and output path</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Independent Failure Gates</h3></div>
+        <ul>
+          <li>Entitlement, certificate and revocation checks</li>
+          <li>Minimum Security Level and time policy</li>
+          <li>OPL, HDCP and protected rendering capability</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">PlayReady trust model - public specifications and defensive architecture analysis - 2026-08-24</p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'diagram.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('diagram.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
