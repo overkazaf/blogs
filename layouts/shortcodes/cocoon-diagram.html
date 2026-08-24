@@ -16,7 +16,6 @@
     display: block;
     width: 100%;
     max-width: 100%;
-    height: {{ $fallbackHeight }}px;
     border: 0;
     background: #020617;
     color-scheme: dark;
@@ -33,7 +32,8 @@
     src="{{ $src | relURL }}"
     title="{{ $title }}"
     loading="lazy"
-    scrolling="no">
+    scrolling="no"
+    style="height: {{ $fallbackHeight }}px;">
   </iframe>
 </div>
 <script>

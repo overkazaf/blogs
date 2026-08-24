@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widevine CENC ISO BMFF Box Structure</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: #fff;
+      overflow-x: hidden;
+    }
+    .container { width: 100%; max-width: 1400px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { color: #94a3b8; font-size: .875rem; margin-left: 1.75rem; overflow-wrap: anywhere; }
+    .diagram-container {
+      background: rgba(15, 23, 42, .5);
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 1.25rem;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    svg { width: 100%; height: auto; min-width: 0; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; background: rgba(15, 23, 42, .5); border: 1px solid #1e293b; border-radius: 8px; padding: 1.1rem; }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; }
+    .card li { margin-bottom: .375rem; }
+    .footer { text-align: center; margin-top: 1.25rem; color: #475569; font-size: .75rem; }
+    .toolbar { display: flex; gap: .5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle {
+      background: transparent; border: none; color: #475569; cursor: pointer;
+      font: inherit; font-size: 1.25rem; line-height: 1; padding: .25rem .5rem;
+      border-radius: 6px; transition: color .2s, background .2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, .8); border: 1px solid #334155; color: #94a3b8;
+      padding: .375rem .75rem; border-radius: 6px; font-family: inherit;
+      font-size: .75rem; cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, .8); color: #fff; border-color: #475569; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+      .footer { margin-top: 1rem; }
+    }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Widevine CENC ISO BMFF Box Structure</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">Copy</button>
+            <button onclick="downloadPNG(this)">PNG</button>
+            <button onclick="downloadPDF(this)">PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">Initialization defaults, per-fragment sample metadata, auxiliary encryption records and encrypted media bytes</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1400 900" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Widevine CENC ISO BMFF box hierarchy and references</title>
+        <desc id="diagram-desc">The initialization segment defines codec and default encryption state while each media segment maps sample timing and auxiliary encryption records to encrypted bytes in mdat.</desc>
+        <defs>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Segment boundaries -->
+        <rect x="20" y="62" width="650" height="700" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="87" fill="#22d3ee" font-size="12" font-weight="600">INITIALIZATION SEGMENT</text>
+        <text x="38" y="104" fill="#64748b" font-size="8">stable track metadata and default encryption context</text>
+
+        <rect x="690" y="62" width="690" height="700" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="708" y="87" fill="#fbbf24" font-size="12" font-weight="600">MEDIA SEGMENT / FRAGMENT</text>
+        <text x="708" y="104" fill="#64748b" font-size="8">sample timing, byte locations, IVs, subsamples and encrypted payload</text>
+
+        <!-- Arrows first so component boxes mask them -->
+        <path d="M 205 151 L 255 151" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="230" y="141" fill="#94a3b8" font-size="8" text-anchor="middle">then</text>
+
+        <path d="M 135 320 L 135 350" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M 135 440 L 135 485" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+
+        <path d="M 430 335 L 430 370" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="443" y="355" fill="#94a3b8" font-size="8">sample entry</text>
+
+        <path d="M 400 412 L 430 412" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="415" y="401" fill="#94a3b8" font-size="7" text-anchor="middle">codec</text>
+
+        <path d="M 320 450 L 320 498" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="333" y="477" fill="#fb7185" font-size="8">protection</text>
+
+        <path d="M 355 570 L 375 570" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M 470 570 L 490 570" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+
+        <path d="M 585 592 C 760 620, 885 555, 1125 548" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="7,5" marker-end="url(#arrow-rose)"/>
+        <text x="820" y="590" fill="#fb7185" font-size="9" text-anchor="middle">tenc default KID / IV size / crypt-skip pattern</text>
+
+        <path d="M 825 151 L 900 151" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M 1025 151 L 1085 151" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+
+        <path d="M 962 180 C 960 208, 915 210, 915 250" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="931" y="214" fill="#a78bfa" font-size="8">indexes range</text>
+
+        <path d="M 850 315 L 885 315" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+
+        <path d="M 995 315 L 1015 315" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M 1125 315 L 1145 315" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+
+        <path d="M 1220 345 C 1240 570, 1100 635, 1040 675" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <text x="1204" y="482" fill="#fbbf24" font-size="8" transform="rotate(76 1204 482)">trun data_offset + sizes</text>
+
+        <path d="M 1020 438 L 1040 438" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="1030" y="427" fill="#a78bfa" font-size="7" text-anchor="middle">maps</text>
+
+        <path d="M 1165 438 C 1205 455, 1210 490, 1210 510" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="1197" y="474" fill="#a78bfa" font-size="8">seig override</text>
+
+        <path d="M 995 548 L 1015 548" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="1005" y="537" fill="#fb923c" font-size="7" text-anchor="middle">sizes</text>
+
+        <path d="M 1125 548 L 1145 548" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="1135" y="537" fill="#fb923c" font-size="7" text-anchor="middle">offset</text>
+
+        <path d="M 1220 588 L 1085 675" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="1172" y="645" fill="#fb923c" font-size="8" transform="rotate(-32 1172 645)">IV + clear/encrypted ranges</text>
+
+        <!-- Init top-level boxes -->
+        <rect x="45" y="120" width="160" height="62" rx="6" fill="#020617"/>
+        <rect x="45" y="120" width="160" height="62" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="125" y="146" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">ftyp</text>
+        <text x="125" y="166" fill="#94a3b8" font-size="8" text-anchor="middle">brands / compatibility</text>
+
+        <rect x="255" y="120" width="390" height="62" rx="6" fill="#020617"/>
+        <rect x="255" y="120" width="390" height="62" rx="6" fill="rgba(8,51,68,.48)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="450" y="146" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">moov</text>
+        <text x="450" y="166" fill="#94a3b8" font-size="8" text-anchor="middle">movie metadata container - no encrypted sample payload</text>
+
+        <!-- moov content boundary -->
+        <rect x="45" y="220" width="600" height="510" rx="10" fill="rgba(8,51,68,.02)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,4"/>
+        <text x="63" y="244" fill="#22d3ee" font-size="10" font-weight="600">moov children</text>
+
+        <rect x="70" y="265" width="130" height="55" rx="6" fill="#020617"/>
+        <rect x="70" y="265" width="130" height="55" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="135" y="289" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">mvhd</text>
+        <text x="135" y="307" fill="#94a3b8" font-size="8" text-anchor="middle">movie timebase</text>
+
+        <rect x="70" y="350" width="130" height="90" rx="6" fill="#020617"/>
+        <rect x="70" y="350" width="130" height="90" rx="6" fill="rgba(8,51,68,.48)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="135" y="377" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">pssh</text>
+        <text x="135" y="399" fill="#22d3ee" font-size="8" text-anchor="middle">SystemID + init data</text>
+        <text x="135" y="417" fill="#94a3b8" font-size="8" text-anchor="middle">CDM session signaling</text>
+
+        <rect x="70" y="485" width="130" height="78" rx="6" fill="#020617"/>
+        <rect x="70" y="485" width="130" height="78" rx="6" fill="rgba(76,29,149,.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="135" y="512" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">mvex / trex</text>
+        <text x="135" y="534" fill="#a78bfa" font-size="8" text-anchor="middle">fragment defaults</text>
+        <text x="135" y="550" fill="#94a3b8" font-size="7" text-anchor="middle">duration / size / flags</text>
+
+        <rect x="240" y="265" width="365" height="70" rx="6" fill="#020617"/>
+        <rect x="240" y="265" width="365" height="70" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="422" y="292" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">trak / mdia / minf / stbl / stsd</text>
+        <text x="422" y="314" fill="#94a3b8" font-size="8" text-anchor="middle">track - media - sample table - sample descriptions</text>
+
+        <rect x="240" y="370" width="160" height="80" rx="6" fill="#020617"/>
+        <rect x="240" y="370" width="160" height="80" rx="6" fill="rgba(136,19,55,.42)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="320" y="398" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">encv / enca</text>
+        <text x="320" y="420" fill="#fb7185" font-size="8" text-anchor="middle">protected sample entry</text>
+        <text x="320" y="437" fill="#94a3b8" font-size="7" text-anchor="middle">video / audio wrapper</text>
+
+        <rect x="430" y="370" width="175" height="80" rx="6" fill="#020617"/>
+        <rect x="430" y="370" width="175" height="80" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="517" y="397" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">codec config</text>
+        <text x="517" y="419" fill="#94a3b8" font-size="8" text-anchor="middle">avcC / hvcC / av1C / esds</text>
+        <text x="517" y="436" fill="#64748b" font-size="7" text-anchor="middle">decode configuration, not DRM</text>
+
+        <rect x="240" y="498" width="365" height="195" rx="8" fill="rgba(136,19,55,.025)" stroke="#fb7185" stroke-width="1" stroke-dasharray="5,4"/>
+        <text x="258" y="520" fill="#fb7185" font-size="10" font-weight="600">sinf - protection scheme information</text>
+
+        <rect x="260" y="535" width="95" height="70" rx="6" fill="#020617"/>
+        <rect x="260" y="535" width="95" height="70" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="307" y="562" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">frma</text>
+        <text x="307" y="582" fill="#94a3b8" font-size="7" text-anchor="middle">original codec 4CC</text>
+
+        <rect x="375" y="535" width="95" height="70" rx="6" fill="#020617"/>
+        <rect x="375" y="535" width="95" height="70" rx="6" fill="rgba(120,53,15,.38)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="422" y="562" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">schm</text>
+        <text x="422" y="582" fill="#fbbf24" font-size="7" text-anchor="middle">cenc / cbcs 4CC</text>
+
+        <rect x="490" y="535" width="95" height="132" rx="6" fill="#020617"/>
+        <rect x="490" y="535" width="95" height="132" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="537" y="560" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">schi / tenc</text>
+        <text x="537" y="582" fill="#fb7185" font-size="7" text-anchor="middle">isProtected</text>
+        <text x="537" y="598" fill="#fb7185" font-size="7" text-anchor="middle">default KID</text>
+        <text x="537" y="614" fill="#fb7185" font-size="7" text-anchor="middle">IV size / const IV</text>
+        <text x="537" y="630" fill="#fb7185" font-size="7" text-anchor="middle">crypt / skip pattern</text>
+        <text x="537" y="650" fill="#94a3b8" font-size="7" text-anchor="middle">track defaults</text>
+
+        <!-- Media top-level boxes -->
+        <rect x="715" y="120" width="110" height="62" rx="6" fill="#020617"/>
+        <rect x="715" y="120" width="110" height="62" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="770" y="146" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">styp</text>
+        <text x="770" y="166" fill="#94a3b8" font-size="7" text-anchor="middle">segment brands</text>
+
+        <rect x="900" y="120" width="125" height="62" rx="6" fill="#020617"/>
+        <rect x="900" y="120" width="125" height="62" rx="6" fill="rgba(76,29,149,.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="962" y="146" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">sidx</text>
+        <text x="962" y="166" fill="#a78bfa" font-size="7" text-anchor="middle">optional byte/time index</text>
+
+        <rect x="1085" y="120" width="250" height="62" rx="6" fill="#020617"/>
+        <rect x="1085" y="120" width="250" height="62" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1210" y="146" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">emsg / prft (optional)</text>
+        <text x="1210" y="166" fill="#94a3b8" font-size="7" text-anchor="middle">timed events / producer time - not key material</text>
+
+        <!-- moof content -->
+        <rect x="715" y="220" width="640" height="390" rx="10" fill="rgba(120,53,15,.02)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="5,4"/>
+        <text x="733" y="244" fill="#fbbf24" font-size="10" font-weight="600">moof - movie fragment metadata</text>
+
+        <rect x="740" y="275" width="110" height="80" rx="6" fill="#020617"/>
+        <rect x="740" y="275" width="110" height="80" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="795" y="302" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">mfhd</text>
+        <text x="795" y="324" fill="#94a3b8" font-size="8" text-anchor="middle">sequence number</text>
+        <text x="795" y="341" fill="#64748b" font-size="7" text-anchor="middle">fragment identity</text>
+
+        <rect x="885" y="250" width="440" height="330" rx="8" fill="rgba(120,53,15,.018)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="5,4"/>
+        <text x="903" y="272" fill="#fbbf24" font-size="10" font-weight="600">traf - one track fragment</text>
+
+        <rect x="895" y="285" width="100" height="60" rx="6" fill="#020617"/>
+        <rect x="895" y="285" width="100" height="60" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="945" y="311" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">tfhd</text>
+        <text x="945" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">track + defaults</text>
+
+        <rect x="1015" y="285" width="110" height="60" rx="6" fill="#020617"/>
+        <rect x="1015" y="285" width="110" height="60" rx="6" fill="rgba(30,41,59,.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1070" y="311" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">tfdt</text>
+        <text x="1070" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">base decode time</text>
+
+        <rect x="1145" y="285" width="150" height="60" rx="6" fill="#020617"/>
+        <rect x="1145" y="285" width="150" height="60" rx="6" fill="rgba(120,53,15,.38)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="1220" y="311" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">trun</text>
+        <text x="1220" y="330" fill="#fbbf24" font-size="7" text-anchor="middle">count / size / duration / offset</text>
+
+        <rect x="895" y="398" width="125" height="80" rx="6" fill="#020617"/>
+        <rect x="895" y="398" width="125" height="80" rx="6" fill="rgba(76,29,149,.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="957" y="425" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">sgpd (seig)</text>
+        <text x="957" y="447" fill="#a78bfa" font-size="7" text-anchor="middle">alternate KID / IV</text>
+        <text x="957" y="464" fill="#94a3b8" font-size="7" text-anchor="middle">encryption group entry</text>
+
+        <rect x="1040" y="398" width="125" height="80" rx="6" fill="#020617"/>
+        <rect x="1040" y="398" width="125" height="80" rx="6" fill="rgba(76,29,149,.35)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1102" y="425" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">sbgp</text>
+        <text x="1102" y="447" fill="#a78bfa" font-size="7" text-anchor="middle">sample range -&gt; group</text>
+        <text x="1102" y="464" fill="#94a3b8" font-size="7" text-anchor="middle">key rotation mapping</text>
+
+        <rect x="895" y="510" width="100" height="76" rx="6" fill="#020617"/>
+        <rect x="895" y="510" width="100" height="76" rx="6" fill="rgba(251,146,60,.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="945" y="538" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">saiz</text>
+        <text x="945" y="559" fill="#fb923c" font-size="7" text-anchor="middle">aux entry sizes</text>
+        <text x="945" y="574" fill="#94a3b8" font-size="7" text-anchor="middle">per sample</text>
+
+        <rect x="1015" y="510" width="110" height="76" rx="6" fill="#020617"/>
+        <rect x="1015" y="510" width="110" height="76" rx="6" fill="rgba(251,146,60,.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="1070" y="538" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">saio</text>
+        <text x="1070" y="559" fill="#fb923c" font-size="7" text-anchor="middle">aux data offsets</text>
+        <text x="1070" y="574" fill="#94a3b8" font-size="7" text-anchor="middle">locates records</text>
+
+        <rect x="1145" y="510" width="150" height="76" rx="6" fill="#020617"/>
+        <rect x="1145" y="510" width="150" height="76" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1220" y="537" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">senc</text>
+        <text x="1220" y="558" fill="#fb7185" font-size="7" text-anchor="middle">sample IV + subsamples</text>
+        <text x="1220" y="574" fill="#94a3b8" font-size="7" text-anchor="middle">clear/encrypted byte counts</text>
+
+        <rect x="850" y="665" width="370" height="70" rx="6" fill="#020617"/>
+        <rect x="850" y="665" width="370" height="70" rx="6" fill="rgba(120,53,15,.38)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="1035" y="692" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">mdat</text>
+        <text x="1035" y="714" fill="#fbbf24" font-size="8" text-anchor="middle">encrypted sample bytes - ciphertext, not License or metadata</text>
+
+        <!-- Legend below boundaries -->
+        <text x="30" y="820" fill="#fff" font-size="10" font-weight="600">LEGEND</text>
+        <rect x="95" y="809" width="18" height="11" rx="2" fill="rgba(30,41,59,.6)" stroke="#94a3b8"/>
+        <text x="121" y="819" fill="#94a3b8" font-size="9">container / timing</text>
+        <rect x="260" y="809" width="18" height="11" rx="2" fill="rgba(8,51,68,.48)" stroke="#22d3ee"/>
+        <text x="286" y="819" fill="#94a3b8" font-size="9">DRM signaling</text>
+        <rect x="415" y="809" width="18" height="11" rx="2" fill="rgba(136,19,55,.42)" stroke="#fb7185"/>
+        <text x="441" y="819" fill="#94a3b8" font-size="9">encryption context</text>
+        <rect x="600" y="809" width="18" height="11" rx="2" fill="rgba(76,29,149,.35)" stroke="#a78bfa"/>
+        <text x="626" y="819" fill="#94a3b8" font-size="9">index / group map</text>
+        <rect x="790" y="809" width="18" height="11" rx="2" fill="rgba(251,146,60,.3)" stroke="#fb923c"/>
+        <text x="816" y="819" fill="#94a3b8" font-size="9">auxiliary metadata</text>
+        <rect x="990" y="809" width="18" height="11" rx="2" fill="rgba(120,53,15,.38)" stroke="#fbbf24"/>
+        <text x="1016" y="819" fill="#94a3b8" font-size="9">media / byte ranges</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>Initialization Defaults</h3></div>
+        <ul>
+          <li>stsd selects the protected encv/enca sample entry</li>
+          <li>sinf restores codec identity and names cenc/cbcs</li>
+          <li>tenc provides the default KID, IV and pattern state</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>Per-Fragment Layout</h3></div>
+        <ul>
+          <li>trun maps sample count, timing, sizes and mdat offsets</li>
+          <li>saiz/saio locate auxiliary encryption records</li>
+          <li>senc supplies per-sample IVs and subsample byte ranges</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>Rotation Overrides</h3></div>
+        <ul>
+          <li>sgpd seig entries describe alternate encryption state</li>
+          <li>sbgp maps sample runs to those group descriptions</li>
+          <li>the effective KID may therefore differ from tenc default</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">Widevine CENC ISO BMFF box map - public specifications and Shaka/Chromium parser behavior - 2026-08-24</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({
+          type: 'cocoon-diagram:resize',
+          height: Math.ceil(root.getBoundingClientRect().height + padding)
+        }, window.location.origin);
+      });
+    }
+
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', (event) => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') {
+          reportEmbeddedSize();
+        }
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+
+    async function captureDiagram() {
+      const el = document.getElementById('report-container');
+      const r = el.getBoundingClientRect();
+      const pad = 32;
+      return html2canvas(document.body, {
+        backgroundColor: '#020617',
+        scale: 2,
+        useCORS: true,
+        ignoreElements: (e) => e.classList && e.classList.contains('toolbar'),
+        x: r.left + window.scrollX - pad,
+        y: r.top + window.scrollY - pad,
+        width: r.width + pad * 2,
+        height: r.height + pad * 2
+      });
+    }
+
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const canvas = await captureDiagram();
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = 'Copied';
+      } catch (e) {
+        btn.textContent = 'Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Working';
+      try {
+        const canvas = await captureDiagram();
+        const link = document.createElement('a');
+        link.download = 'widevine-cenc-isobmff-box-map.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = 'Done';
+      } catch (e) {
+        btn.textContent = 'Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Working';
+      try {
+        const canvas = await captureDiagram();
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('widevine-cenc-isobmff-box-map.pdf');
+        btn.textContent = 'Done';
+      } catch (e) {
+        btn.textContent = 'Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

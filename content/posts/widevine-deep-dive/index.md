@@ -2,19 +2,20 @@
 title: "一个 PSSH，为什么还拿不到 Key？ - Google Widevine 从 License Proxy 到 L1 的完整解剖"
 slug: "widevine-pssh-license-l1-deep-dive"
 date: 2026-08-22T14:00:00+08:00
-lastmod: 2026-08-22T14:00:00+08:00
+lastmod: 2026-08-24T16:30:00+08:00
 draft: false
-tags: ["Widevine", "DRM", "CENC", "EME", "MediaDrm", "OEMCrypto", "L1", "PSSH", "protobuf", "security-research"]
+tags: ["Widevine", "DRM", "CENC", "CMAF", "ISOBMFF", "EME", "MediaDrm", "OEMCrypto", "L1", "PSSH", "protobuf", "security-research"]
 categories: ["security-research"]
-description: "从 Widevine SystemID 与 PSSH protobuf 开始，沿 CENC、License Proxy、设备 Provisioning、MediaDrm、OEMCrypto、L1/L2/L3 和安全输出还原完整信任链，并给出可复现的自有内容实验与安全评估。"
+description: "从 Widevine SystemID、PSSH protobuf 与 CENC box 结构开始，沿 Chrome/Android 通信架构、License Proxy、设备 Provisioning、MediaDrm、OEMCrypto、L1/L2/L3 和安全输出还原完整信任链。"
 toc: true
 math: false
 ---
 
 > **读完本文，你将获得：**
 > - 分清 MPD、PSSH、WidevinePsshData、KID、CK 和 License，不再把一段 Base64 当成内容密钥
+> - 看懂 `moov/trak/stsd/sinf/tenc` 与 `moof/traf/saiz/saio/senc/mdat` 的完整层级和引用关系
 > - 看懂客户端为什么不能直接访问 Widevine License Service，以及合作方 License Proxy 真正承担什么职责
-> - 理解浏览器 EME 与 Android `MediaDrm` 两条接入路径，知道 CDM、OEMCrypto、TEE 和 Secure Decoder 各自守哪一段
+> - 对照 Chrome 与 Android 双泳道通信图，理解 EME/Mojo/CDM 与 MediaDrm/AIDL HAL/OEMCrypto 两条接入路径
 > - 严格区分 Widevine L1/L2/L3、Android 五级安全枚举、分辨率授权和 HDCP 输出策略
 > - 理解 Provisioning、设备身份、License 个性化、续租、离线授权、密钥轮换和撤销之间的关系
 > - 用固定版本 Shaka Packager 对自有媒体做 CENC 实验，并用 Bento4、GPAC 与 PSSH parser 交叉检查结果
@@ -205,19 +206,280 @@ Widevine 采用 ISO Common Encryption。现代工作流最常见的是：
 
 Google 的公开支持表明确显示，平台和系统版本对加密方案的支持不同。例如 Android 7+ 才进入官方 `cbcs` 支持范围，Media3 文档给出的 Widevine `cbcs` 最低要求是 Android 7.1 / API 25。打包时只看浏览器桌面测试通过，很容易在旧 Android、电视或嵌入式客户端上留下兼容性断层。
 
-### 4.2 `tenc`、`senc`、`saiz`、`saio`
+### 4.2 一张图看清 Init Segment 与 Media Segment
 
-PSSH 只负责 DRM 初始化，真正的样本加密信息分散在 CENC box 中：
+如果只按四字符名称背 box，`tenc`、`senc`、`saiz`、`saio` 很快就会混在一起。更有效的办法，是先把它们放回 ISO BMFF 的容器树，再沿引用关系找出“默认值、逐 sample 元数据和真正密文”分别位于哪里。
 
-- `schm` 声明 protection scheme；
-- `tenc` 提供默认 KID、IV 和 pattern 参数；
-- `senc` 描述每个 sample 的 IV 与 subsample 加密区间；
-- `saiz`/`saio` 帮助定位辅助加密信息；
-- `pssh` 告诉 DRM 客户端如何为相关 KID 建立授权会话。
+{{< cocoon-diagram
+  src="images/widevine-deep-dive/isobmff-box-map.html"
+  title="Widevine CENC ISO BMFF Box Structure"
+  height="1120"
+>}}
 
-因此，“成功解析 PSSH”只证明你读懂了初始化数据，不证明你已经理解每个 sample 的加密布局，更不证明拿到了 CK。
+这张图表达了三条互相独立的链：
 
-### 4.3 多轨、多 KID 与密钥轮换
+1. `pssh` 把 SystemID 和 DRM init data 送给 CDM，负责建立 License session；
+2. `stsd -> encv/enca -> sinf -> schm/tenc` 定义这条 track 的默认加密上下文；
+3. `moof -> traf -> trun/saiz/saio/senc -> mdat` 把每个 fragment 的 sample、IV、subsample 区间和密文字节对应起来。
+
+因此，`pssh` 不描述每个 sample 的字节布局，`senc` 也不负责告诉客户端去哪个 License Server。两者都叫“加密相关 box”，但处在完全不同的控制面。
+
+### 4.3 先理解 Box 与 FullBox
+
+ISO BMFF 是一棵带长度的 box 树。最普通的 box 头是：
+
+```text
+size      4 bytes, big-endian
+type      4 bytes, FourCC
+payload   size - header_size bytes
+```
+
+当 `size == 1` 时，后面还有 64-bit `largesize`；当 `size == 0` 时，box 延伸到当前文件或父容器结束。`FullBox` 在普通头后再增加：
+
+```text
+version   1 byte
+flags     3 bytes
+```
+
+`pssh`、`tenc`、`tfhd`、`trun`、`saiz`、`saio`、`senc`、`sgpd`、`sbgp` 都是 FullBox。解析器必须先根据 version/flags 决定后续字段是否存在，不能拿一个固定 C struct 直接覆盖输入字节。
+
+安全审计时至少要防六类问题：
+
+| 问题 | 典型错误 |
+|------|----------|
+| box size 小于 header | offset 回退或死循环 |
+| 32/64-bit 长度加法溢出 | 边界检查被绕过 |
+| child size 超出 parent | 跨容器读取下一段数据 |
+| count 乘 entry size 溢出 | KID/sample 数组越界 |
+| version/flags 未校验 | 按错误布局解释字段 |
+| unknown box 被错误拒绝 | 兼容性失败；正确做法通常是按长度安全跳过 |
+
+### 4.4 初始化段：`ftyp + moov` 定义稳定上下文
+
+典型 fragmented MP4/CMAF 初始化段可以抽象成：
+
+```text
+ftyp
+moov
+├── mvhd
+├── pssh [0..N]
+├── mvex
+│   └── trex [per track]
+└── trak [per track]
+    ├── tkhd
+    └── mdia
+        ├── mdhd
+        ├── hdlr
+        └── minf
+            └── stbl
+                └── stsd
+                    └── encv / enca
+                        ├── codec configuration
+                        └── sinf
+                            ├── frma
+                            ├── schm
+                            └── schi
+                                └── tenc
+```
+
+主要 box 的职责：
+
+| Box | 所在位置 | 关键字段/作用 | DRM 语义 |
+|-----|----------|---------------|----------|
+| `ftyp` | top-level | major brand、compatible brands | 声明文件兼容族，不含授权信息 |
+| `moov` | top-level | movie/track 元数据容器 | 初始化段主体，通常不含 sample payload |
+| `mvhd` | `moov` | movie timescale、duration | 全局时间基准，不决定加密 |
+| `trak` | `moov` | 一条音频、视频或文本 track | 不同 track 可以使用不同 KID |
+| `tkhd` | `trak` | track ID、尺寸、duration | track identity，供 fragment 的 `tfhd` 对应 |
+| `mdhd` | `mdia` | media timescale、duration、language | sample 时间轴 |
+| `hdlr` | `mdia` | handler type，例如 video/audio | 轨道类型 |
+| `stsd` | `stbl` | sample entry 列表 | 选择 codec 与 protected sample entry |
+| `mvex` | `moov` | fragmented movie 扩展容器 | 表示后续由 `moof` 提供 sample 元数据 |
+| `trex` | `mvex` | 默认 duration、size、flags、description index | 被 `tfhd/trun` 覆盖前的 fragment 默认值 |
+| `pssh` | `moov` 或允许的 fragment 位置 | SystemID、KID 列表、system data | 向 CDM 提供 init data；不含 sample IV |
+
+`ftyp` 通过、codec 能识别、`pssh` 能解码，只说明容器和初始化信令基本成立。播放器还必须找到受保护 sample entry、有效 `tenc`，并在后续 fragment 中建立 sample 到 `mdat` 的映射。
+
+### 4.5 Protected Sample Entry：`encv/enca -> sinf -> tenc`
+
+加密视频通常把普通 codec sample entry 包在 `encv` 中，加密音频则使用 `enca`。真正的原始 codec 没有消失，而是由 `sinf/frma` 保存：
+
+```text
+encv
+├── avcC / hvcC / av1C / ...
+└── sinf
+    ├── frma = avc1 / hvc1 / av01 / ...
+    ├── schm = cenc / cbcs / cbc1 / cens
+    └── schi
+        └── tenc
+```
+
+四个对象需要分开：
+
+| 对象 | 回答的问题 |
+|------|------------|
+| `encv/enca` | 这是一条受保护的视频/音频 sample entry 吗？ |
+| `frma` | 去掉保护包装后，原始 codec FourCC 是什么？ |
+| `schm` | 使用哪种 protection scheme？ |
+| `tenc` | 这条 track 默认使用哪个 KID、IV 规则和 pattern？ |
+
+`tenc` 的核心字段包括：
+
+```text
+default_is_protected
+default_per_sample_iv_size
+default_kid[16]
+default_crypt_byte_block      // pattern scheme
+default_skip_byte_block       // pattern scheme
+default_constant_iv           // when per-sample IV size is 0
+```
+
+字段是否出现取决于 `tenc` version 和前置值。`cenc` 常见逐 sample IV；`cbcs` 还需要 crypt/skip pattern，并可能使用 constant IV。不能只读取 `default_kid` 就跳过剩余字段，否则下一 child box 的边界很容易被误判。
+
+这里的 `default` 很关键。它不是“永远使用这组参数”，而是没有 sample group 覆盖时的 track 默认值。发生 key rotation 时，某些 sample 的有效 KID 可能来自 `sgpd(seig)`，而不是 `tenc.default_KID`。
+
+### 4.6 Media Segment：`moof` 描述，`mdat` 存密文
+
+一个典型 fragmented media segment：
+
+```text
+styp              // optional segment brands
+sidx              // optional byte/time index
+emsg / prft       // optional timed metadata / producer time
+moof
+├── mfhd
+└── traf [per track fragment]
+    ├── tfhd
+    ├── tfdt
+    ├── trun [1..N]
+    ├── sgpd / sbgp       // optional encryption groups
+    ├── saiz
+    ├── saio
+    └── senc
+mdat
+```
+
+| Box | 关键作用 | 与加密的关系 |
+|-----|----------|--------------|
+| `styp` | segment brand/compatibility | 无 key 语义 |
+| `sidx` | 时间、字节范围和 SAP 索引 | 帮助随机访问，不描述 AES |
+| `emsg` | timed event | 可触发业务事件，但不是 License |
+| `prft` | producer reference time | 用于时钟/低延迟关联，不是安全时钟证明 |
+| `moof` | fragment metadata 容器 | 每段 sample mapping 的入口 |
+| `mfhd` | fragment sequence number | 顺序标识，不应被当作 crypto period |
+| `traf` | 单 track fragment | 把 timing、sample run 和 aux info 聚合起来 |
+| `tfhd` | track ID 与 fragment 默认字段 | 可覆盖 `trex` 默认值 |
+| `tfdt` | base media decode time | 定位 decode timeline |
+| `trun` | sample count、duration、size、flags、composition offset、data offset | 定位 `mdat` 中每个 sample 的字节范围 |
+| `mdat` | media payload | 对受保护 track 而言，这里才是加密 sample bytes |
+
+`mdat` 不知道自己属于哪个 KID，也不知道哪些 NALU 字节保持 clear。它只是一段 payload。播放器必须先从 `tfhd/trun` 算出 sample 边界，再结合有效 encryption context 和 auxiliary info 才能正确解释。
+
+### 4.7 `saiz + saio + senc`：三个 box 如何拼成一条记录
+
+这三个名称经常被一句“存 IV”带过，实际分工更精确：
+
+- `senc`：承载或表示每个 sample 的 encryption entry，包含 IV，以及可选的 subsample pairs；
+- `saiz`：给出每个 sample 对应 auxiliary encryption entry 的字节长度，长度相同时可用一个 default size；
+- `saio`：给出 auxiliary information 相对相应基准的 offset，帮助 parser 找到实际记录。
+
+一个启用 subsample encryption 的 `senc` entry 可以抽象成：
+
+```text
+sample_iv[iv_size]
+subsample_count
+repeat subsample_count times:
+  bytes_of_clear_data
+  bytes_of_protected_data
+```
+
+对视频来说，保留部分 codec framing/NAL header 为 clear 很常见。`bytes_of_clear_data + bytes_of_protected_data` 的累计结果必须与 sample size 对齐；对 CBC/pattern scheme，还要继续验证受保护区间的 block/pattern 约束。
+
+三者的读取顺序不是“先看到谁就信谁”，而是：
+
+```text
+effective tenc/seig context
+  -> 得到 IV size / constant IV / pattern / KID
+saio
+  -> 找到 auxiliary data
+saiz
+  -> 切分每个 sample 的 auxiliary entry
+senc semantics
+  -> 解析 IV 与 subsample clear/protected ranges
+trun
+  -> 找到 mdat sample bytes
+```
+
+Shaka Packager 当前的 fragmented MP4 写法让 `saio` 指向 `senc` 内的 sample encryption data，并把 `senc` 放在 `traf` 的末尾。但这是具体 muxer 的稳定实现行为，不应被 parser 偷换成“所有合法文件中 `senc` 必须永远位于最后”的无条件假设。
+
+### 4.8 `sgpd(seig) + sbgp`：key rotation 如何覆盖 `tenc`
+
+当一条 track 在不同 sample 范围使用不同 KID 时，重新写一个 `tenc` 不现实，因为 `tenc` 位于初始化段。CENC 使用 sample group 解决：
+
+- `sgpd` 的 grouping type 为 `seig` 时，存放一个或多个 CENC Sample Encryption Information Group Entry；
+- 每个 `seig` entry 可以携带 `is_protected`、per-sample IV size、KID、pattern 和 constant IV；
+- `sbgp` 把连续 sample run 映射到某个 group description index；
+- 没有映射到覆盖项的 sample 继续使用 `tenc` 默认上下文。
+
+可以把有效参数写成：
+
+```text
+effective_encryption(sample) =
+  mapped seig entry, if sbgp selects one
+  otherwise tenc defaults
+```
+
+因此，看到 MPD 或 `tenc` 中只有一个 default KID，不代表整个 segment 只使用一个 KID。要正确审计轮换，必须同时遍历 track/fragment level 的 `sgpd`、`sbgp`，并处理 group description index 的作用域。
+
+### 4.9 三组默认值的优先级
+
+fragmented MP4 的难点不仅是 box 多，还在于字段可以继承和覆盖。
+
+**Sample timing/size/flags：**
+
+```text
+trun per-sample field
+  > tfhd fragment default
+  > trex track-fragment default
+```
+
+**Encryption context：**
+
+```text
+sbgp selected sgpd(seig) entry
+  > tenc track default
+```
+
+**Codec identity：**
+
+```text
+encrypted sample entry encv/enca
+  -> sinf/frma original format
+  -> corresponding codec configuration box
+```
+
+把这些继承关系写成明确的数据结构，比在解密循环里到处写 fallback 判断可靠得多。否则 parser 很容易在某个 optional flag 缺失时使用未初始化的 size、IV 或 KID。
+
+### 4.10 Box 级一致性检查清单
+
+对自己打包的文件，推荐按以下顺序检查：
+
+1. `ftyp/styp` brand 是否与目标 CMAF/DASH profile 一致；
+2. 每条 `trak` 的 `tkhd.track_ID` 是否能被对应 `tfhd.track_ID` 找到；
+3. `stsd` 的 active sample description 是否为预期 `encv/enca`；
+4. `frma` 与 codec configuration 是否一致，例如 `frma=avc1` 对应 `avcC`；
+5. `schm.scheme_type` 是否为目标 `cenc/cbcs`；
+6. `tenc.default_KID` 是否与 MPD/打包配置一致；
+7. `trun` 的 sample count、size 和 data offset 是否落在 `mdat` 边界内；
+8. `saiz.sample_count`、`senc` entry count 与相关 sample count 是否一致；
+9. 每个 subsample pair 的 clear/protected bytes 累计是否等于 sample size；
+10. `sbgp` 覆盖的 sample run 是否越界，group index 是否能在对应 `sgpd` 中解析；
+11. 有效 KID 是否出现在预期 PSSH/License 授权集合中；
+12. 任意未知 box 是否能按声明长度安全跳过，不破坏 sibling 边界。
+
+因此，“成功解析 PSSH”只证明你读懂了 DRM 初始化数据；“成功解析 `moov`”也只证明你得到了默认上下文。只有把 `moof` 的逐 sample mapping 和 `mdat` 字节范围一起验证，才算真正读懂了 CENC 数据面。
+
+### 4.11 多轨、多 KID 与密钥轮换
 
 生产内容常见三种切分：
 
@@ -227,7 +489,7 @@ PSSH 只负责 DRM 初始化，真正的样本加密信息分散在 CENC box 中
 
 这种切分不仅是密码学 hygiene，也让 License Service 能按设备能力和业务权利只签发一部分 key。服务端即使允许音频和 SD，也可以不给 UHD KID。客户端宣称支持 4K，并不意味着 License 里会出现 4K 对应的 key。
 
-### 4.4 多 DRM 的最弱路径效应
+### 4.12 多 DRM 的最弱路径效应
 
 同一份 CMAF 资产可以让 Widevine 和 PlayReady 共用 CK，只放不同 PSSH/License 封装。这降低了存储和打包成本，也引入一个直接的安全后果：
 
@@ -239,7 +501,37 @@ PSSH 只负责 DRM 初始化，真正的样本加密信息分散在 CENC box 中
 
 ## 五、浏览器路径：EME 只接线，不交出 Key
 
-### 5.1 EME 的职责边界
+在分别下钻 API 之前，先把 Chrome desktop 与原生 Android 放到同一张通信图里。两边的服务端 License loop 几乎同构，但本地调用会穿过完全不同的进程、HAL 与硬件边界。
+
+{{< cocoon-diagram
+  src="images/widevine-deep-dive/client-communication-architecture.html"
+  title="Chrome and Android Widevine Communication Architecture"
+  height="1160"
+>}}
+
+这张图有意把“授权消息”和“媒体数据”分成两条线：
+
+- 红/紫虚线是 License Request/Response。应用负责 HTTPS transport，但拿到的是 opaque bytes；
+- 蓝色实线是 MPD、PSSH、加密 sample 和 decode 后的 frame/buffer；
+- Chrome desktop 通过 Mojo 把 library CDM 放进独立 CDM utility process；
+- Android 通过 `MediaDrm`、Binder、`DrmHal/CryptoHal` 和 AIDL vendor plugin 进入 Widevine/OEMCrypto；
+- 两边都先访问 Partner License Proxy，而不是从客户端直连 Widevine Cloud License Service。
+
+### 5.1 同一个 License Loop，两套本地 ABI
+
+| 阶段 | Chrome / EME | Android / MediaDrm |
+|------|--------------|--------------------|
+| init data 入口 | `encrypted` event / `generateRequest("cenc", initData)` | app/player 从 manifest/init segment 取得 init data |
+| 创建 session | `MediaKeys.createSession()` | `MediaDrm.openSession()` |
+| 生成请求 | CDM callback 触发 `MediaKeyMessageEvent` | `getKeyRequest()` 返回 opaque `byte[]` |
+| 网络发送 | Web App 用 Fetch/XHR 发给 Partner Proxy | App/Media3 的 DRM callback 发给 Partner Proxy |
+| 安装响应 | `MediaKeySession.update(response)` | `provideKeyResponse(scope, response)` |
+| 本地系统边界 | Renderer -> Browser broker -> Mojo `CdmService` -> `CdmAdapter`/library CDM | App -> Binder -> `mediadrmserver` -> AIDL `IDrmPlugin`/`ICryptoPlugin` |
+| 媒体路径 | MSE/demux -> CDM-backed decryptor/decoder -> GPU/OS media path | extractor -> `MediaCrypto/CryptoHal` -> OEMCrypto/TEE -> `MediaCodec` secure decoder |
+
+这张对照表也解释了一个常见误区：网络请求通常由应用层代码发出，不代表 License 是“发给 JavaScript”或“发给 Android App”的。应用只是协议搬运工；真正消费 response、建立 key status 和绑定 session 的是 CDM/DRM plugin。
+
+### 5.2 EME 的职责边界
 
 浏览器侧典型流程：
 
@@ -256,24 +548,40 @@ navigator.requestMediaKeySystemAccess("com.widevine.alpha", configs)
 
 W3C EME 定义的是会话、消息、状态与能力协商，不定义 Widevine License 的生产字段，也不提供 `getRawKey()` 之类的 API。JavaScript 能看到的是 opaque message 和 key status；内容密钥是否能被软件进程触达，取决于具体 CDM 与平台安全实现，而不是网页权限。
 
-### 5.2 Chrome 里的进程边界
+### 5.3 Chrome 里的进程边界
 
 Chromium 公开了 CDM shared-library interface，但正式 Widevine CDM 不是 Chromium 仓库里的完整开源实现。概念上可以分成：
 
 ```text
-Renderer / Web App
-  -> EME implementation
-  -> Mojo / CDM service boundary
-  -> Widevine CDM adapter + proprietary CDM
-  -> decrypt/decode path
-  -> compositor / GPU / display
+Renderer process
+  Web App / MediaKeySession
+    -> Blink EME / MediaKeys
+    -> MojoCdm client
+
+Browser process
+  MediaInterfaceProxy / InterfaceFactory broker
+
+CDM utility process (desktop library-CDM path)
+  CdmService
+    -> MojoCdmService
+    -> CdmAdapter
+    -> proprietary Widevine library CDM
+
+Media pipeline
+  MSE / demuxed encrypted buffer
+    -> CDM-backed decryptor or decoder
+    -> platform decoder / GPU / compositor / display
 ```
+
+Chromium 的公开 media/mojo 文档把 `MediaInterfaceProxy` 描述为媒体接口请求的 central hub；桌面启用 library CDM 时，`ContentDecryptionModule` 请求会被转发到运行在 CDM utility process 中的 `CdmService`。`CdmService` 只承载 CDM 接口，不等于整个播放器和 decoder 都进入同一个进程。
+
+session 通信是双向的：`CreateSessionAndGenerateRequest()` 把 init data 交给 CDM；CDM 的 session message、keys change、expiration update 再经 Mojo callback 回到 Renderer，最终表现为 EME event。网页随后自行完成 HTTPS 请求，并用 `session.update()` 把 opaque response 原路送回。
 
 具体进程名、sandbox 归属和 decode 路径会随 Chromium 版本、OS 和硬件能力变化。安全分析应追踪“消息和 buffer 穿过了哪些 trust boundary”，不要把某一版 `ps` 输出当成永久架构。
 
 桌面软件 CDM 的现实约束也很清楚：如果密钥使用和解密长期发生在通用 CPU/普通进程，强混淆与完整性校验只能提高逆向成本，不能制造硬件隔离。ChromeOS、Android 和特定平台可能提供不同的硬件路径，因此“Chrome = L3”同样是过度概括。
 
-### 5.3 能力协商不是授权结果
+### 5.4 能力协商不是授权结果
 
 EME configuration 里的 codec、robustness、persistent state 和 distinctive identifier 是客户端能力与隐私协商。服务端最终是否发 UHD/HDR key，还会结合设备状态、账号权利、内容策略和输出能力。
 
@@ -302,7 +610,37 @@ Media3 / App
 
 加密 sample 可以一直保持密文，直到被送入 decoder。AOSP 还为 secure buffer 设计了跨 Binder 的 native handle 路径，目的就是避免高安全内容在普通应用地址空间里先变成明文再交给 codec。
 
-### 6.2 `MediaDrm` 的公开安全枚举
+### 6.2 `IDrmPlugin` 与 `ICryptoPlugin` 为什么要分开
+
+AOSP 把控制面和数据面拆成两类 vendor interface：
+
+| Interface | 控制对象 | 典型动作 |
+|-----------|----------|----------|
+| `IDrmPlugin` | session、Provisioning、License、key status、secure state | open/close session、get/provide key response、query status |
+| `ICryptoPlugin` | 绑定 session 的 sample crypto context | 接收 subsample layout、secure buffer handle，执行受约束 decrypt |
+
+`DrmHal` 负责前一类，`CryptoHal` 负责后一类；它们由 `mediadrmserver` 创建，再通过 AIDL 调用 vendor/SoC 的实现。这样做不是为了让应用更方便，而是为了让 License state 与高吞吐 sample path 各自拥有清晰 ABI 和权限边界。
+
+一轮 streaming key acquisition 可以展开为：
+
+```text
+1. app -> MediaDrm.openSession()
+2. app -> MediaDrm.getKeyRequest(sessionId, initData, mimeType, STREAMING, params)
+3. MediaDrm -> DrmHal -> IDrmPlugin -> Widevine implementation
+4. opaque KeyRequest returns to app
+5. app -> Partner License Proxy -> Widevine License Service
+6. opaque response returns to app
+7. app -> MediaDrm.provideKeyResponse(sessionId, response)
+8. plugin verifies/binds keys and publishes key status
+9. MediaCrypto(sessionId) is attached to MediaCodec
+10. encrypted samples enter queueSecureInputBuffer()
+```
+
+第 4、6 步经过 app 并不等于 app 获得 CK。第 9、10 步也不保证一定是 L1：是否要求 secure decoder、buffer 是否进入 protected memory、最终安全级别是什么，都要查询实际 session 和 codec 能力。
+
+Provisioning 是另一条状态机。`NotProvisionedException` 或 provision-required event 出现时，应用取得 opaque `ProvisionRequest`，发送到其推荐 provisioning endpoint，再把 response 交回 `provideProvisionResponse()`。它解决设备凭据，不应和内容 License API 合并成一个“拿 key 请求”。
+
+### 6.3 `MediaDrm` 的公开安全枚举
 
 Android API 公开的不是简单三个等级，而是五种具体能力：
 
@@ -316,7 +654,7 @@ Android API 公开的不是简单三个等级，而是五种具体能力：
 
 `getSecurityLevel(sessionId)` 返回 session 当前级别，`requiresSecureDecoder(mime, level)` 则回答指定 codec/级别是否要求 secure decoder。这比读一个厂商字符串更适合做能力判断。
 
-### 6.3 L1/L2/L3 与 Android 枚举不能机械画等号
+### 6.4 L1/L2/L3 与 Android 枚举不能机械画等号
 
 Widevine 业界常用的三层概念可以这样理解：
 
@@ -330,7 +668,7 @@ Widevine 业界常用的三层概念可以这样理解：
 
 最重要的一句是：**安全级别描述客户端执行能力，不直接定义内容分辨率。** `MediaDrm.openSession(level)` 的官方文档只说降低安全级别通常会被 License policy 限制到更低分辨率；“通常”不是“协议固定”。720p、1080p、4K 与 HDR 的门槛是服务方策略，不是 L1 字符串的数学函数。
 
-### 6.4 OEMCrypto 守的是什么
+### 6.5 OEMCrypto 守的是什么
 
 Widevine 官方公开页只把 OEMCrypto、Keybox 和 Provisioning 标为设备集成组件，详细接口和合规要求属于授权资料。结合 AOSP 边界与公开研究，可以谨慎地描述其角色：
 
@@ -818,3 +1156,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 16. [Delaune et al.: Formal Security Analysis of Widevine](https://www.usenix.org/system/files/usenixsecurity24-delaune.pdf)
 17. [Roudot et al.: Narrowbeer, A Practical Replay Attack Against Widevine DRM](https://www.usenix.org/system/files/usenixsecurity25-roudot.pdf)
 18. [Patat et al.: Privacy Implications of Widevine EME](https://arxiv.org/abs/2308.05416)
+19. [Shaka Packager MP4 Box Definitions](https://github.com/shaka-project/shaka-packager/blob/main/packager/media/formats/mp4/box_definitions.h)
+20. [Shaka Packager MP4 Segmenter](https://github.com/shaka-project/shaka-packager/blob/main/packager/media/formats/mp4/segmenter.cc)
+21. [Chromium Media Mojo Architecture](https://chromium.googlesource.com/chromium/src/+/main/media/mojo/)
+22. [Chromium MP4 Box Definitions](https://chromium.googlesource.com/chromium/src/+/main/media/formats/mp4/box_definitions.h)
