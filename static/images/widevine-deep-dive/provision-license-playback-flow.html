@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widevine Provisioning, License and Secure Playback Flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: #fff;
+      overflow-x: hidden;
+    }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { color: #94a3b8; font-size: .875rem; margin-left: 1.75rem; overflow-wrap: anywhere; }
+    .diagram-container {
+      background: rgba(15, 23, 42, .5);
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 1.25rem;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    svg { width: 100%; height: auto; min-width: 0; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; background: rgba(15, 23, 42, .5); border: 1px solid #1e293b; border-radius: 8px; padding: 1.1rem; }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; }
+    .card li { margin-bottom: .375rem; }
+    .footer { text-align: center; margin-top: 1.25rem; color: #475569; font-size: .75rem; }
+    .toolbar { display: flex; gap: .5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle {
+      background: transparent; border: none; color: #475569; cursor: pointer;
+      font: inherit; font-size: 1.25rem; line-height: 1; padding: .25rem .5rem;
+      border-radius: 6px; transition: color .2s, background .2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, .8); border: 1px solid #334155; color: #94a3b8;
+      padding: .375rem .75rem; border-radius: 6px; font-family: inherit;
+      font-size: .75rem; cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, .8); color: #fff; border-color: #475569; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+      .footer { margin-top: 1rem; }
+    }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Widevine Provisioning, License and Secure Playback Flow</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">Copy</button>
+            <button onclick="downloadPNG(this)">PNG</button>
+            <button onclick="downloadPDF(this)">PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">Device trust is established before content entitlement; opaque licenses then govern key use, renewal and output</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 900" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Widevine provisioning, content license and secure playback sequence</title>
+        <desc id="diagram-desc">The client first obtains or refreshes device credentials through provisioning, then relays a content license request through a partner proxy, and finally uses the resulting license in a CDM or secure media path.</desc>
+        <defs>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b" /></marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" /></marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399" /></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" /></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" /></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" /></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Phase boundaries -->
+        <rect x="20" y="132" width="1460" height="220" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="155" fill="#fbbf24" font-size="11" font-weight="600">A. DEVICE TRUST / PROVISIONING - only when credentials are absent, stale or revoked</text>
+        <rect x="20" y="370" width="1460" height="260" rx="12" fill="rgba(52,211,153,.018)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="393" fill="#34d399" font-size="11" font-weight="600">B. CONTENT ENTITLEMENT / LICENSE - repeated per title, policy window or key period</text>
+        <rect x="20" y="648" width="1460" height="145" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="671" fill="#22d3ee" font-size="11" font-weight="600">C. KEY USE / SECURE PLAYBACK - encrypted samples, policy enforcement and lifecycle events</text>
+
+        <!-- Lifelines and all flow arrows are drawn before actor boxes -->
+        <line x1="135" y1="110" x2="135" y2="775" stroke="#334155" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="380" y1="110" x2="380" y2="775" stroke="#334155" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="625" y1="110" x2="625" y2="352" stroke="#334155" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="870" y1="110" x2="870" y2="775" stroke="#334155" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="1115" y1="110" x2="1115" y2="630" stroke="#334155" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="1360" y1="110" x2="1360" y2="775" stroke="#334155" stroke-width="1.5" stroke-dasharray="5,5"/>
+
+        <!-- Provisioning branch -->
+        <path d="M 135 180 L 370 180" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="252" y="171" fill="#94a3b8" font-size="8" text-anchor="middle">1. create/open DRM session</text>
+        <path d="M 370 208 L 145 208" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <text x="257" y="200" fill="#fbbf24" font-size="8" text-anchor="middle">2. not provisioned / individualization needed</text>
+        <path d="M 135 237 L 370 237" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="252" y="229" fill="#94a3b8" font-size="8" text-anchor="middle">3. Android getProvisionRequest()</text>
+        <path d="M 370 266 L 145 266" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <text x="257" y="258" fill="#fbbf24" font-size="8" text-anchor="middle">4. opaque request + server URL</text>
+        <path d="M 135 296 L 615 296" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-amber)"/>
+        <text x="375" y="288" fill="#fbbf24" font-size="8" text-anchor="middle">5a. app relay over HTTPS</text>
+        <path d="M 380 318 C 455 345, 565 345, 615 318" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="3,4" marker-end="url(#arrow-violet)"/>
+        <text x="500" y="344" fill="#a78bfa" font-size="8" text-anchor="middle">5b. browser/CDM direct individualization may be internal</text>
+        <path d="M 615 325 L 145 325" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="380" y="317" fill="#a78bfa" font-size="8" text-anchor="middle">6. signed device certificate / credentials</text>
+        <path d="M 135 342 L 370 342" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="252" y="337" fill="#94a3b8" font-size="7" text-anchor="middle">7. provideProvisionResponse(); retry</text>
+
+        <!-- Content license branch -->
+        <path d="M 135 420 L 370 420" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="252" y="411" fill="#22d3ee" font-size="8" text-anchor="middle">8. PSSH + KID + session type</text>
+        <path d="M 370 451 L 145 451" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="257" y="443" fill="#fb7185" font-size="8" text-anchor="middle">9. opaque License Request</text>
+        <path d="M 135 482 L 860 482" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-rose)"/>
+        <text x="500" y="473" fill="#fb7185" font-size="8" text-anchor="middle">10. HTTPS + account token + asset/playback context</text>
+        <path d="M 880 513 L 1105 513" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+        <text x="992" y="505" fill="#34d399" font-size="8" text-anchor="middle">11. verified request + policy</text>
+        <path d="M 1105 543 L 880 543" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="992" y="535" fill="#a78bfa" font-size="8" text-anchor="middle">12. individualized license</text>
+        <path d="M 860 574 L 145 574" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-violet)"/>
+        <text x="500" y="566" fill="#a78bfa" font-size="8" text-anchor="middle">13. opaque response; proxy cannot rewrite generated license</text>
+        <path d="M 135 605 L 370 605" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <text x="252" y="597" fill="#94a3b8" font-size="8" text-anchor="middle">14. update() / provideKeyResponse()</text>
+        <path d="M 390 615 L 1350 615" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <text x="870" y="607" fill="#fb7185" font-size="8" text-anchor="middle">key handle + policy state; raw CK is not returned through the public app API</text>
+
+        <!-- Secure playback and lifecycle -->
+        <path d="M 135 705 L 1350 705" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="742" y="696" fill="#22d3ee" font-size="8" text-anchor="middle">15. encrypted CENC samples + IV/subsample metadata</text>
+        <path d="M 1350 736 L 390 736" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+        <text x="870" y="728" fill="#34d399" font-size="8" text-anchor="middle">16. usable/expired/output-restricted status; frames remain in protected path when required</text>
+        <path d="M 370 766 C 515 805, 750 805, 860 766" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-violet)"/>
+        <text x="615" y="789" fill="#a78bfa" font-size="8" text-anchor="middle">17. renewal, key rotation, offline restore/release loop</text>
+
+        <!-- Actor boxes: opaque underlay then semantic fill -->
+        <rect x="40" y="42" width="190" height="68" rx="6" fill="#0f172a"/><rect x="40" y="42" width="190" height="68" rx="6" fill="rgba(8,51,68,.48)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="135" y="68" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">OTT App / Browser</text><text x="135" y="88" fill="#94a3b8" font-size="8" text-anchor="middle">transport + account context</text>
+        <rect x="285" y="42" width="190" height="68" rx="6" fill="#0f172a"/><rect x="285" y="42" width="190" height="68" rx="6" fill="rgba(136,19,55,.42)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="380" y="68" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">CDM / MediaDrm</text><text x="380" y="88" fill="#94a3b8" font-size="8" text-anchor="middle">credential + license state</text>
+        <rect x="530" y="42" width="190" height="68" rx="6" fill="#0f172a"/><rect x="530" y="42" width="190" height="68" rx="6" fill="rgba(120,53,15,.35)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="625" y="68" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Provisioning Service</text><text x="625" y="88" fill="#94a3b8" font-size="8" text-anchor="middle">device certificate lifecycle</text>
+        <rect x="775" y="42" width="190" height="68" rx="6" fill="#0f172a"/><rect x="775" y="42" width="190" height="68" rx="6" fill="rgba(6,78,59,.45)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="870" y="68" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Partner License Proxy</text><text x="870" y="88" fill="#94a3b8" font-size="8" text-anchor="middle">entitlement + risk policy</text>
+        <rect x="1020" y="42" width="190" height="68" rx="6" fill="#0f172a"/><rect x="1020" y="42" width="190" height="68" rx="6" fill="rgba(76,29,149,.42)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1115" y="68" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Widevine Service</text><text x="1115" y="88" fill="#94a3b8" font-size="8" text-anchor="middle">fulfillment + personalization</text>
+        <rect x="1255" y="42" width="210" height="68" rx="6" fill="#0f172a"/><rect x="1255" y="42" width="210" height="68" rx="6" fill="rgba(136,19,55,.42)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1360" y="68" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">OEMCrypto / Decoder</text><text x="1360" y="88" fill="#94a3b8" font-size="8" text-anchor="middle">TEE + protected output</text>
+
+        <!-- Partner decision point -->
+        <rect x="788" y="454" width="164" height="38" rx="6" fill="#0f172a"/><rect x="788" y="454" width="164" height="38" rx="6" fill="rgba(6,78,59,.45)" stroke="#34d399" stroke-width="1.2"/>
+        <text x="870" y="470" fill="#fff" font-size="8" font-weight="600" text-anchor="middle">ENTITLEMENT GATE</text><text x="870" y="484" fill="#94a3b8" font-size="7" text-anchor="middle">plan / geo / concurrency / risk</text>
+
+        <!-- Legend outside all phase boundaries -->
+        <text x="30" y="850" fill="#fff" font-size="10" font-weight="600">LEGEND</text>
+        <line x1="100" y1="846" x2="135" y2="846" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,4"/><text x="145" y="850" fill="#94a3b8" font-size="9">provisioning</text>
+        <line x1="275" y1="846" x2="310" y2="846" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,4"/><text x="320" y="850" fill="#94a3b8" font-size="9">license request</text>
+        <line x1="470" y1="846" x2="505" y2="846" stroke="#a78bfa" stroke-width="2"/><text x="515" y="850" fill="#94a3b8" font-size="9">credential / license response</text>
+        <line x1="765" y1="846" x2="800" y2="846" stroke="#22d3ee" stroke-width="2"/><text x="810" y="850" fill="#94a3b8" font-size="9">encrypted media</text>
+        <line x1="985" y1="846" x2="1020" y2="846" stroke="#34d399" stroke-width="2"/><text x="1030" y="850" fill="#94a3b8" font-size="9">policy status / secure output</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>Provision Once, Refresh When Needed</h3></div>
+        <ul>
+          <li>Android surfaces NotProvisionedException and opaque provisioning APIs</li>
+          <li>Browser individualization may remain inside the user agent and CDM</li>
+          <li>Provisioning establishes device credentials; it does not authorize a title</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Authorize Every Playback Context</h3></div>
+        <ul>
+          <li>The partner proxy binds account rights, asset, KID and device evidence</li>
+          <li>The Widevine service returns an opaque device-individualized license</li>
+          <li>Streaming, offline, renewal and release are separate lifecycle states</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>Enforce During Key Use</h3></div>
+        <ul>
+          <li>L1 can retain keys, decrypted samples and decode inside secure hardware</li>
+          <li>HDCP, resolution and expiration remain active playback gates</li>
+          <li>License success alone does not guarantee an allowed output path</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">Widevine lifecycle sequence - public EME, MediaDrm and Widevine architecture - 2026-08-24</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({
+          type: 'cocoon-diagram:resize',
+          height: Math.ceil(root.getBoundingClientRect().height + padding)
+        }, window.location.origin);
+      });
+    }
+
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', (event) => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize();
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+
+    async function captureDiagram() {
+      const el = document.getElementById('report-container');
+      const r = el.getBoundingClientRect();
+      const pad = 32;
+      return html2canvas(document.body, {
+        backgroundColor: '#020617', scale: 2, useCORS: true,
+        ignoreElements: (e) => e.classList && e.classList.contains('toolbar'),
+        x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad,
+        width: r.width + pad * 2, height: r.height + pad * 2
+      });
+    }
+
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const canvas = await captureDiagram();
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = 'Copied';
+      } catch (e) { btn.textContent = 'Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Working';
+      try {
+        const canvas = await captureDiagram();
+        const link = document.createElement('a');
+        link.download = 'widevine-provision-license-playback-flow.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = 'Done';
+      } catch (e) { btn.textContent = 'Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Working';
+      try {
+        const canvas = await captureDiagram();
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('widevine-provision-license-playback-flow.pdf');
+        btn.textContent = 'Done';
+      } catch (e) { btn.textContent = 'Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

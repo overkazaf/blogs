@@ -2,7 +2,7 @@
 title: "一个 PSSH，为什么还拿不到 Key？ - Google Widevine 从 License Proxy 到 L1 的完整解剖"
 slug: "widevine-pssh-license-l1-deep-dive"
 date: 2026-08-22T14:00:00+08:00
-lastmod: 2026-08-24T16:30:00+08:00
+lastmod: 2026-08-24T16:52:00+08:00
 draft: false
 tags: ["Widevine", "DRM", "CENC", "CMAF", "ISOBMFF", "EME", "MediaDrm", "OEMCrypto", "L1", "PSSH", "protobuf", "security-research"]
 categories: ["security-research"]
@@ -18,6 +18,7 @@ math: false
 > - 对照 Chrome 与 Android 双泳道通信图，理解 EME/Mojo/CDM 与 MediaDrm/AIDL HAL/OEMCrypto 两条接入路径
 > - 严格区分 Widevine L1/L2/L3、Android 五级安全枚举、分辨率授权和 HDCP 输出策略
 > - 理解 Provisioning、设备身份、License 个性化、续租、离线授权、密钥轮换和撤销之间的关系
+> - 对照十类主流 OTT 应用，理解 Widevine 在订阅、租购、离线、直播和 UHD 场景中到底负责哪一段
 > - 用固定版本 Shaka Packager 对自有媒体做 CENC 实验，并用 Bento4、GPAC 与 PSSH parser 交叉检查结果
 > - 从攻击面而不是产品宣传评估 Widevine：L1 把风险压到了哪里，License Server 又可能怎样把整条链主动放空
 
@@ -759,6 +760,33 @@ Android `MediaDrm` 公开 API 明确区分 Provisioning 和 Key Request：
 
 这说明 DRM 的隐私目标不是“设备没有身份”，而是尽量避免把同一个可链接标识无条件暴露给所有站点。公开研究已经指出浏览器实现偏差可能重新引入可链接性，因此隐私评审要覆盖浏览器/CDM 实现，而不能只看 EME 规范的理想流程。
 
+### 8.4 从 Provisioning 到 Secure Playback 的完整时序
+
+把 Provisioning、License 和播放混在一张抓包时序里，很容易误判“第一次请求为什么没有 PSSH”，或者把设备证书响应当成内容 License。下面这张图把三段状态机拆开：
+
+{{< cocoon-diagram
+  src="images/widevine-deep-dive/provision-license-playback-flow.html"
+  title="Widevine Provisioning, License and Secure Playback Flow"
+  height="1160"
+>}}
+
+图里的参与者是逻辑边界，不承诺所有平台都以相同进程和 HTTP 栈实现。尤其要区分 Android 与浏览器：
+
+1. 播放器先创建 DRM/CDM 上下文并尝试打开 session；
+2. Android 若没有可用设备证书，相关操作会抛出 `NotProvisionedException`；
+3. 应用调用 `getProvisionRequest()`，取得 opaque request 和目标 URL；
+4. 应用只负责经 HTTPS 搬运 request/response，再调用 `provideProvisionResponse()` 安装凭据；
+5. 浏览器侧的 Individualization 可能由 User Agent/CDM 直接完成，网页 JavaScript 不一定能观察到与 Android 等价的 provisioning API；
+6. Provisioning 成功后，客户端才根据 MPD/PSSH、KID 和 session type 生成内容 License Request；
+7. App/Web App 把 opaque request 连同账号 token、asset 和播放上下文送到 Partner License Proxy；
+8. Proxy 校验套餐、地区、并发、设备风险与 KID 映射，再附加业务规则请求 Widevine fulfillment；
+9. 生成后的个性化 License 作为 opaque response 原路返回，并由 `update()` 或 `provideKeyResponse()` 消费；
+10. CDM/OEMCrypto 建立 key handle 与 policy state，公开应用 API 不返回 raw CK；
+11. 加密 sample 携带 IV、subsample 和 KID 元数据进入 crypto/decode path；
+12. 续租、key rotation、offline restore/release、过期和输出限制继续驱动后续状态变化。
+
+因此，Provisioning 回答的是“这台客户端能否获得一个受信的设备身份”，License 回答的是“这个身份在当前业务上下文里能否使用哪些 KID”，Secure Playback 回答的才是“这些 key 能在哪里、以什么输出条件被使用”。三者缺一不可，也不能互相代替。
+
 ---
 
 ## 九、License 不只是一把 CK：时间、状态与输出
@@ -819,9 +847,81 @@ Shaka Packager 公开的 Widevine Common Encryption API 支持：
 
 ---
 
-## 十一、从安全角度评估 Widevine
+## 十一、哪些 OTT App 在使用 Widevine，它们实际保护什么
 
-### 11.1 它真正做强的地方
+### 11.1 先纠正“基于 Widevine 构建”这个说法
+
+Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/overview) 直接列出了 Google Play、YouTube、Netflix、Disney+、Amazon Prime Video、HBO Max、Hulu、Peacock、Discovery+ 和 Paramount+。这足以证明它们是 Widevine 生态的公开合作方，但不能推出三个过度结论：
+
+1. 这些 App 的全部安全体系都由 Widevine 提供；
+2. 它们在每个平台、每个标题和每个清晰度上都使用 Widevine；
+3. 它们采用相同 License policy、L1 门槛或服务端实现。
+
+更准确的表述是：**这些 OTT 服务在 Chrome、Android、Android TV、Fire OS、部分智能电视等 Widevine 平台上，把 Widevine 作为多 DRM 交付矩阵中的一条内容保护路径。** 同一服务在 Apple 设备上通常需要 FairPlay，在 Windows、Xbox 或部分电视生态中还可能走 PlayReady。媒体资产可以共用 CENC/CMAF，License 和设备信任路径则按平台分开。
+
+### 11.2 十类公开确认的服务与典型场景
+
+下表中的“Widevine 承载点”是根据公开架构做的边界映射，不代表服务商公开了每个内部 License 字段。具体功能会随地区、套餐、标题和设备变化。
+
+| OTT App / 服务 | 典型业务场景 | Widevine 在适用平台可承载的保护 | 仍由服务自身负责的部分 |
+|----------------|--------------|--------------------------------|--------------------------|
+| **Google Play / Google TV** | 电影租赁、购买、跨设备播放、移动端离线 | persistent/offline License、租期与播放窗口、设备绑定、输出策略 | 订单、所有权账本、退款、地区版权 |
+| **YouTube** | 付费电影、高价值内容、Living Room 与直播频道 | L1 secure decode、HDCP、key rotation、多 KID 与分辨率策略 | 频道权利、广告、账号、直播授权与风控 |
+| **Netflix** | 订阅 VOD、UHD/HDR、移动端下载 | 设备安全等级、offline License、续租、HDCP 与高价值轨道隔离 | MSL/账号会话、套餐、Household、并发、推荐和 CDN token |
+| **Disney+** | 影视订阅、4K/HDR、移动端离线 | 高清轨道策略、设备绑定、离线有效期与 protected output | 套餐、地区 catalog、儿童档案、并发和账号风控 |
+| **Amazon Prime Video** | 订阅、租赁、购买、离线与直播活动 | streaming/offline/release 生命周期、租购窗口、轮换与输出限制 | 订单、频道订阅、PIN、并发和地区规则 |
+| **HBO Max / Max** | 精品影视、UHD 与部分地区直播体育 | 高价值 KID、L1/secure path、HDCP、短期 License/renewal | 套餐、赛事权利、账号共享策略与区域授权 |
+| **Hulu** | 订阅 VOD、Live TV、移动端下载 | VOD License、Live key rotation、离线恢复与到期状态 | 直播频道包、地理位置、广告和并发限制 |
+| **Peacock** | 广告/订阅 VOD、线性频道、体育直播 | CENC、直播轮换、设备策略、输出保护 | 广告决策、赛事 blackout、账号和播放并发 |
+| **Discovery+** | 纪实内容、订阅 VOD、部分市场体育 | 多设备 License、UHD/HD 档位、续租和输出约束 | 区域 catalog、套餐、赛事/频道 entitlement |
+| **Paramount+** | 影视 VOD、线性频道与体育直播 | VOD 与 Live License、crypto period、secure decode/HDCP | CBS/赛事地区权、套餐、广告、并发和风控 |
+
+这里最值得观察的不是品牌数量，而是**同一个 DRM 状态机如何承载不同商业模型**。
+
+### 11.3 五种业务场景，五组不同的 License 重点
+
+**订阅 VOD。** Netflix、Disney+、Max 一类服务更关心套餐是否覆盖当前标题、设备是否允许目标分辨率、License 多久续一次，以及外接显示链是否满足 HDCP。Widevine 可以执行 key usage 与输出策略，但“用户有没有订阅”仍由 Partner Proxy 判断。
+
+**租赁与购买。** Google Play/Google TV、Prime Video 的租购场景需要区分“订单长期存在”和“本次播放 License 有效”。购买记录可以长期保留，License 仍可短期签发并周期更新；租赁还需要未开始窗口、首次播放后的倒计时和设备数量限制。不能把支付数据库的一行订单直接等同于永不过期的 DRM License。
+
+**离线下载。** Netflix、Disney+、Prime Video 等移动应用需要把 encrypted media 与 persistent/offline License 一起管理。License 可绑定设备、账号、下载槽位和安全时间，并支持 renewal/release。把 `.mp4` 缓存到磁盘只是数据面；真正决定断网后还能否播放的是 DRM 持久状态。
+
+**Live TV 与体育。** Hulu Live TV、Peacock、Paramount+ 和部分地区的 Max/Discovery+ 需要短 License、持续 renewal、crypto-period key rotation 和快速 revocation。赛事 blackout、地区限制和订阅包由 Proxy 决策，Widevine 负责让对应 KID 的授权在设备上按时生效或失效。
+
+**UHD/HDR 与 Living Room。** 高价值档位通常要求更强的 device robustness、secure decoder 和输出保护。YouTube 的公开 Living Room 设备要求把 1080p 以上 High Value Content 与 Widevine L1、secure hardware decode 和 HDCP 关联；Netflix 的帮助文档也把 4K 外接显示链与 HDCP 2.2 放在同一组前提中。这说明“拿到 License”与“允许输出目标画质”是两个独立门槛。
+
+### 11.4 Widevine 明确不负责什么
+
+一次 OTT 安全评审如果只画 DRM，会漏掉更大的业务面：
+
+- 登录、支付、订阅和家庭成员关系；
+- geo-block、VPN/代理判断、赛事 blackout 和版权窗口；
+- CDN signed URL、manifest token 与防盗链；
+- 并发播放、设备槽位和异常账号共享检测；
+- App 完整性、root/debug 风险、设备 attestation；
+- 服务端 watermarking、泄露溯源和盗版监测；
+- 广告决策、反作弊、遥测和风控模型。
+
+这些控制可以影响 Partner Proxy 是否签发、签发哪些 KID、License 多长、是否要求 L1/HDCP，却不是 Widevine CDM 自动提供的功能。反过来，业务 token 做得再复杂，也不能替代 secure key use 和 protected media path。
+
+### 11.5 评估一个 OTT App 时应该问什么
+
+1. 当前平台实际选择了 Widevine、PlayReady 还是 FairPlay，是否存在降级路径？
+2. SD、HD、UHD/HDR、音频是否使用不同 KID 与不同安全策略？
+3. Provisioning 失败、凭据撤销和 CDM 版本过旧时，是拒播、降档还是切换 DRM？
+4. Streaming、offline、renewal、release 的状态是否都绑定账号、asset、KID 和设备？
+5. Live rotation 的提前量、session 数和 License QPS 能否承受边缘网络抖动？
+6. Partner Proxy 是否从可信 catalog 反查 KID，而不是接受客户端任意指定？
+7. L1、secure decoder、HDCP 和 protected surface 是否在播放全过程持续验证？
+8. 多 DRM 共用 CK 时，另一条路径是否能获得更宽松的同一把 key？
+
+这套问题比“App 有没有 Widevine”更接近真实安全结论。前者是在查一个 SDK，后者是在审一条从订单、License 到屏幕的授权链。
+
+---
+
+## 十二、从安全角度评估 Widevine
+
+### 12.1 它真正做强的地方
 
 Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需要同时成立的条件：
 
@@ -834,13 +934,13 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 它并不保证攻击不可能，而是努力把“复制一段响应即可无限扩散”变成高成本、设备相关、容易观测且可以撤销的对抗。
 
-### 11.2 网络攻击者
+### 12.2 网络攻击者
 
 网络侧可以看到域名、时序、包长和加密媒体流量，但 HTTPS 保护 License Proxy 传输。即使在受控客户端上看到完整 Request/Response，设备个性化和 session 状态也应阻止把响应搬到另一设备直接使用。
 
 剩余风险主要在：TLS 终止点、代理日志、调试抓包配置、错误遥测、CDN token 和 License API 的认证授权。尤其要检查 APM 是否把 opaque License body 当“便于排障的 payload”持久化。
 
-### 11.3 控制 Web App 或普通 Android 进程的攻击者
+### 12.3 控制 Web App 或普通 Android 进程的攻击者
 
 这类攻击者可以改 JavaScript、hook EME/`MediaDrm` 调用、观察 IPC 和网络，也可以伪造 UI 层 capability。对 L3，秘密和攻击者长期处于同一通用执行环境，安全性很大程度依赖实现复杂度、混淆、完整性与快速撤销。
 
@@ -852,7 +952,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 - secure decoder 和 protected surface 不能被替换成普通输出而保持同等授权；
 - TEE 调用严格校验 handle、长度、session 和 nonce。
 
-### 11.4 L1 把攻击面搬到了哪里
+### 12.4 L1 把攻击面搬到了哪里
 
 “进入 TEE”是边界变化，不是安全证明。L1 的残余风险包括：
 
@@ -866,7 +966,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 这也是为什么安全等级不能只靠客户端上报。License Service 需要基于受认证的设备/实现状态做决策，并保留按 OEM、model、build、CDM version 和 credential 批次快速降级的能力。
 
-### 11.5 License Proxy 与 KMS 往往更脆
+### 12.5 License Proxy 与 KMS 往往更脆
 
 | 风险 | 后果 | 防御重点 |
 |------|------|----------|
@@ -880,7 +980,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 客户端投入再多，KMS 返回接口如果能被普通应用凭据调用，或者 Proxy 能为任意 KID 附加宽松规则，整条硬件信任链都会被服务端主动绕开。
 
-### 11.6 公开研究给出的边界
+### 12.6 公开研究给出的边界
 
 近年来的 Widevine 研究大致分成四类：
 
@@ -893,9 +993,9 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 ---
 
-## 十二、一个合法、可重复的 Widevine 实验室
+## 十三、一个合法、可重复的 Widevine 实验室
 
-### 12.1 实验目标
+### 13.1 实验目标
 
 ```text
 自有 clear MP4
@@ -908,7 +1008,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 
 raw key 实验只能验证 CENC 数据面和 Widevine 信令。它不会凭空生成受 Google 信任的 Device Credential、Cloud License 权限或生产 CDM。
 
-### 12.2 固定 Shaka Packager 版本
+### 13.2 固定 Shaka Packager 版本
 
 本文固定 `v3.9.3`，避免 main branch 继续变化后命令和产物无法对齐：
 
@@ -955,7 +1055,7 @@ cmake -B build-musl -G Ninja \
 
 为了让实验可复现，至少记录：tag、完整 commit、submodule revision、编译器版本、CMake 版本、host OS 和最终 `packager --version` 输出。
 
-### 12.3 打包自己的测试媒体
+### 13.3 打包自己的测试媒体
 
 下面 KID/key 仅是公开文档占位值，只能用于自己生成的测试内容：
 
@@ -988,7 +1088,7 @@ label=AUDIO:key_id=ffeeddccbbaa99887766554433221100:key=0f0e0d0c0b0a090807060504
 
 不要把实验 raw key 放进 shell history、CI 日志或生产命令。生产打包应从 KMS/Key Service 取得 key，并将 packager 身份限制为只访问当前 asset/track 所需材料。
 
-### 12.4 使用 Widevine Key Service 的参数边界
+### 13.4 使用 Widevine Key Service 的参数边界
 
 Shaka Packager 支持 `--enable_widevine_encryption`，配合：
 
@@ -1003,7 +1103,7 @@ Shaka Packager 支持 `--enable_widevine_encryption`，配合：
 
 这组参数属于获得 Widevine 权限的内容提供方工作流。`signer` 与签名 key 是组织凭据，不是播放器侧 License，也不应出现在前端、示例仓库或普通构建日志中。没有正式 Cloud Service/合作方测试权限时，停留在 raw key + 自有内容实验即可。
 
-### 12.5 交叉检查产物
+### 13.5 交叉检查产物
 
 ```bash
 ./build/packager/packager --dump_stream_info input=video_cenc.mp4
@@ -1026,7 +1126,7 @@ python3 build/packager/pssh-box.py \
 
 同一个 packager 同时负责写和读，可能让同一实现缺陷互相“证明正确”。用 Bento4、GPAC 和 Shaka 自带 PSSH 工具交叉验证，价值远高于换三种 Base64 网站。
 
-### 12.6 播放侧实验
+### 13.6 播放侧实验
 
 浏览器可使用 Shaka Player，Android 可使用 Media3 ExoPlayer demo。实验应用只应负责：
 
@@ -1042,9 +1142,9 @@ observe key status, renewal, HDCP and decoder errors
 
 ---
 
-## 十三、参考项目地图：谁能证明哪一层
+## 十四、参考项目地图：谁能证明哪一层
 
-### 13.1 Google、Android 与标准
+### 14.1 Google、Android 与标准
 
 | 项目/规范 | 层 | 用途 | 注意事项 |
 |-----------|----|------|----------|
@@ -1057,7 +1157,7 @@ observe key status, renewal, HDCP and decoder errors
 | [W3C EME](https://www.w3.org/TR/encrypted-media-2/) | Browser API | Key System、session、message、key status | 不定义 Widevine License payload |
 | [W3C CENC Init Data](https://www.w3.org/TR/eme-initdata-cenc/) | Init Data | 多 PSSH 串联与处理规则 | 连接 CENC 与 EME |
 
-### 13.2 打包、解析与播放
+### 14.2 打包、解析与播放
 
 | 项目 | 角色 | Widevine 相关能力 | 推荐用法 |
 |------|------|--------------------|----------|
@@ -1073,7 +1173,7 @@ observe key status, renewal, HDCP and decoder errors
 
 FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Widevine CDM、License Client 或 OEMCrypto 实现。`ffprobe` 能列出 encrypted track，不等于“FFmpeg 支持 Widevine”。
 
-### 13.3 研究项目与论文
+### 14.3 研究项目与论文
 
 | 项目/论文 | 范围 | 研究价值 | 边界 |
 |-----------|------|----------|------|
@@ -1088,7 +1188,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 
 ---
 
-## 十四、和 PlayReady 放在一起看
+## 十五、和 PlayReady 放在一起看
 
 | 维度 | Widevine | PlayReady |
 |------|----------|-----------|
@@ -1105,7 +1205,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 
 ---
 
-## 十五、实现和审计时最值得记住的十二条
+## 十六、实现和审计时最值得记住的十二条
 
 1. Widevine PSSH 的 SystemID 固定，但 PSSH 不是 License，更不是 CK。
 2. `key_id` 可以公开；它是索引，不是 AES key。
@@ -1122,7 +1222,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 
 ---
 
-## 十六、结语：真正的边界在 PSSH 之后
+## 十七、结语：真正的边界在 PSSH 之后
 
 回到开头那段 protobuf。
 
@@ -1160,3 +1260,9 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 20. [Shaka Packager MP4 Segmenter](https://github.com/shaka-project/shaka-packager/blob/main/packager/media/formats/mp4/segmenter.cc)
 21. [Chromium Media Mojo Architecture](https://chromium.googlesource.com/chromium/src/+/main/media/mojo/)
 22. [Chromium MP4 Box Definitions](https://chromium.googlesource.com/chromium/src/+/main/media/formats/mp4/box_definitions.h)
+23. [Android `NotProvisionedException`](https://developer.android.com/reference/android/media/NotProvisionedException)
+24. [Android NDK `AMediaDrm_getProvisionRequest`](https://developer.android.com/ndk/reference/group/media#amediadrm_getprovisionrequest)
+25. [YouTube Living Room Hardware and Media Format Requirements](https://developers.google.com/youtube/devices/living-room/files/pdf-guides/Revised_YouTube_Hardware_And_Media_Format_Requirements_for_CE_and_Operator_Devices_2020.pdf)
+26. [Netflix: Ultra HD and HDCP Requirements on Windows](https://help.netflix.com/en/node/23931)
+27. [Prime Video Usage Rules](https://www.primevideo.com/help/?language=en_US&nodeId=G202095500)
+28. [Disney+ Plans, 4K and Downloads](https://help.disneyplus.com/article/disneyplus-price)
