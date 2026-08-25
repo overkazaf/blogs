@@ -2,11 +2,11 @@
 title: "一个 Canvas 当然认不出你：海内外主流 Web / Android 设备指纹与风控体系全景"
 slug: "device-fingerprinting-web-android-mainstream-platforms"
 date: 2026-08-25T10:30:00+08:00
-lastmod: 2026-08-25T12:52:10+08:00
+lastmod: 2026-08-25T13:53:17+08:00
 draft: false
-tags: ["Device-Fingerprinting", "Web-Security", "Android", "Risk-Control", "Anti-Fraud", "Privacy", "Play-Integrity", "Cloudflare", "Stripe", "Sift", "Alibaba", "Ant", "Meituan"]
+tags: ["Device-Fingerprinting", "Web-Security", "Android", "Risk-Control", "Anti-Fraud", "Privacy", "Device-Registration", "Play-Integrity", "ByteDance", "Douyin", "Cloudflare", "Stripe", "Sift", "Alibaba", "Ant", "Meituan"]
 categories: ["security-research"]
-description: "沿着信号采集、可信验证、设备归并、业务图谱、风险处置和对抗反馈这一条主线，比较海内外主流 Web / Android 设备风控方案、Play Integrity 架构及其可被规避的边界。"
+description: "沿着信号采集、设备注册、可信验证、画像归并、业务图谱、风险处置和对抗反馈这一条主线，比较海内外主流 Web / Android 设备风控方案、抖音系注册流程、Play Integrity 架构及其可被规避的边界。"
 toc: true
 math: false
 ---
@@ -59,8 +59,9 @@ math: false
 后面的 Web API、Android ID、Play Integrity、画像匹配、国内外平台和对抗手段，都放回同一条链：
 
 ```text
-观察信号 -> 验证来源与新鲜度 -> 归并设备画像
-         -> 关联账号和业务图谱 -> 分级处置 -> 结果反馈与老化
+观察信号 -> 注册/封装安装上下文 -> 验证来源与新鲜度
+         -> 归并设备画像 -> 关联账号和业务图谱
+         -> 分级处置 -> 结果反馈与老化
 ```
 
 {{< cocoon-diagram
@@ -69,7 +70,7 @@ math: false
   height="1130"
 >}}
 
-全文反复回答五个问题：看到了什么，谁能为它背书；它像哪个历史环境，有多确定；它与哪些账号和业务资源相连；这次应该增加多少摩擦；处置结果又该以多大权重写回系统。
+全文反复回答六个问题：看到了什么；一次安装如何取得服务端句柄；谁能为证据背书；它像哪个历史环境，有多确定；它与哪些账号和业务资源相连；这次应该增加多少摩擦，结果又该以多大权重写回系统。
 
 ### 1.4 证据边界
 
@@ -407,7 +408,87 @@ DRM 身份有自己的分区、Provisioning、授权和隐私边界。把它挪�
 
 ---
 
-### 4.3 Android 环境与行为信号
+### 4.3 设备注册：从本地安装种子到服务端风险身份
+
+“设备注册”很容易被误解成“用户注册账号时顺便记录一台手机”。真实顺序通常相反：App 第一次启动、用户还没有登录时，SDK 就需要为这次安装建立一个可续接的服务端上下文。账号注册解决“谁创建了账户”，设备注册解决的是：
+
+> **这次安装以后用什么句柄接收配置、上报激活和事件，并与后续登录账号及历史设备画像建立关系？**
+
+先把四个经常同名的对象拆开：
+
+| 对象 | 产生位置 | 典型作用域 | 安全含义 |
+|------|----------|------------|----------|
+| **本地安装种子** | App/SDK 首次运行生成，或读取 Android ID、OAID 等受限标识 | 安装、应用、开发者或广告作用域 | 提供注册输入；可清除、可重置，也可被受控客户端替换 |
+| **服务端设备句柄** | 设备注册或安装服务签发，例如 `device_id`、FID | 产品、项目、应用或厂商自定义作用域 | 连接配置和历史事件，不自动证明物理设备唯一或可信 |
+| **用户映射 ID** | 登录后由服务端把设备句柄与业务用户关联 | 账号、主体或集团作用域 | 连接匿名与实名行为；共享设备和账号切换必须是多对多关系 |
+| **动作证明/风险 Token** | 高价值事件附近即时生成 | 单次请求、短会话或 `bizId` | 证明当前动作的新鲜度或环境属性，不应充当长期设备号 |
+
+{{< cocoon-diagram
+  src="images/device-fingerprinting-web-android/android-device-registration-lifecycle.html"
+  title="Android Device Registration Lifecycle"
+  height="1280"
+>}}
+
+**一条完整注册链至少有七步。**
+
+1. **合规启动。** App 在隐私选择和 SDK 配置完成后启动设备服务，确定 `app_id`、包名、签名、版本、渠道和 schema 版本；被拒绝的可选信号保持缺失，而不是偷偷补采。
+2. **准备本地种子。** SDK 读取应用私有 GUID，以及在合法用途和平台允许范围内可用的 Android ID、OAID、安装来源和推送标识。种子描述的是来源，不是最终身份。
+3. **形成注册信封。** 客户端组合 App 身份、设备/系统分桶、网络上下文、本地种子、时间和能力版本。TLS 保护运输，产品还可能加入请求完整性、压缩或应用层信封。
+4. **服务端校验与归一化。** 注册边界先检查 App 身份、结构、版本、新鲜度和字段一致性，再区分 `MISSING`、`UNSUPPORTED`、`ERROR` 与真实风险，不让一个空值悄悄变成“安全”。
+5. **解析画像并发号。** 服务端决定新建安装、续接旧画像还是暂时保持两个候选，并签发设备/安装句柄及配置。这里可能使用确定规则、概率匹配或两者组合。
+6. **本地持久化并回填。** SDK 保存句柄，后续激活、事件、远程配置和业务请求带上它；登录后再把业务用户 ID 与设备关系送到服务端。
+7. **轮换、撤销和拆分。** 清数据、重装、签名迁移、长期不活跃、服务端删除或发现错误合并时，句柄需要刷新、失效或拆分。没有重置语义的“永久设备号”不是工程优势，而是治理债务。
+
+**抖音/字节系：先注册设备，再让 MetaSec 和事件流共享句柄。**
+
+这里有两组证据，强度不同，必须分开写。
+
+**A级公开能力。** 火山引擎 DataFinder 文档明确把 `device_id`、`user_unique_id`、`ssid` 分成三层：`device_id` 由设备注册服务根据设备信息生成并由客户端 SDK 本地保存；`user_unique_id` 通常来自登录账号；`ssid` 再映射匿名设备与登录用户，处理登录前后、跨设备登录和同设备切换账号的统计归属。官方激活事件还区分首装、更新和卸载重装。它证明字节系公开产品具备完整的“设备注册 -> 事件 -> 用户映射”能力，**不能直接证明抖音线上与 DataFinder 客户使用完全相同的字段、作用域和匹配策略**。
+
+**C级版本样本。** 仓库内的[抖音 v37.5 MetaSec 实验记录](/blogs/posts/douyin-sixgod-metasec-unidbg-reverse-engineering/)观察到另一条更靠近消费端 App 的链：客户端先完成 App/安全 SDK 初始化，收集与版本匹配的应用身份、本地安装种子和设备上下文，把它们放进受保护注册信封；服务端返回 `device_id` 与 `install_id`；客户端再把两个句柄回填到 MetaSec/事件上下文，后续请求由此拥有连续的安装历史。
+
+把两组证据叠起来，抖音系的主线可以保守地表示为：
+
+```text
+隐私与 SDK 初始化
+  -> 本地安装种子 + App 身份 + 最小设备上下文
+  -> 受保护的设备注册信封
+  -> 服务端校验、画像解析、签发 device_id / install_id
+  -> 本地持久化并回填安全 SDK
+  -> 激活、事件、配置和业务请求形成连续历史
+  -> 登录账号及内容/广告/电商行为进入关系图
+```
+
+其中 `device_id` 更接近服务端设备/画像句柄，样本中的 `install_id` 更接近安装与激活上下文；但抖音没有公开当前生产环境对两者的完整生命周期定义，所以不能仅凭名字断言它们跨重装、跨 App 或跨地区永久稳定。请求体保护和 MetaSec 签名提高伪造与批量注册成本，也不等于服务端已经相信这是真机：注册成功只说明信封、版本和基本一致性达到可接受条件，后续风险仍取决于事件历史、账号、网络、内容、电商和处置反馈。
+
+**其它主流流程：看起来都在“发设备号”，实际不是一类凭证。**
+
+| 模型/样本 | 公开或可验证流程 | 返回或形成的对象 | 主要重置语义 | 不能误读成 |
+|-----------|------------------|------------------|--------------|------------|
+| **字节系 DataFinder / 抖音版本样本** | 设备上下文注册 -> 服务端 DID/安装句柄 -> 激活与事件 -> 登录用户映射 | `device_id`、样本 `install_id`、统计口径 `ssid` | SDK 配置、清数据/重装、服务端匹配与 ID Mapping 策略相关 | 一次发号就证明真机、真人或正常业务意图 |
+| **Firebase Installations** | 每个 Firebase App 安装实例创建 FID -> 服务端可签发安装 Auth Token -> FCM/Remote Config 等服务使用 | FID + 有期限的 Installation Auth Token | 不同 App 不同 FID；重装、清理、显式删除及长期不活跃可能轮换 | Google 账号身份、Android 物理设备 ID 或完整性证明 |
+| **腾讯 QIMEI / 快手综合设备标识** | 官方政策能确认 SDK/平台处理设备标识和综合设备参数；注册请求、签发算法及当前生命周期未公开 | 平台内部设备标识或画像索引 | 只能按政策、SDK 版本与授权范围评估 | 从一个字段名反推出当前线上注册协议和跨 App 共享范围 |
+| **百度移动统计** | 新版 SDK 初始化阶段不采集/不上报；获得同意后启动统计采集和事件上报 | 统计侧安装/用户画像，具体服务端句柄语义未完整公开 | 受 SDK 版本、用户授权、OAID/应用状态和服务端规则影响 | App 调用 `init` 就已经合法完成设备注册 |
+| **阿里云设备风控** | 端侧 SDK 形成 `deviceToken` -> 业务后端调用风险 API -> 返回本次风险判断 | 有版本和时效的观察信封/风险 Token | 按 Token 时效、业务事件、SDK 配置重新生成 | 需要长期保存并代表物理设备的安装 ID |
+| **Play Integrity** | 预热 Provider -> 对业务摘要请求 Token -> 后端解码并核对 `requestHash`/时间 -> 使用 Verdict | 按动作生成的完整性声明 | 新动作重新请求，受时效、配额和平台状态影响 | 设备注册服务或可查询历史事件的稳定 DID |
+
+Firebase 是最适合校准概念的海外样本。官方把 FID 明确定义为“某个 Firebase App 的一次安装实例”，同一设备上的不同 App 使用不同 FID；FID 可删除和轮换，Installation Auth Token 还与 `projectNumber`、`appId` 和到期时间绑定。这个边界比“全局设备唯一 ID”更窄，却更容易解释、撤销和治理。
+
+QIMEI、快手、百度等国内样本则提醒另一件事：**隐私政策能证明处理的数据类别和用途，不能自动证明线上的注册协议。** 没有可复核官方文档或明确版本样本时，最严谨的写法是保留“平台设备标识/画像索引”这一层，不补造请求域名、字段顺序、加密算法和服务端去重规则。
+
+**从安全设计看，注册接口真正要守住五个边界。**
+
+1. **注册幂等。** 网络重试不应制造多个平行身份；同一个安装种子重复请求，应返回可解释的续接或冲突结果。
+2. **App 身份。** 包名、证书、版本和渠道必须由服务端按可信发布记录校验，不能只相信客户端字符串；高价值场景可再引入 Attestation 或硬件密钥注册。
+3. **句柄与能力分离。** `device_id` 可以公开出现在事件里，真正的修改、续期或敏感动作能力应由独立认证材料保护。
+4. **多对多关系。** 一台家庭设备可登录多个账号，一个账号也会跨设备；错误地强制一对一，会同时制造误伤和可绕过的关系模型。
+5. **可轮换与可删除。** 服务端要记录签发版本、最近活动、来源和失效原因，支持重装、二手设备、用户删除和误合并拆分，而不是让历史关系无限期继承。
+
+设备注册因此位于“观察”和“身份”之间：它把一组易变输入变成可运营的服务端句柄，却没有把概率证据变成硬件事实。后面的环境检测、Attestation 和业务图谱仍然不可省略。
+
+---
+
+### 4.4 Android 环境与行为信号
 
 **设备与系统属性。**
 
@@ -450,13 +531,13 @@ IP、DNS、网络类型、SSID/BSSID、附近 Wi-Fi 和局域网地址曾经是�
 
 ---
 
-### 4.4 Attestation 才是 Android 与 Web 最大的结构差异
+### 4.5 Attestation 才是 Android 与 Web 最大的结构差异
 
 Web 指纹的判断材料主要来自站点自己观察；Play Integrity 则引入了第三方签发者：Google Play 根据 App、设备、账号和可选环境信号生成一份加密、带保护的 Verdict，业务后端再通过 Google 的服务端接口解密验证。
 
 这并不意味着 Google 替业务做了风控。Google 回答“这次请求具备哪些可验证属性”，业务后端仍要回答“这笔登录、付款、领券或游戏成绩是否应该被接受”。
 
-### 4.5 Play Integrity 的四个信任域与完整流程
+### 4.6 Play Integrity 的四个信任域与完整流程
 
 {{< cocoon-diagram
   src="images/device-fingerprinting-web-android/play-integrity-trust-architecture.html"
@@ -591,12 +672,14 @@ Play Integrity 和 Key Attestation 也不能互相简单替换。前者是 Googl
 
 下面不比较“谁的算法最神秘”，只比较公开材料能支持的架构重点。
 
-### 5.1 国内样本：六种业务重心
+### 5.1 国内样本：八种业务重心
 
 **总览证据矩阵。**
 
 | 平台 | Web/H5 公开面 | Android 公开面 | 最有区分度的业务上下文 | 证据边界 |
 |------|---------------|----------------|--------------------------|----------|
+| 抖音/字节系 | `web_id`、登录状态、页面行为与服务日志；公开增长产品提供 Web/Android ID Mapping | 公开产品有设备注册、`device_id/user_unique_id/ssid`；v37.5 样本观察到 `device_id/install_id` 回填 MetaSec | 内容消费、创作、广告、电商、社交关系、账号和事件时序 | DataFinder 是 A 级产品参照；抖音样本是版本化 C 级证据，不能直接等同当前生产策略 |
+| 快手 | Cookie、匿名标识、访问和内容互动日志 | 政策披露 Android ID、OAID、OpenUDID、UAID 及综合设备参数形成的标识符 | 内容、直播、互动、广告、电商、创作者和账号关系 | 数据类别可确认，当前注册接口、句柄语义和匹配算法未公开 |
 | 淘宝 | Cookie、日志、浏览器类型；阿里体系有公开 Web 设备 Token 产品链 | Android ID、OAID/GAID、设备/系统/网络/传感器等安全信号 | 账号、订单、地址、支付、营销权益、商户 | 政策可确认类别，内部模型与 Token 字段未知 |
 | 蚂蚁/支付宝 | 支付开放平台与风控产品；Web/小程序仍需绑定交易事件 | 历史 UTDID、终端安全、可信身份、多因子与业务反欺诈 | 实名、账户、资金、收款方、交易时序、风险图 | 金融风控产品可确认，APDID 等内部语义不作当前事实 |
 | 夸克 | 目标网站自己的 Web 指纹 + 浏览器服务日志形成双观察面 | Android ID、OAID、设备/网络/传感器/本 App 进程等 | 搜索、浏览、账号安全、广告和网盘/支付场景 | 不能假设网页能读取宿主 App 的 Android ID |
@@ -604,7 +687,7 @@ Play Integrity 和 Key Attestation 也不能互相简单替换。前者是 Googl
 | 美团 | 官方文章公开 H5/PC 行为采集、人机验证、IP/地域和服务端风控 | Android ID/OAID、设备、网络、传感器、应用/进程等 | 时间、地点、门店、配送、支付、履约关系 | 公开规则引擎与 Web 流程较多，字段权重仍未知 |
 | 小红书 | 第一方状态、浏览器与行为可用于内容站点风控 | 政策披露设备标识、进程、应用、网络、传感器等安全验证信息 | 账号、内容、发布、互动、社交关系、广告 | 官方未公开当前指纹算法，不以第三方逆向签名仓库代替证据 |
 
-这张表不能用于评“谁最强”。拼多多列出很多传感器，不代表每次都采；美团公开技术文章较多，不代表其他平台没有类似能力；蚂蚁的交易图谱可能比任何单一 Android 特征重要，但外部看不到实时模型。公开透明度、信号数量和安全能力是三个不同维度。
+这张表不能用于评“谁最强”。拼多多列出很多传感器，不代表每次都采；美团公开技术文章较多，不代表其他平台没有类似能力；抖音样本看到注册句柄，也不代表掌握服务端去重和风控模型；蚂蚁的交易图谱可能比任何单一 Android 特征重要，但外部看不到实时模型。公开透明度、信号数量和安全能力是三个不同维度。
 
 ---
 
@@ -998,8 +1081,9 @@ Web 的 UA、屏幕、Canvas 和自动化标志，Android 的 Java/JNI 返回、
 
 回到开头那张新人券。设备指纹能帮助系统发现“这不像真正的新环境”，但最后是否拦截，仍取决于账号、权益、支付、地址、行为和历史结果。海内外样本的共同结论是：信号可以采购，业务语义不能外包。
 
-国内六个平台表面上都在处理 Android ID、OAID、设备参数、网络或行为，真正的差异来自业务：
+国内八个平台表面上都在处理 Android ID、OAID、设备参数、网络或行为，真正的差异来自业务：
 
+- 抖音和快手先用设备/安装句柄连接激活、内容、直播、广告与账号事件，注册本身并不等于可信；
 - 淘宝和拼多多把设备放进商品、订单、地址、支付和营销权益关系里；
 - 蚂蚁把设备放进实名、账户、收款方、金额和实时交易决策里；
 - 夸克同时面对浏览器宿主与目标网站两个观察面；
@@ -1008,12 +1092,13 @@ Web 的 UA、屏幕、Canvas 和自动化标志，Android 的 Java/JNI 返回、
 
 海外产品则展示了能力分工：Fingerprint 和 ThreatMetrix 更接近设备身份，Cloudflare 与 Arkose 更接近自动化检测和挑战，Stripe Radar 与 Sift 更接近业务事件和反馈网络，Play Integrity 为 Android 环境提供更高完整性的证据，Netflix MSL 则把实体能力、会话、用户和单次播放动作做协议级绑定。一个成熟系统往往需要组合其中两到三类，而不是寻找一个“永不变化、无法绕过”的超级设备 ID。
 
-从 Web 到 Android，最值得记住的不是字段清单，而是四个边界：
+从 Web 到 Android，最值得记住的不是字段清单，而是五个边界：
 
 1. **标识符有作用域和重置条件，不是物理设备的永久身份证。**
-2. **指纹是概率证据，必须处理碰撞、漂移、缺失和置信度。**
-3. **Attestation 证明环境属性，不证明操作者本人和业务意图。**
-4. **最终决策必须绑定具体业务事件，并接受最小化、期限、审计和申诉约束。**
+2. **设备注册把安装变成服务端句柄，不会自动把客户端输入变成可信事实。**
+3. **指纹是概率证据，必须处理碰撞、漂移、缺失和置信度。**
+4. **Attestation 证明环境属性，不证明操作者本人和业务意图。**
+5. **最终决策必须绑定具体业务事件，并接受最小化、期限、审计和申诉约束。**
 
 一个 Canvas 认不出你，一串 OAID 也证明不了你。真正把风险看清的，是端上信号、平台信任、服务端图谱和业务语义之间是否形成一条可验证、可降级、可解释的证据链。
 
@@ -1078,26 +1163,33 @@ Web 的 UA、屏幕、Canvas 和自动化标志，Android 的 Java/JNI 返回、
 49. Netflix, [Message Security Layer Framework](https://github.com/Netflix/msl)
 50. Netflix, [MSL Application Security Requirements](https://github.com/Netflix/msl/wiki/Application-Security-Requirements)
 51. Netflix, [MSL Messages](https://github.com/Netflix/msl/wiki/Messages)
+52. 火山引擎, [支持的用户唯一标识：device_id、user_unique_id 与 ssid](https://www.volcengine.com/docs/56651/783962)
+53. 火山引擎, [DataFinder Android SDK FAQ](https://www.volcengine.com/docs/84129/1261743?lang=zh)
+54. 火山引擎, [广告监测预置事件与激活类型](https://www.volcengine.com/docs/6285/108609?lang=zh)
+55. Google Firebase, [Manage Firebase installations and IDs](https://firebase.google.com/docs/projects/manage-installations)
+56. 腾讯, [QIMEI SDK 个人信息保护规则](https://privacy.qq.com/document/preview/91754d6dd7824e3689f17782c580e06e)
+57. 快手, [快手隐私保护平台](https://privacy.kuaishou.com/policy)
+58. 百度统计, [百度移动统计 SDK 开发者个人信息保护合规指引](https://tongji.baidu.com/web/help/article?id=365&type=0)
 
 ### 公开项目与社区工程观察
 
-52. FingerprintJS, [Open-source browser fingerprinting library](https://github.com/fingerprintjs/fingerprintjs)
-53. Abraham Juliot, [CreepJS: browser fingerprinting and lie detection](https://github.com/abrahamjuliot/creepjs)
-54. BrowserLeaks, [Browser privacy and fingerprinting test suite](https://browserleaks.com/)
-55. Apache Software Foundation, [GeaFlow: streaming graph computing engine](https://github.com/apache/geaflow)
-56. WsttXm, [RiskEngine: Android device fingerprint and runtime risk detection](https://github.com/WsttXm/RiskEngine)
-57. TrustDecision, [TrustDevice Android 开源版](https://github.com/trustdecision/trustdevice-android)
-58. 顶象技术, [详解设备指纹核心算法](https://bbs.kanxue.com/article-19171.htm)
-59. 看雪安全社区, [聊聊大厂设备指纹获取和对抗](https://bbs.kanxue.com/thread-273759.htm)
-60. 看雪安全社区, [浅谈淘四神的坑点](https://bbs.kanxue.com/thread-288889.htm)
-61. 看雪安全社区, [某团 App 之 mtgsig2.4 算法分析](https://bbs.kanxue.com/thread-280779-1.htm)
-62. 看雪安全社区, [libpdd_secure.so 指纹算法分析](https://bbs.kanxue.com/thread-289301.htm)
-63. 看雪安全社区, [anti-token 纯算法分析](https://bbs.kanxue.com/thread-291889.htm)
-64. 看雪安全社区, [RiskEngine 开源设备指纹与风险检测 SDK](https://bbs.kanxue.com/thread-290994-1.htm)
+59. FingerprintJS, [Open-source browser fingerprinting library](https://github.com/fingerprintjs/fingerprintjs)
+60. Abraham Juliot, [CreepJS: browser fingerprinting and lie detection](https://github.com/abrahamjuliot/creepjs)
+61. BrowserLeaks, [Browser privacy and fingerprinting test suite](https://browserleaks.com/)
+62. Apache Software Foundation, [GeaFlow: streaming graph computing engine](https://github.com/apache/geaflow)
+63. WsttXm, [RiskEngine: Android device fingerprint and runtime risk detection](https://github.com/WsttXm/RiskEngine)
+64. TrustDecision, [TrustDevice Android 开源版](https://github.com/trustdecision/trustdevice-android)
+65. 顶象技术, [详解设备指纹核心算法](https://bbs.kanxue.com/article-19171.htm)
+66. 看雪安全社区, [聊聊大厂设备指纹获取和对抗](https://bbs.kanxue.com/thread-273759.htm)
+67. 看雪安全社区, [浅谈淘四神的坑点](https://bbs.kanxue.com/thread-288889.htm)
+68. 看雪安全社区, [某团 App 之 mtgsig2.4 算法分析](https://bbs.kanxue.com/thread-280779-1.htm)
+69. 看雪安全社区, [libpdd_secure.so 指纹算法分析](https://bbs.kanxue.com/thread-289301.htm)
+70. 看雪安全社区, [anti-token 纯算法分析](https://bbs.kanxue.com/thread-291889.htm)
+71. 看雪安全社区, [RiskEngine 开源设备指纹与风险检测 SDK](https://bbs.kanxue.com/thread-290994-1.htm)
 
 ### 法律与监管
 
-65. 中国人大网, [中华人民共和国个人信息保护法](https://www.npc.gov.cn/WZWSREL25wYy8vLy8vL2MyL2MzMDgzNC8yMDIxMDgvdDIwMjEwODIwXzMxMzA4OC5odG1s)
-66. 国家互联网信息办公室等四部门, [常见类型移动互联网应用程序必要个人信息范围规定](https://www.cac.gov.cn/2021-03/22/c_1617990997054277.htm)
-67. 国家互联网信息办公室, [移动互联网应用程序信息服务管理规定](https://www.cac.gov.cn/2022-06/14/c_1656821626455324.htm)
-68. 国家互联网信息办公室, [个人信息保护合规审计管理办法](https://www.cac.gov.cn/2025-02/14/c_1741233507681519.htm)
+72. 中国人大网, [中华人民共和国个人信息保护法](https://www.npc.gov.cn/WZWSREL25wYy8vLy8vL2MyL2MzMDgzNC8yMDIxMDgvdDIwMjEwODIwXzMxMzA4OC5odG1s)
+73. 国家互联网信息办公室等四部门, [常见类型移动互联网应用程序必要个人信息范围规定](https://www.cac.gov.cn/2021-03/22/c_1617990997054277.htm)
+74. 国家互联网信息办公室, [移动互联网应用程序信息服务管理规定](https://www.cac.gov.cn/2022-06/14/c_1656821626455324.htm)
+75. 国家互联网信息办公室, [个人信息保护合规审计管理办法](https://www.cac.gov.cn/2025-02/14/c_1741233507681519.htm)

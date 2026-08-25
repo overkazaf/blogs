@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Android Device Registration Lifecycle</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { background: #020617; }
+    body { min-width: 0; min-height: 100vh; padding: 2rem; overflow-wrap: anywhere; background: #020617; color: #fff; font-family: 'JetBrains Mono', monospace; }
+    .container { width: min(100%, 1200px); margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: .8rem; }
+    .pulse-dot { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; background: #22d3ee; animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.35rem; line-height: 1.35; letter-spacing: 0; }
+    .subtitle { margin: .55rem 0 0 1.8rem; color: #94a3b8; font-size: .82rem; line-height: 1.6; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.violet { background: #a78bfa; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Android Device Registration Lifecycle</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">设备注册不是账号注册：它把一次安装的本地种子换成服务端句柄，再由事件、账号和风险反馈持续修正</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 1080" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Android device registration from local installation seed to server risk identity</title>
+        <desc id="diagram-desc">The client collects consented installation and device context, sends a protected registration envelope, receives server handles and configuration, then binds events and accounts while lifecycle controls rotate or revoke the identity.</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <rect x="20" y="55" width="330" height="720" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-dasharray="8,5"/>
+        <text x="40" y="84" fill="#22d3ee" font-size="12" font-weight="600">APP AND SDK RUNTIME</text>
+        <rect x="370" y="55" width="330" height="720" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-dasharray="8,5"/>
+        <text x="390" y="84" fill="#fbbf24" font-size="12" font-weight="600">REGISTRATION EDGE</text>
+        <rect x="720" y="55" width="350" height="720" rx="12" fill="rgba(167,139,250,.018)" stroke="#a78bfa" stroke-dasharray="8,5"/>
+        <text x="740" y="84" fill="#a78bfa" font-size="12" font-weight="600">IDENTITY AND LIFECYCLE</text>
+        <rect x="1090" y="55" width="390" height="720" rx="12" fill="rgba(52,211,153,.018)" stroke="#34d399" stroke-dasharray="8,5"/>
+        <text x="1110" y="84" fill="#34d399" font-size="12" font-weight="600">BUSINESS AND RISK</text>
+
+        <!-- Arrows are painted before nodes. -->
+        <path d="M310 190 L410 190" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M185 245 L185 320" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M310 375 L410 220" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M535 245 L535 320" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M660 375 L760 190" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M895 245 L895 320" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M760 375 C650 445 430 455 310 555" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M310 555 L410 555" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M660 555 L1130 190" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M660 575 L1130 375" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M1285 245 L1285 320" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M1285 430 L1285 500" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M1130 555 L1030 555" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+        <path d="M760 575 C600 735 340 725 185 610" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="7,6" marker-end="url(#arrow-slate)"/>
+        <text x="565" y="710" fill="#94a3b8" font-size="8" text-anchor="middle">rotation, revocation, reinstall and profile split/merge return a new or refreshed handle</text>
+
+        <rect x="60" y="135" width="250" height="110" rx="6" fill="#020617"/><rect x="60" y="135" width="250" height="110" rx="6" fill="rgba(8,51,68,.52)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="185" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Consent and SDK Start</text><text x="185" y="193" fill="#22d3ee" font-size="8" text-anchor="middle">privacy gate / app id / channel / version</text><text x="185" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">initialization must not outrun consent</text>
+        <rect x="60" y="320" width="250" height="110" rx="6" fill="#020617"/><rect x="60" y="320" width="250" height="110" rx="6" fill="rgba(8,51,68,.52)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="185" y="351" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Local Seed and Context</text><text x="185" y="378" fill="#22d3ee" font-size="8" text-anchor="middle">private GUID + scoped IDs + app identity</text><text x="185" y="402" fill="#94a3b8" font-size="8" text-anchor="middle">device/system/network only when justified</text>
+        <rect x="60" y="500" width="250" height="110" rx="6" fill="#020617"/><rect x="60" y="500" width="250" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="185" y="531" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Persisted Server Handles</text><text x="185" y="558" fill="#a78bfa" font-size="8" text-anchor="middle">device_id / install_id / FID / config</text><text x="185" y="582" fill="#94a3b8" font-size="8" text-anchor="middle">cached locally; not a physical identity</text>
+
+        <rect x="410" y="135" width="250" height="110" rx="6" fill="#020617"/><rect x="410" y="135" width="250" height="110" rx="6" fill="rgba(120,53,15,.43)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="535" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Registration Envelope</text><text x="535" y="193" fill="#fbbf24" font-size="8" text-anchor="middle">schema + timestamp + app/device context</text><text x="535" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">TLS plus product-specific integrity layer</text>
+        <rect x="410" y="320" width="250" height="110" rx="6" fill="#020617"/><rect x="410" y="320" width="250" height="110" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="535" y="351" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Verify and Normalize</text><text x="535" y="378" fill="#fb7185" font-size="8" text-anchor="middle">app identity / freshness / consistency</text><text x="535" y="402" fill="#94a3b8" font-size="8" text-anchor="middle">missing and unsupported remain explicit</text>
+        <rect x="410" y="500" width="250" height="110" rx="6" fill="#020617"/><rect x="410" y="500" width="250" height="110" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="535" y="531" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Event and Config Channel</text><text x="535" y="558" fill="#34d399" font-size="8" text-anchor="middle">activation / analytics / remote config</text><text x="535" y="582" fill="#94a3b8" font-size="8" text-anchor="middle">registration handle joins later events</text>
+
+        <rect x="760" y="135" width="270" height="110" rx="6" fill="#020617"/><rect x="760" y="135" width="270" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="895" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Candidate Profile Resolver</text><text x="895" y="193" fill="#a78bfa" font-size="8" text-anchor="middle">new install OR reconnect known profile</text><text x="895" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">scope and collision policy are product-specific</text>
+        <rect x="760" y="320" width="270" height="110" rx="6" fill="#020617"/><rect x="760" y="320" width="270" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="895" y="351" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Issue Handles and Config</text><text x="895" y="378" fill="#a78bfa" font-size="8" text-anchor="middle">server ID + install ID + policy snapshot</text><text x="895" y="402" fill="#94a3b8" font-size="8" text-anchor="middle">observed Douyin sample returns DID and IID</text>
+        <rect x="760" y="500" width="270" height="110" rx="6" fill="#020617"/><rect x="760" y="500" width="270" height="110" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="895" y="531" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Lifecycle Controller</text><text x="895" y="558" fill="#fb7185" font-size="8" text-anchor="middle">refresh / rotate / revoke / delete / split</text><text x="895" y="582" fill="#94a3b8" font-size="8" text-anchor="middle">reset semantics are part of the contract</text>
+
+        <rect x="1130" y="135" width="310" height="110" rx="6" fill="#020617"/><rect x="1130" y="135" width="310" height="110" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1285" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Activation and Event History</text><text x="1285" y="193" fill="#34d399" font-size="8" text-anchor="middle">first install / update / reinstall / sessions</text><text x="1285" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">device handle gains temporal meaning here</text>
+        <rect x="1130" y="320" width="310" height="110" rx="6" fill="#020617"/><rect x="1130" y="320" width="310" height="110" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1285" y="351" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Account and User Binding</text><text x="1285" y="378" fill="#34d399" font-size="8" text-anchor="middle">user_unique_id / login / logout / account graph</text><text x="1285" y="402" fill="#94a3b8" font-size="8" text-anchor="middle">device registration never authenticates a person</text>
+        <rect x="1130" y="500" width="310" height="110" rx="6" fill="#020617"/><rect x="1130" y="500" width="310" height="110" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1285" y="531" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Risk Graph and Decision</text><text x="1285" y="558" fill="#fb7185" font-size="8" text-anchor="middle">accounts / content / payment / network / outcome</text><text x="1285" y="582" fill="#94a3b8" font-size="8" text-anchor="middle">registration is an input, not authorization</text>
+
+        <text x="45" y="825" fill="#64748b" font-size="9">Four registration semantics that look similar on the wire but carry different trust and reset properties:</text>
+        <rect x="45" y="855" width="320" height="70" rx="6" fill="rgba(120,53,15,.32)" stroke="#fbbf24"/><text x="205" y="881" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">SERVER DID + INSTALL HANDLE</text><text x="205" y="903" fill="#fbbf24" font-size="8" text-anchor="middle">ByteDance-style analytics / activation continuity</text>
+        <rect x="395" y="855" width="320" height="70" rx="6" fill="rgba(76,29,149,.4)" stroke="#a78bfa"/><text x="555" y="881" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">INSTALLATION ID + AUTH TOKEN</text><text x="555" y="903" fill="#a78bfa" font-size="8" text-anchor="middle">Firebase FID scoped to one app installation</text>
+        <rect x="745" y="855" width="320" height="70" rx="6" fill="rgba(6,78,59,.4)" stroke="#34d399"/><text x="905" y="881" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">SHORT-LIVED RISK TOKEN</text><text x="905" y="903" fill="#34d399" font-size="8" text-anchor="middle">Alibaba-style observation envelope for a biz event</text>
+        <rect x="1095" y="855" width="360" height="70" rx="6" fill="rgba(136,19,55,.4)" stroke="#fb7185"/><text x="1275" y="881" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">PER-ACTION ATTESTATION</text><text x="1275" y="903" fill="#fb7185" font-size="8" text-anchor="middle">Play Integrity binds verdict to requestHash or nonce</text>
+        <line x1="45" y1="975" x2="105" y2="975" stroke="#22d3ee" stroke-width="2"/><text x="120" y="979" fill="#94a3b8" font-size="8">documented or locally observed flow</text>
+        <line x1="430" y1="975" x2="490" y2="975" stroke="#64748b" stroke-width="2" stroke-dasharray="7,6"/><text x="505" y="979" fill="#94a3b8" font-size="8">lifecycle and risk feedback</text>
+        <text x="45" y="1025" fill="#64748b" font-size="9">Evidence boundary: official DataFinder and Firebase behavior is not proof that every consumer app uses the same fields, scope or matching policy.</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>先分清三个身份</h3></div><ul><li>本地种子描述一次安装的初始状态</li><li>服务端句柄用于连接配置与事件历史</li><li>账号身份只在登录后与设备关系绑定</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>抖音样本的关键闭环</h3></div><ul><li>注册信封先建立 DID/IID，再回填 SDK 上下文</li><li>后续事件与 API 携带句柄形成连续历史</li><li>字段和保护方案必须带版本与证据等级</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>注册成功不是设备可信</h3></div><ul><li>服务端发号证明结构可接受，不证明环境真实</li><li>重装、清数据、轮换和撤销必须有明确语义</li><li>高价值动作仍需 Attestation、账号和业务图谱</li></ul></div>
+    </div>
+    <p class="footer">Android device registration lifecycle - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'android-device-registration-lifecycle.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('android-device-registration-lifecycle.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>
