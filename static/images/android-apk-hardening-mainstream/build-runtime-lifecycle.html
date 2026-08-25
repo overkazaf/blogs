@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APK Hardening Build and Runtime Lifecycle</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { min-width: 0; background: #020617; }
+    body { min-height: 100vh; padding: 2rem; overflow-wrap: anywhere; color: #fff; font-family: 'JetBrains Mono', monospace; }
+    .container { width: min(100%, 1200px); margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: .8rem; }
+    .pulse-dot { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; background: #fbbf24; animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.35rem; line-height: 1.35; letter-spacing: 0; }
+    .subtitle { margin: .55rem 0 0 1.8rem; color: #94a3b8; font-size: .82rem; line-height: 1.6; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.amber { background: #fbbf24; } .card-dot.cyan { background: #22d3ee; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: 0; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>APK Hardening Build and Runtime Lifecycle</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">加固不是给原 APK 外面套一层 ZIP：它会改写构建产物、启动入口、类加载路径和运行时完整性逻辑</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 1080" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">APK hardening build and runtime lifecycle</title>
+        <desc id="diagram-desc">A release artifact passes through compiler optimization, selective protection, package rewriting, alignment and signing, then executes through a shell loader, integrity gates, payload loading, protected logic, and server attestation.</desc>
+        <defs>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <rect x="25" y="45" width="1450" height="365" rx="12" fill="rgba(120,53,15,.025)" stroke="#fbbf24" stroke-dasharray="8,5"/>
+        <text x="48" y="78" fill="#fbbf24" font-size="12" font-weight="600">PHASE A / CI, HARDENING SERVICE AND RELEASE PIPELINE</text>
+        <rect x="25" y="445" width="1450" height="420" rx="12" fill="rgba(8,51,68,.025)" stroke="#22d3ee" stroke-dasharray="8,5"/>
+        <text x="48" y="478" fill="#22d3ee" font-size="12" font-weight="600">PHASE B / ANDROID PROCESS STARTUP AND PROTECTED EXECUTION</text>
+
+        <!-- Connections are painted before the component boxes. -->
+        <path d="M290 210 L340 210" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M590 210 L640 210" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M890 210 L940 210" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M1190 210 L1240 210" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M1360 270 L1360 530" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M1240 600 L1190 600" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M940 600 L890 600" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M640 600 L590 600" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M340 600 L290 600" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M765 660 L765 760" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+        <path d="M465 660 C465 790 1080 790 1065 660" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+        <text x="765" y="744" fill="#fb7185" font-size="8" text-anchor="middle">policy-controlled response</text>
+
+        <rect x="60" y="145" width="230" height="125" rx="6" fill="#020617"/><rect x="60" y="145" width="230" height="125" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="175" y="176" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">1. Release Build</text><text x="175" y="204" fill="#22d3ee" font-size="8" text-anchor="middle">Kotlin/Java + NDK + resources</text><text x="175" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">debuggable off / symbols archived</text><text x="175" y="250" fill="#64748b" font-size="8" text-anchor="middle">produce APK or AAB input</text>
+        <rect x="340" y="145" width="250" height="125" rx="6" fill="#020617"/><rect x="340" y="145" width="250" height="125" rx="6" fill="rgba(120,53,15,.45)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="465" y="176" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">2. Optimize and Select</text><text x="465" y="204" fill="#fbbf24" font-size="8" text-anchor="middle">R8 shrink / optimize / obfuscate</text><text x="465" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">mark high-value methods and assets</text><text x="465" y="250" fill="#64748b" font-size="8" text-anchor="middle">preserve mapping and keep rules</text>
+        <rect x="640" y="145" width="250" height="125" rx="6" fill="#020617"/><rect x="640" y="145" width="250" height="125" rx="6" fill="rgba(136,19,55,.48)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="765" y="176" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">3. Harden and Rewrite</text><text x="765" y="204" fill="#fb7185" font-size="8" text-anchor="middle">encrypt / extract / VMP / RASP inject</text><text x="765" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">stub entry + loader + integrity policy</text><text x="765" y="250" fill="#64748b" font-size="8" text-anchor="middle">output is a different package</text>
+        <rect x="940" y="145" width="250" height="125" rx="6" fill="#020617"/><rect x="940" y="145" width="250" height="125" rx="6" fill="rgba(76,29,149,.48)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1065" y="176" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">4. Verify and Align</text><text x="1065" y="204" fill="#a78bfa" font-size="8" text-anchor="middle">manifest / ABI / resources / splits</text><text x="1065" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">zipalign before modern APK signing</text><text x="1065" y="250" fill="#64748b" font-size="8" text-anchor="middle">run smoke and compatibility tests</text>
+        <rect x="1240" y="145" width="220" height="125" rx="6" fill="#020617"/><rect x="1240" y="145" width="220" height="125" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1350" y="176" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">5. Sign and Publish</text><text x="1350" y="204" fill="#34d399" font-size="8" text-anchor="middle">APK v2/v3 or AAB upload key</text><text x="1350" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">verify cert / provenance / rollout</text><text x="1350" y="250" fill="#64748b" font-size="8" text-anchor="middle">no post-sign byte rewriting</text>
+
+        <rect x="1240" y="530" width="220" height="130" rx="6" fill="#020617"/><rect x="1240" y="530" width="220" height="130" rx="6" fill="rgba(76,29,149,.48)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1350" y="562" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">6. Package Install</text><text x="1350" y="591" fill="#a78bfa" font-size="8" text-anchor="middle">Package Manager verifies signer</text><text x="1350" y="615" fill="#94a3b8" font-size="8" text-anchor="middle">OS identity and update continuity</text><text x="1350" y="638" fill="#64748b" font-size="8" text-anchor="middle">not an anti-reversing check</text>
+        <rect x="940" y="530" width="250" height="130" rx="6" fill="#020617"/><rect x="940" y="530" width="250" height="130" rx="6" fill="rgba(136,19,55,.48)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1065" y="562" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">7. Stub Starts Early</text><text x="1065" y="591" fill="#fb7185" font-size="8" text-anchor="middle">Application / Provider / native bootstrap</text><text x="1065" y="615" fill="#94a3b8" font-size="8" text-anchor="middle">initialize shell before business code</text><text x="1065" y="638" fill="#64748b" font-size="8" text-anchor="middle">startup order is compatibility-critical</text>
+        <rect x="640" y="530" width="250" height="130" rx="6" fill="#020617"/><rect x="640" y="530" width="250" height="130" rx="6" fill="rgba(136,19,55,.48)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="765" y="562" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">8. Local Integrity Gates</text><text x="765" y="591" fill="#fb7185" font-size="8" text-anchor="middle">certificate / files / memory / runtime</text><text x="765" y="615" fill="#94a3b8" font-size="8" text-anchor="middle">debug, hook, root and emulator signals</text><text x="765" y="638" fill="#64748b" font-size="8" text-anchor="middle">local checks remain patchable</text>
+        <rect x="340" y="530" width="250" height="130" rx="6" fill="#020617"/><rect x="340" y="530" width="250" height="130" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="465" y="562" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">9. Materialize Semantics</text><text x="465" y="591" fill="#22d3ee" font-size="8" text-anchor="middle">decrypt/load class or dispatch VM code</text><text x="465" y="615" fill="#94a3b8" font-size="8" text-anchor="middle">ART/JNI executes an equivalent meaning</text><text x="465" y="638" fill="#64748b" font-size="8" text-anchor="middle">this is the unavoidable observation point</text>
+        <rect x="60" y="530" width="230" height="130" rx="6" fill="#020617"/><rect x="60" y="530" width="230" height="130" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="175" y="562" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">10. Bind Server Action</text><text x="175" y="591" fill="#34d399" font-size="8" text-anchor="middle">attestation + install handle + request</text><text x="175" y="615" fill="#94a3b8" font-size="8" text-anchor="middle">backend verifies freshness and policy</text><text x="175" y="638" fill="#64748b" font-size="8" text-anchor="middle">authorization leaves the client</text>
+
+        <rect x="60" y="760" width="1340" height="80" rx="6" fill="#020617"/><rect x="60" y="760" width="1340" height="80" rx="6" fill="rgba(136,19,55,.28)" stroke="#fb7185" stroke-dasharray="7,5"/>
+        <text x="90" y="790" fill="#fb7185" font-size="10" font-weight="600">RUNTIME RESPONSE POLICY</text>
+        <text x="90" y="815" fill="#94a3b8" font-size="8">Report, degrade, challenge, delay or stop according to feature value and confidence; a universal process exit turns false positives into outages.</text>
+
+        <text x="50" y="915" fill="#64748b" font-size="9">RELEASE GATES THAT MATTER MORE THAN A FEATURE CHECKBOX</text>
+        <rect x="50" y="940" width="260" height="72" rx="6" fill="rgba(120,53,15,.32)" stroke="#fbbf24"/><text x="180" y="968" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">COMPATIBILITY</text><text x="180" y="991" fill="#fbbf24" font-size="8" text-anchor="middle">ABI / API / OEM / split / framework</text>
+        <rect x="335" y="940" width="260" height="72" rx="6" fill="rgba(8,51,68,.32)" stroke="#22d3ee"/><text x="465" y="968" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">PERFORMANCE</text><text x="465" y="991" fill="#22d3ee" font-size="8" text-anchor="middle">cold start / memory / battery / jank</text>
+        <rect x="620" y="940" width="260" height="72" rx="6" fill="rgba(76,29,149,.32)" stroke="#a78bfa"/><text x="750" y="968" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">OBSERVABILITY</text><text x="750" y="991" fill="#a78bfa" font-size="8" text-anchor="middle">mapping / symbols / crash attribution</text>
+        <rect x="905" y="940" width="260" height="72" rx="6" fill="rgba(6,78,59,.32)" stroke="#34d399"/><text x="1035" y="968" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">PROVENANCE</text><text x="1035" y="991" fill="#34d399" font-size="8" text-anchor="middle">hash / cert / SBOM / reproducibility</text>
+        <rect x="1190" y="940" width="260" height="72" rx="6" fill="rgba(136,19,55,.32)" stroke="#fb7185"/><text x="1320" y="968" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">ENFORCEMENT</text><text x="1320" y="991" fill="#fb7185" font-size="8" text-anchor="middle">shadow mode / tiers / rollback</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot amber"></div><h3>顺序不能乱</h3></div><ul><li>现代 APK 通常先加固、对齐，再使用发布密钥签名</li><li>AAB 需遵守加固厂商与 Play App Signing 的专用流程</li><li>签名后任何字节改写都会破坏 v2/v3 完整性</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>明文不一定落盘</h3></div><ul><li>现代方案可采用内存类加载、方法抽取或 VM 调度</li><li>但处理器最终必须执行与原逻辑等价的语义</li><li>保护目标是缩短窗口并打散稳定锚点</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>上线门槛不只是能启动</h3></div><ul><li>需要覆盖冷启动、崩溃、ANR、耗电和机型分布</li><li>保留 mapping、符号、构建哈希和回滚产物</li><li>处置策略先观察，再逐级增加摩擦</li></ul></div>
+    </div>
+    <p class="footer">APK hardening build and runtime lifecycle - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'apk-hardening-build-runtime-lifecycle.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('apk-hardening-build-runtime-lifecycle.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>

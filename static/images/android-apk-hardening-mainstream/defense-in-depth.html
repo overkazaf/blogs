@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Android APK Hardening Defense in Depth</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { min-width: 0; background: #020617; }
+    body { min-height: 100vh; padding: 2rem; overflow-wrap: anywhere; color: #fff; font-family: 'JetBrains Mono', monospace; }
+    .container { width: min(100%, 1200px); margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: .8rem; }
+    .pulse-dot { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; background: #22d3ee; animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.35rem; line-height: 1.35; letter-spacing: 0; }
+    .subtitle { margin: .55rem 0 0 1.8rem; color: #94a3b8; font-size: .82rem; line-height: 1.6; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.violet { background: #a78bfa; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: 0; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Android APK Hardening: Defense in Depth</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">加固提高客户端分析成本；平台证明提供外部可信度；设备注册和业务后端决定一次动作能否被接受</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 1020" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Android APK hardening defense in depth architecture</title>
+        <desc id="diagram-desc">Five security layers connect build-time transformations, runtime shell and RASP, Android platform trust, device registration, and backend risk decisions.</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <rect x="25" y="45" width="1450" height="720" rx="12" fill="rgba(15,23,42,.12)" stroke="#334155" stroke-dasharray="8,5"/>
+        <text x="48" y="75" fill="#94a3b8" font-size="11" font-weight="600">ONE REQUEST CROSSES FIVE DIFFERENT TRUST LAYERS</text>
+
+        <!-- Connections are painted before the component boxes. -->
+        <path d="M315 205 L390 205" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M650 205 L725 205" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+        <path d="M985 205 L1060 205" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M1315 205 L1400 205 L1400 355 L185 355 L185 413" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M315 485 L390 485" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M650 485 L725 485" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M985 485 L1060 485" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+        <path d="M1190 545 C1120 665 860 685 790 545" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+        <path d="M855 545 C760 700 560 700 520 545" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="7,6" marker-end="url(#arrow-slate)"/>
+        <text x="995" y="670" fill="#fb7185" font-size="8" text-anchor="middle">deny, step-up, limit or allow with monitored risk</text>
+        <text x="650" y="715" fill="#94a3b8" font-size="8" text-anchor="middle">threat telemetry and outcomes refresh device and account history</text>
+
+        <text x="55" y="115" fill="#22d3ee" font-size="11" font-weight="600">1 / BUILD-TIME COST</text>
+        <rect x="55" y="135" width="260" height="140" rx="6" fill="#020617"/><rect x="55" y="135" width="260" height="140" rx="6" fill="rgba(8,51,68,.52)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="185" y="170" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Code Hardening</text>
+        <text x="185" y="198" fill="#22d3ee" font-size="8" text-anchor="middle">R8 / names / control flow / strings</text>
+        <text x="185" y="221" fill="#94a3b8" font-size="8" text-anchor="middle">class encryption / selective VMP / DEX2C</text>
+        <text x="185" y="247" fill="#64748b" font-size="8" text-anchor="middle">goal: delay understanding and reuse</text>
+
+        <text x="390" y="115" fill="#fb7185" font-size="11" font-weight="600">2 / LOCAL EXECUTION COST</text>
+        <rect x="390" y="135" width="260" height="140" rx="6" fill="#020617"/><rect x="390" y="135" width="260" height="140" rx="6" fill="rgba(136,19,55,.48)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="520" y="170" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Shell and RASP</text>
+        <text x="520" y="198" fill="#fb7185" font-size="8" text-anchor="middle">loader / decrypt / integrity / anti-hook</text>
+        <text x="520" y="221" fill="#94a3b8" font-size="8" text-anchor="middle">root / emulator / debugger / overlay signals</text>
+        <text x="520" y="247" fill="#64748b" font-size="8" text-anchor="middle">goal: detect or disturb live analysis</text>
+
+        <text x="725" y="115" fill="#a78bfa" font-size="11" font-weight="600">3 / PLATFORM EVIDENCE</text>
+        <rect x="725" y="135" width="260" height="140" rx="6" fill="#020617"/><rect x="725" y="135" width="260" height="140" rx="6" fill="rgba(76,29,149,.5)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="855" y="170" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Signing and Attestation</text>
+        <text x="855" y="198" fill="#a78bfa" font-size="8" text-anchor="middle">APK v2/v3/v4 / Play App Signing</text>
+        <text x="855" y="221" fill="#94a3b8" font-size="8" text-anchor="middle">appIntegrity / deviceIntegrity / requestHash</text>
+        <text x="855" y="247" fill="#64748b" font-size="8" text-anchor="middle">goal: add evidence outside app control</text>
+
+        <text x="1060" y="115" fill="#34d399" font-size="11" font-weight="600">4 / IDENTITY CONTINUITY</text>
+        <rect x="1060" y="135" width="255" height="140" rx="6" fill="#020617"/><rect x="1060" y="135" width="255" height="140" rx="6" fill="rgba(6,78,59,.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1188" y="170" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Device Registration</text>
+        <text x="1188" y="198" fill="#34d399" font-size="8" text-anchor="middle">install handle / device profile / account link</text>
+        <text x="1188" y="221" fill="#94a3b8" font-size="8" text-anchor="middle">activation / event history / lifecycle rotation</text>
+        <text x="1188" y="247" fill="#64748b" font-size="8" text-anchor="middle">goal: preserve explainable continuity</text>
+
+        <text x="55" y="395" fill="#34d399" font-size="11" font-weight="600">5 / SERVER AUTHORITY</text>
+        <rect x="55" y="415" width="260" height="130" rx="6" fill="#020617"/><rect x="55" y="415" width="260" height="130" rx="6" fill="rgba(6,78,59,.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="185" y="450" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Bound Business Request</text>
+        <text x="185" y="478" fill="#34d399" font-size="8" text-anchor="middle">action + amount + object + account + nonce</text>
+        <text x="185" y="504" fill="#94a3b8" font-size="8" text-anchor="middle">the only useful unit of authorization</text>
+
+        <rect x="390" y="415" width="260" height="130" rx="6" fill="#020617"/><rect x="390" y="415" width="260" height="130" rx="6" fill="rgba(6,78,59,.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="520" y="450" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Evidence Normalizer</text>
+        <text x="520" y="478" fill="#34d399" font-size="8" text-anchor="middle">freshness / app / device / account / network</text>
+        <text x="520" y="504" fill="#94a3b8" font-size="8" text-anchor="middle">missing is not automatically safe or hostile</text>
+
+        <rect x="725" y="415" width="260" height="130" rx="6" fill="#020617"/><rect x="725" y="415" width="260" height="130" rx="6" fill="rgba(6,78,59,.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="855" y="450" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Risk and Policy Engine</text>
+        <text x="855" y="478" fill="#34d399" font-size="8" text-anchor="middle">graph / velocity / abuse history / entitlement</text>
+        <text x="855" y="504" fill="#94a3b8" font-size="8" text-anchor="middle">tiered policy replaces one-bit trust</text>
+
+        <rect x="1060" y="415" width="255" height="130" rx="6" fill="#020617"/><rect x="1060" y="415" width="255" height="130" rx="6" fill="rgba(136,19,55,.48)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1188" y="450" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Decision and Feedback</text>
+        <text x="1188" y="478" fill="#fb7185" font-size="8" text-anchor="middle">allow / challenge / limit / deny / observe</text>
+        <text x="1188" y="504" fill="#94a3b8" font-size="8" text-anchor="middle">outcomes age and correct prior confidence</text>
+
+        <text x="50" y="815" fill="#64748b" font-size="9">WHAT EACH LAYER CAN AND CANNOT PROVE</text>
+        <rect x="50" y="840" width="330" height="82" rx="6" fill="rgba(8,51,68,.32)" stroke="#22d3ee"/>
+        <text x="215" y="869" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">HARDENING</text><text x="215" y="895" fill="#22d3ee" font-size="8" text-anchor="middle">raises cost; cannot attest itself as genuine</text>
+        <rect x="405" y="840" width="330" height="82" rx="6" fill="rgba(76,29,149,.36)" stroke="#a78bfa"/>
+        <text x="570" y="869" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">ATTESTATION</text><text x="570" y="895" fill="#a78bfa" font-size="8" text-anchor="middle">describes app/device state; not user intent</text>
+        <rect x="760" y="840" width="330" height="82" rx="6" fill="rgba(6,78,59,.36)" stroke="#34d399"/>
+        <text x="925" y="869" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">DEVICE REGISTRATION</text><text x="925" y="895" fill="#34d399" font-size="8" text-anchor="middle">links history; not physical uniqueness</text>
+        <rect x="1115" y="840" width="330" height="82" rx="6" fill="rgba(136,19,55,.36)" stroke="#fb7185"/>
+        <text x="1280" y="869" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">SERVER DECISION</text><text x="1280" y="895" fill="#fb7185" font-size="8" text-anchor="middle">owns authorization and business consequence</text>
+        <text x="50" y="970" fill="#64748b" font-size="9">Design rule: never let a local anti-debug result, device ID, or one integrity verdict become a permanent allow/deny decision by itself.</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>加固保护的是成本</h3></div><ul><li>混淆、加密、抽取与 VMP 延缓代码理解</li><li>壳和 RASP 压缩稳定的动态观测窗口</li><li>客户端最终仍在攻击者控制的机器上执行</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>可信度必须来自外部</h3></div><ul><li>APK 签名保证安装与升级身份连续</li><li>Attestation 为具体请求提供平台证据</li><li>证据必须绑定业务摘要并验证新鲜度</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>后端保留最终权力</h3></div><ul><li>设备句柄只连接历史，不代表真人或真机</li><li>授权依赖账号、对象、金额和行为上下文</li><li>处置结果持续修正画像与策略</li></ul></div>
+    </div>
+    <p class="footer">Android APK hardening defense in depth - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'android-apk-hardening-defense-in-depth.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('android-apk-hardening-defense-in-depth.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>
