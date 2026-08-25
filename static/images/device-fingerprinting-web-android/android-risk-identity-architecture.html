@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Android Device Fingerprint, Attestation and Risk Identity Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      padding: 2rem;
+      overflow-x: hidden;
+      background: #020617;
+      color: #fff;
+      font-family: 'JetBrains Mono', 'Noto Sans SC', monospace;
+    }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #fbbf24; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container {
+      max-width: 100%;
+      padding: 1.25rem;
+      overflow: hidden;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      background: rgba(15, 23, 42, .5);
+    }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.6; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle {
+      padding: .25rem .5rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #475569;
+      font: inherit;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      transition: color .2s, background .2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      padding: .375rem .75rem;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      background: rgba(30, 41, 59, .8);
+      color: #94a3b8;
+      font-family: inherit;
+      font-size: .75rem;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .toolbar-actions button:hover { border-color: #475569; background: rgba(51, 65, 85, .8); color: #fff; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+      .footer { margin-top: 1rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Android Device Fingerprint, Attestation and Risk Identity</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">Copy</button>
+            <button onclick="downloadPNG(this)">PNG</button>
+            <button onclick="downloadPDF(this)">PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">标识符回答“像不像同一安装或设备”，完整性证明回答“当前 App 与执行环境是否可信”</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 950" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Android device fingerprint, integrity attestation and risk identity processing flow</title>
+        <desc id="diagram-desc">App-scoped identifiers, resettable advertising identifiers, Android ID, device properties, application posture and behavior feed a risk SDK. Independent integrity and key attestation signals are verified by servers, then joined with account and business context for a tiered decision.</desc>
+        <defs>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Trust boundaries -->
+        <rect x="20" y="55" width="630" height="700" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="82" fill="#22d3ee" font-size="12" font-weight="600">APP PROCESS / SDK</text>
+        <rect x="670" y="55" width="390" height="700" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="688" y="82" fill="#fbbf24" font-size="12" font-weight="600">ANDROID / OEM TRUST SERVICES</text>
+        <rect x="1080" y="55" width="400" height="700" rx="12" fill="rgba(52,211,153,.018)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="1098" y="82" fill="#34d399" font-size="12" font-weight="600">BACKEND RISK PLATFORM</text>
+
+        <!-- Arrows painted before all nodes -->
+        <path d="M230 155 C310 155 330 265 395 300" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M230 255 L385 325" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M230 355 L385 350" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M230 455 L385 375" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M230 555 C310 555 340 445 400 405" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M230 655 C330 655 350 475 420 425" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M585 355 L710 355" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <text x="648" y="342" fill="#22d3ee" font-size="8" text-anchor="middle">deviceToken + bizId</text>
+
+        <path d="M865 205 L865 280" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M865 425 L865 500" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M865 650 L865 700" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow-amber)"/>
+        <path d="M1020 355 L1120 230" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M1020 570 L1120 350" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+
+        <path d="M1260 230 L1300 230" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M1190 280 L1190 335" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M1370 280 L1370 335" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M1260 385 L1300 385" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M1370 435 L1370 500" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+        <path d="M1260 550 L1300 550" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M1340 610 C1365 675 1160 690 1190 610" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6,5" marker-end="url(#arrow-slate)"/>
+        <text x="1280" y="681" fill="#94a3b8" font-size="8" text-anchor="middle">outcome feedback / device profile aging</text>
+
+        <!-- App-side sources -->
+        <rect x="55" y="110" width="175" height="90" rx="6" fill="#020617"/>
+        <rect x="55" y="110" width="175" height="90" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="142" y="138" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">App Instance ID</text>
+        <text x="142" y="161" fill="#22d3ee" font-size="8" text-anchor="middle">FID or private GUID</text>
+        <text x="142" y="180" fill="#94a3b8" font-size="8" text-anchor="middle">app-scoped / reinstall-reset</text>
+
+        <rect x="55" y="210" width="175" height="90" rx="6" fill="#020617"/>
+        <rect x="55" y="210" width="175" height="90" rx="6" fill="rgba(120,53,15,.42)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="142" y="238" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">ANDROID_ID / SSAID</text>
+        <text x="142" y="261" fill="#fbbf24" font-size="8" text-anchor="middle">signing key + user + device</text>
+        <text x="142" y="280" fill="#94a3b8" font-size="8" text-anchor="middle">factory-reset / key-change semantics</text>
+
+        <rect x="55" y="310" width="175" height="90" rx="6" fill="#020617"/>
+        <rect x="55" y="310" width="175" height="90" rx="6" fill="rgba(120,53,15,.42)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="142" y="338" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">OAID / GAID</text>
+        <text x="142" y="361" fill="#fbbf24" font-size="8" text-anchor="middle">ads-oriented / user resettable</text>
+        <text x="142" y="380" fill="#94a3b8" font-size="8" text-anchor="middle">consent and purpose constrained</text>
+
+        <rect x="55" y="410" width="175" height="90" rx="6" fill="#020617"/>
+        <rect x="55" y="410" width="175" height="90" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="142" y="438" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Device Properties</text>
+        <text x="142" y="461" fill="#22d3ee" font-size="8" text-anchor="middle">Build / OS / ABI / screen</text>
+        <text x="142" y="480" fill="#94a3b8" font-size="8" text-anchor="middle">locale / storage / network</text>
+
+        <rect x="55" y="510" width="175" height="90" rx="6" fill="#020617"/>
+        <rect x="55" y="510" width="175" height="90" rx="6" fill="rgba(76,29,149,.42)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="142" y="538" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">App / Runtime Posture</text>
+        <text x="142" y="561" fill="#a78bfa" font-size="8" text-anchor="middle">signature / installer / debug</text>
+        <text x="142" y="580" fill="#94a3b8" font-size="8" text-anchor="middle">hook / root / emulator hints</text>
+
+        <rect x="55" y="610" width="175" height="90" rx="6" fill="#020617"/>
+        <rect x="55" y="610" width="175" height="90" rx="6" fill="rgba(30,41,59,.68)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="142" y="638" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Behavior / Sensors</text>
+        <text x="142" y="661" fill="#94a3b8" font-size="8" text-anchor="middle">touch rhythm / navigation</text>
+        <text x="142" y="680" fill="#94a3b8" font-size="8" text-anchor="middle">motion consistency / velocity</text>
+
+        <rect x="385" y="275" width="200" height="165" rx="7" fill="#020617"/>
+        <rect x="385" y="275" width="200" height="165" rx="7" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="485" y="306" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Risk SDK</text>
+        <text x="485" y="331" fill="#22d3ee" font-size="8" text-anchor="middle">consent-gated collection</text>
+        <text x="485" y="353" fill="#94a3b8" font-size="8" text-anchor="middle">canonicalize / sign / encrypt</text>
+        <text x="485" y="375" fill="#94a3b8" font-size="8" text-anchor="middle">nonce + timestamp + bizId</text>
+        <text x="485" y="397" fill="#a78bfa" font-size="8" text-anchor="middle">token is an envelope, not identity</text>
+        <text x="485" y="419" fill="#fb7185" font-size="8" text-anchor="middle">client verdicts remain bypassable</text>
+
+        <rect x="330" y="585" width="255" height="95" rx="6" fill="#020617"/>
+        <rect x="330" y="585" width="255" height="95" rx="6" fill="rgba(136,19,55,.35)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,4"/>
+        <text x="457" y="612" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">Restricted Hardware IDs</text>
+        <text x="457" y="635" fill="#94a3b8" font-size="8" text-anchor="middle">IMEI / serial / factory MAC</text>
+        <text x="457" y="656" fill="#94a3b8" font-size="8" text-anchor="middle">not generally available to modern third-party apps</text>
+
+        <!-- Android and OEM services -->
+        <rect x="710" y="120" width="310" height="85" rx="6" fill="#020617"/>
+        <rect x="710" y="120" width="310" height="85" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="865" y="148" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Integrity Provider</text>
+        <text x="865" y="171" fill="#fb7185" font-size="8" text-anchor="middle">app recognition / device integrity / account context</text>
+        <text x="865" y="190" fill="#94a3b8" font-size="8" text-anchor="middle">Play Integrity or OEM-equivalent service</text>
+
+        <rect x="710" y="280" width="310" height="145" rx="7" fill="#020617"/>
+        <rect x="710" y="280" width="310" height="145" rx="7" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="865" y="310" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Android Keystore / TEE / StrongBox</text>
+        <text x="865" y="335" fill="#fb7185" font-size="8" text-anchor="middle">hardware-backed key and certificate chain</text>
+        <text x="865" y="357" fill="#94a3b8" font-size="8" text-anchor="middle">verified boot / security level / patch claims</text>
+        <text x="865" y="379" fill="#94a3b8" font-size="8" text-anchor="middle">server challenge prevents naive replay</text>
+        <text x="865" y="401" fill="#fbbf24" font-size="8" text-anchor="middle">attestation proves properties, not a person</text>
+
+        <rect x="710" y="500" width="310" height="150" rx="7" fill="#020617"/>
+        <rect x="710" y="500" width="310" height="150" rx="7" fill="rgba(120,53,15,.42)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="865" y="530" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">OS Privacy Boundaries</text>
+        <text x="865" y="555" fill="#fbbf24" font-size="8" text-anchor="middle">permission / package visibility / scoped storage</text>
+        <text x="865" y="577" fill="#94a3b8" font-size="8" text-anchor="middle">MAC randomization / ID scoping / reset controls</text>
+        <text x="865" y="599" fill="#94a3b8" font-size="8" text-anchor="middle">OEM variation and no-GMS fallback paths</text>
+        <text x="865" y="621" fill="#fb7185" font-size="8" text-anchor="middle">absence of a signal must degrade gracefully</text>
+
+        <rect x="745" y="700" width="240" height="38" rx="6" fill="#020617"/>
+        <rect x="745" y="700" width="240" height="38" rx="6" fill="rgba(30,41,59,.68)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="865" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">OEM / region / Android version variance</text>
+
+        <!-- Backend boxes -->
+        <rect x="1120" y="180" width="140" height="100" rx="6" fill="#020617"/>
+        <rect x="1120" y="180" width="140" height="100" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1190" y="209" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Token Gateway</text>
+        <text x="1190" y="232" fill="#34d399" font-size="8" text-anchor="middle">schema / nonce / bizId</text>
+        <text x="1190" y="253" fill="#94a3b8" font-size="8" text-anchor="middle">anti-replay / versioning</text>
+
+        <rect x="1300" y="180" width="140" height="100" rx="6" fill="#020617"/>
+        <rect x="1300" y="180" width="140" height="100" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1370" y="209" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Attest Verify</text>
+        <text x="1370" y="232" fill="#fb7185" font-size="8" text-anchor="middle">chain / root / revocation</text>
+        <text x="1370" y="253" fill="#94a3b8" font-size="8" text-anchor="middle">request binding / freshness</text>
+
+        <rect x="1120" y="335" width="140" height="100" rx="6" fill="#020617"/>
+        <rect x="1120" y="335" width="140" height="100" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1190" y="364" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Profile Matcher</text>
+        <text x="1190" y="387" fill="#34d399" font-size="8" text-anchor="middle">stability + confidence</text>
+        <text x="1190" y="408" fill="#94a3b8" font-size="8" text-anchor="middle">reset / reinstall / drift</text>
+
+        <rect x="1300" y="335" width="140" height="100" rx="6" fill="#020617"/>
+        <rect x="1300" y="335" width="140" height="100" rx="6" fill="rgba(76,29,149,.42)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1370" y="364" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Risk Graph</text>
+        <text x="1370" y="387" fill="#a78bfa" font-size="8" text-anchor="middle">account / device / IP</text>
+        <text x="1370" y="408" fill="#94a3b8" font-size="8" text-anchor="middle">order / address / content</text>
+
+        <rect x="1120" y="500" width="140" height="110" rx="6" fill="#020617"/>
+        <rect x="1120" y="500" width="140" height="110" rx="6" fill="rgba(120,53,15,.42)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="1190" y="529" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Business Event</text>
+        <text x="1190" y="552" fill="#fbbf24" font-size="8" text-anchor="middle">login / payment / coupon</text>
+        <text x="1190" y="573" fill="#94a3b8" font-size="8" text-anchor="middle">amount / frequency</text>
+        <text x="1190" y="594" fill="#94a3b8" font-size="8" text-anchor="middle">account history</text>
+
+        <rect x="1300" y="500" width="140" height="110" rx="6" fill="#020617"/>
+        <rect x="1300" y="500" width="140" height="110" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1370" y="529" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Decision Engine</text>
+        <text x="1370" y="552" fill="#fb7185" font-size="8" text-anchor="middle">rules + model + policy</text>
+        <text x="1370" y="573" fill="#94a3b8" font-size="8" text-anchor="middle">reason / TTL / audit</text>
+        <text x="1370" y="594" fill="#94a3b8" font-size="8" text-anchor="middle">tiered response</text>
+
+        <rect x="1145" y="635" width="270" height="48" rx="6" fill="#020617"/>
+        <rect x="1145" y="635" width="270" height="48" rx="6" fill="rgba(30,41,59,.68)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1280" y="664" fill="#fff" font-size="10" font-weight="600" text-anchor="middle">ALLOW / LIMIT / STEP-UP / REVIEW / DENY</text>
+
+        <!-- Legend outside boundaries -->
+        <text x="30" y="805" fill="#fff" font-size="10" font-weight="600">LEGEND</text>
+        <rect x="95" y="794" width="18" height="11" rx="2" fill="rgba(8,51,68,.5)" stroke="#22d3ee"/>
+        <text x="121" y="804" fill="#94a3b8" font-size="9">app-scoped signal</text>
+        <rect x="280" y="794" width="18" height="11" rx="2" fill="rgba(120,53,15,.42)" stroke="#fbbf24"/>
+        <text x="306" y="804" fill="#94a3b8" font-size="9">OS identifier / policy</text>
+        <rect x="520" y="794" width="18" height="11" rx="2" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="546" y="804" fill="#94a3b8" font-size="9">integrity / trust claim</text>
+        <rect x="760" y="794" width="18" height="11" rx="2" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="786" y="804" fill="#94a3b8" font-size="9">server verification</text>
+        <rect x="970" y="794" width="18" height="11" rx="2" fill="rgba(76,29,149,.42)" stroke="#a78bfa"/>
+        <text x="996" y="804" fill="#94a3b8" font-size="9">relationship graph</text>
+
+        <text x="30" y="855" fill="#64748b" font-size="9">Core invariant: do not bridge user resets or rebuild a permanent identity from weaker signals without a valid purpose and legal basis.</text>
+        <text x="30" y="882" fill="#64748b" font-size="9">Security invariant: verify integrity evidence off-device; local root, hook and emulator checks are supporting signals, not roots of trust.</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>ID 有不同作用域</h3></div>
+        <ul>
+          <li>应用实例 GUID 通常重装即变，Android ID 受签名、用户和设备共同约束</li>
+          <li>OAID/GAID 面向广告场景，可被用户关闭或重置</li>
+          <li>把这些 ID 强行拼回永久身份，会破坏平台设计的重置语义</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>证明不等于指纹</h3></div>
+        <ul>
+          <li>指纹是概率匹配，完整性证明是带签名的环境声明</li>
+          <li>Attestation 必须在服务端验链、验撤销、验挑战绑定</li>
+          <li>通过完整性校验仍不能证明操作者本人或业务行为正常</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>无 GMS 不是无风控</h3></div>
+        <ul>
+          <li>国内 Android 生态常使用 OAID、OEM 能力和自有终端 SDK</li>
+          <li>OEM、ROM 与系统版本差异要求服务端显式处理缺失信号</li>
+          <li>稳定工程依赖分级决策，而不是要求每台设备返回同一组字段</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">Android fingerprint, attestation and risk identity reference architecture - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({
+          type: 'cocoon-diagram:resize',
+          height: Math.ceil(root.getBoundingClientRect().height + padding)
+        }, window.location.origin);
+      });
+    }
+
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', (event) => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize();
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+
+    async function captureDiagram() {
+      const el = document.getElementById('report-container');
+      const r = el.getBoundingClientRect();
+      const pad = 32;
+      return html2canvas(document.body, {
+        backgroundColor: '#020617',
+        scale: 2,
+        useCORS: true,
+        ignoreElements: (e) => e.classList && e.classList.contains('toolbar'),
+        x: r.left + window.scrollX - pad,
+        y: r.top + window.scrollY - pad,
+        width: r.width + pad * 2,
+        height: r.height + pad * 2
+      });
+    }
+
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const canvas = await captureDiagram();
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = 'Copied';
+      } catch (e) { btn.textContent = 'Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Working';
+      try {
+        const canvas = await captureDiagram();
+        const link = document.createElement('a');
+        link.download = 'android-risk-identity-architecture.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = 'Done';
+      } catch (e) { btn.textContent = 'Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Working';
+      try {
+        const canvas = await captureDiagram();
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('android-risk-identity-architecture.pdf');
+        btn.textContent = 'Done';
+      } catch (e) { btn.textContent = 'Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
