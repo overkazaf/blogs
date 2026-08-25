@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Device Risk Control Capability Matrix</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #fbbf24; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.violet { background: #a78bfa; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Global Device Risk Control Capability Matrix</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">基于公开接入文档的能力覆盖比较；不是准确率排名，也不代表所有套餐、地区和客户配置</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 1100" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Global device risk control capability matrix</title>
+        <desc id="diagram-desc">Chinese and overseas device risk products are compared across identity, environment, edge, automation, business graph, response and shared intelligence capabilities.</desc>
+        <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern></defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Table frame -->
+        <rect x="25" y="65" width="1450" height="825" rx="10" fill="rgba(15,23,42,.52)" stroke="#334155"/>
+        <rect x="25" y="65" width="1450" height="85" rx="10" fill="rgba(30,41,59,.82)" stroke="#334155"/>
+        <line x1="350" y1="65" x2="350" y2="890" stroke="#334155"/>
+        <line x1="510" y1="65" x2="510" y2="890" stroke="#334155"/>
+        <line x1="670" y1="65" x2="670" y2="890" stroke="#334155"/>
+        <line x1="830" y1="65" x2="830" y2="890" stroke="#334155"/>
+        <line x1="990" y1="65" x2="990" y2="890" stroke="#334155"/>
+        <line x1="1150" y1="65" x2="1150" y2="890" stroke="#334155"/>
+        <line x1="1310" y1="65" x2="1310" y2="890" stroke="#334155"/>
+        <text x="50" y="102" fill="#fff" font-size="12" font-weight="600">产品 / 公开定位</text><text x="50" y="127" fill="#64748b" font-size="8">同类比较看覆盖面，跨类比较看组合方式</text>
+        <text x="430" y="102" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">稳定识别</text><text x="430" y="127" fill="#64748b" font-size="8" text-anchor="middle">browser / device</text>
+        <text x="590" y="102" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">环境可信</text><text x="590" y="127" fill="#64748b" font-size="8" text-anchor="middle">tamper / emulator</text>
+        <text x="750" y="102" fill="#38bdf8" font-size="10" font-weight="600" text-anchor="middle">边缘网络</text><text x="750" y="127" fill="#64748b" font-size="8" text-anchor="middle">TLS / IP / ASN</text>
+        <text x="910" y="102" fill="#a78bfa" font-size="10" font-weight="600" text-anchor="middle">自动化行为</text><text x="910" y="127" fill="#64748b" font-size="8" text-anchor="middle">bot / velocity</text>
+        <text x="1070" y="102" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">业务图谱</text><text x="1070" y="127" fill="#64748b" font-size="8" text-anchor="middle">account / event</text>
+        <text x="1230" y="102" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">处置闭环</text><text x="1230" y="127" fill="#64748b" font-size="8" text-anchor="middle">challenge / rule</text>
+        <text x="1392" y="102" fill="#c4b5fd" font-size="10" font-weight="600" text-anchor="middle">共享情报</text><text x="1392" y="127" fill="#64748b" font-size="8" text-anchor="middle">network feedback</text>
+
+        <!-- Group and row backgrounds -->
+        <rect x="25" y="150" width="1450" height="50" fill="rgba(34,211,238,.06)"/><text x="48" y="181" fill="#22d3ee" font-size="11" font-weight="600">中国商业设备风控</text>
+        <rect x="25" y="200" width="1450" height="75" fill="rgba(8,51,68,.18)"/><rect x="25" y="275" width="1450" height="75" fill="rgba(8,51,68,.08)"/>
+        <rect x="25" y="350" width="1450" height="50" fill="rgba(167,139,250,.06)"/><text x="48" y="381" fill="#a78bfa" font-size="11" font-weight="600">海外设备身份、Bot 与业务风控</text>
+        <rect x="25" y="400" width="1450" height="75" fill="rgba(76,29,149,.14)"/><rect x="25" y="475" width="1450" height="75" fill="rgba(76,29,149,.07)"/>
+        <rect x="25" y="550" width="1450" height="75" fill="rgba(76,29,149,.14)"/><rect x="25" y="625" width="1450" height="75" fill="rgba(76,29,149,.07)"/>
+        <rect x="25" y="700" width="1450" height="75" fill="rgba(76,29,149,.14)"/><rect x="25" y="775" width="1450" height="75" fill="rgba(76,29,149,.07)"/>
+        <rect x="25" y="850" width="1450" height="40" fill="rgba(251,191,36,.06)"/>
+
+        <!-- Row separators -->
+        <g stroke="#1e293b"><line x1="25" y1="200" x2="1475" y2="200"/><line x1="25" y1="275" x2="1475" y2="275"/><line x1="25" y1="350" x2="1475" y2="350"/><line x1="25" y1="400" x2="1475" y2="400"/><line x1="25" y1="475" x2="1475" y2="475"/><line x1="25" y1="550" x2="1475" y2="550"/><line x1="25" y1="625" x2="1475" y2="625"/><line x1="25" y1="700" x2="1475" y2="700"/><line x1="25" y1="775" x2="1475" y2="775"/><line x1="25" y1="850" x2="1475" y2="850"/></g>
+
+        <!-- Product labels -->
+        <text x="48" y="230" fill="#fff" font-size="11" font-weight="600">Alibaba Cloud Fraud Detection</text><text x="48" y="253" fill="#94a3b8" font-size="8">多端设备风险 + MaaS + 决策引擎</text>
+        <text x="48" y="305" fill="#fff" font-size="11" font-weight="600">Dingxiang UNIFYID</text><text x="48" y="328" fill="#94a3b8" font-size="8">全端设备身份 + 环境风险 + 行为</text>
+        <text x="48" y="430" fill="#fff" font-size="11" font-weight="600">Fingerprint Identification</text><text x="48" y="453" fill="#94a3b8" font-size="8">workspace-scoped visitor/device identity</text>
+        <text x="48" y="505" fill="#fff" font-size="11" font-weight="600">Cloudflare Bot Management</text><text x="48" y="528" fill="#94a3b8" font-size="8">global edge scoring + WAF enforcement</text>
+        <text x="48" y="580" fill="#fff" font-size="11" font-weight="600">Arkose Bot Manager / Device ID</text><text x="48" y="603" fill="#94a3b8" font-size="8">detection + confidence + adaptive challenge</text>
+        <text x="48" y="655" fill="#fff" font-size="11" font-weight="600">Stripe Radar</text><text x="48" y="678" fill="#94a3b8" font-size="8">payment network model + 3DS / review</text>
+        <text x="48" y="730" fill="#fff" font-size="11" font-weight="600">Sift</text><text x="48" y="753" fill="#94a3b8" font-size="8">device + event graph + abuse workflows</text>
+        <text x="48" y="805" fill="#fff" font-size="11" font-weight="600">LexisNexis ThreatMetrix</text><text x="48" y="828" fill="#94a3b8" font-size="8">digital identity network + behavior</text>
+        <text x="48" y="875" fill="#fbbf24" font-size="10" font-weight="600">Google Play Integrity</text><text x="205" y="875" fill="#64748b" font-size="8">信任原语，不是完整风控平台</text>
+
+        <!-- Capability marks: core = filled ring, adjacent = half, integration = outline, none = dash -->
+        <g font-size="23" text-anchor="middle" dominant-baseline="middle">
+          <!-- Alibaba --> <text x="430" y="238" fill="#22d3ee">●</text><text x="590" y="238" fill="#fbbf24">●</text><text x="750" y="238" fill="#38bdf8">◐</text><text x="910" y="238" fill="#a78bfa">●</text><text x="1070" y="238" fill="#34d399">●</text><text x="1230" y="238" fill="#fb7185">●</text><text x="1392" y="238" fill="#c4b5fd">◐</text>
+          <!-- Dingxiang --> <text x="430" y="313" fill="#22d3ee">●</text><text x="590" y="313" fill="#fbbf24">●</text><text x="750" y="313" fill="#38bdf8">◐</text><text x="910" y="313" fill="#a78bfa">●</text><text x="1070" y="313" fill="#34d399">◐</text><text x="1230" y="313" fill="#fb7185">◐</text><text x="1392" y="313" fill="#c4b5fd">◐</text>
+          <!-- Fingerprint --> <text x="430" y="438" fill="#22d3ee">●</text><text x="590" y="438" fill="#fbbf24">◐</text><text x="750" y="438" fill="#38bdf8">◐</text><text x="910" y="438" fill="#a78bfa">◐</text><text x="1070" y="438" fill="#34d399">○</text><text x="1230" y="438" fill="#fb7185">○</text><text x="1392" y="438" fill="#64748b">—</text>
+          <!-- Cloudflare --> <text x="430" y="513" fill="#22d3ee">◐</text><text x="590" y="513" fill="#fbbf24">◐</text><text x="750" y="513" fill="#38bdf8">●</text><text x="910" y="513" fill="#a78bfa">●</text><text x="1070" y="513" fill="#34d399">○</text><text x="1230" y="513" fill="#fb7185">●</text><text x="1392" y="513" fill="#c4b5fd">●</text>
+          <!-- Arkose --> <text x="430" y="588" fill="#22d3ee">◐</text><text x="590" y="588" fill="#fbbf24">●</text><text x="750" y="588" fill="#38bdf8">●</text><text x="910" y="588" fill="#a78bfa">●</text><text x="1070" y="588" fill="#34d399">○</text><text x="1230" y="588" fill="#fb7185">●</text><text x="1392" y="588" fill="#c4b5fd">●</text>
+          <!-- Stripe --> <text x="430" y="663" fill="#22d3ee">◐</text><text x="590" y="663" fill="#fbbf24">◐</text><text x="750" y="663" fill="#38bdf8">◐</text><text x="910" y="663" fill="#a78bfa">●</text><text x="1070" y="663" fill="#34d399">●</text><text x="1230" y="663" fill="#fb7185">●</text><text x="1392" y="663" fill="#c4b5fd">●</text>
+          <!-- Sift --> <text x="430" y="738" fill="#22d3ee">●</text><text x="590" y="738" fill="#fbbf24">◐</text><text x="750" y="738" fill="#38bdf8">◐</text><text x="910" y="738" fill="#a78bfa">●</text><text x="1070" y="738" fill="#34d399">●</text><text x="1230" y="738" fill="#fb7185">●</text><text x="1392" y="738" fill="#c4b5fd">●</text>
+          <!-- ThreatMetrix --> <text x="430" y="813" fill="#22d3ee">●</text><text x="590" y="813" fill="#fbbf24">●</text><text x="750" y="813" fill="#38bdf8">●</text><text x="910" y="813" fill="#a78bfa">●</text><text x="1070" y="813" fill="#34d399">●</text><text x="1230" y="813" fill="#fb7185">◐</text><text x="1392" y="813" fill="#c4b5fd">●</text>
+          <!-- Play Integrity --> <text x="430" y="870" fill="#64748b">—</text><text x="590" y="870" fill="#fbbf24">●</text><text x="750" y="870" fill="#64748b">—</text><text x="910" y="870" fill="#64748b">—</text><text x="1070" y="870" fill="#34d399">○</text><text x="1230" y="870" fill="#fb7185">○</text><text x="1392" y="870" fill="#64748b">—</text>
+        </g>
+
+        <!-- Legend and interpretation -->
+        <text x="35" y="940" fill="#fff" font-size="10" font-weight="600">公开能力覆盖</text><text x="180" y="940" fill="#22d3ee" font-size="16">●</text><text x="205" y="940" fill="#94a3b8" font-size="9">核心/原生</text><text x="330" y="940" fill="#fbbf24" font-size="16">◐</text><text x="355" y="940" fill="#94a3b8" font-size="9">支持/相邻</text><text x="500" y="940" fill="#94a3b8" font-size="16">○</text><text x="525" y="940" fill="#94a3b8" font-size="9">依赖客户数据或集成</text><text x="745" y="940" fill="#64748b" font-size="16">—</text><text x="770" y="940" fill="#94a3b8" font-size="9">非产品核心</text>
+        <text x="35" y="986" fill="#64748b" font-size="9">读取方式：横向看一个产品在哪些层提供证据或动作；纵向看某项能力有哪些可组合供应商。符号不表示准确率、对抗等级或采购建议。</text>
+        <text x="35" y="1016" fill="#64748b" font-size="9">关键结论：设备身份产品通常不掌握业务结果；边缘 Bot 产品通常不理解订单语义；支付/反欺诈网络更强依赖客户事件质量；Integrity 只增强环境证据。</text>
+        <text x="35" y="1046" fill="#64748b" font-size="9">评估限制：能力来自 2026-08-25 可访问的官方文档，实际覆盖受套餐、平台、地区、隐私配置和业务回传影响。</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>设备身份型</h3></div><ul><li>优势是跨会话归并、环境风险和低接入成本</li><li>短板是不了解客户订单、内容和资金结果</li><li>应把 visitor/device ID 作为画像节点而非授权凭据</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>边缘与挑战型</h3></div><ul><li>优势是网络视角、全站流量和即时挑战能力</li><li>短板是业务语义有限，API 与原生 App 还需单独设计</li><li>最适合压低自动化规模，不负责证明自然人身份</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>业务网络型</h3></div><ul><li>优势是事件、损失反馈和跨客户风险模式</li><li>短板是垂直领域强、迁移到其他业务未必成立</li><li>效果上限取决于客户回传质量与处置闭环</li></ul></div>
+    </div>
+    <p class="footer">Global risk control capability matrix - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'global-risk-control-capability-matrix.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('global-risk-control-capability-matrix.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>

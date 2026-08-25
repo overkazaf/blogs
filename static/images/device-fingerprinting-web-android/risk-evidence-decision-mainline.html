@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Risk Evidence to Decision Mainline</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #22d3ee; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.violet { background: #a78bfa; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Device Risk Evidence to Decision Mainline</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">一笔请求的主线：观察环境，验证来源，归并身份，关联业务，分级处置，再用结果校准下一次判断</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 900" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Device risk evidence to decision mainline</title>
+        <desc id="diagram-desc">Web, Android and edge observations become event-bound evidence, a probabilistic device profile, a business risk graph, a tiered decision and a governed feedback loop.</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Stage boundaries -->
+        <rect x="20" y="80" width="270" height="650" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-dasharray="8,5"/>
+        <rect x="310" y="80" width="270" height="650" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-dasharray="8,5"/>
+        <rect x="600" y="80" width="270" height="650" rx="12" fill="rgba(167,139,250,.018)" stroke="#a78bfa" stroke-dasharray="8,5"/>
+        <rect x="890" y="80" width="270" height="650" rx="12" fill="rgba(52,211,153,.018)" stroke="#34d399" stroke-dasharray="8,5"/>
+        <rect x="1180" y="80" width="300" height="650" rx="12" fill="rgba(251,113,133,.018)" stroke="#fb7185" stroke-dasharray="8,5"/>
+        <text x="38" y="108" fill="#22d3ee" font-size="12" font-weight="600">1 / OBSERVE</text>
+        <text x="328" y="108" fill="#fbbf24" font-size="12" font-weight="600">2 / VERIFY</text>
+        <text x="618" y="108" fill="#a78bfa" font-size="12" font-weight="600">3 / RESOLVE</text>
+        <text x="908" y="108" fill="#34d399" font-size="12" font-weight="600">4 / CONTEXTUALIZE</text>
+        <text x="1198" y="108" fill="#fb7185" font-size="12" font-weight="600">5 / DECIDE AND LEARN</text>
+
+        <!-- Arrows painted before nodes -->
+        <path d="M255 330 L345 330" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M545 330 L635 330" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M835 330 L925 330" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M1125 330 L1215 330" fill="none" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+        <path d="M1330 390 L1330 520" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+        <path d="M1215 575 C1010 790 465 790 215 520" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="7,6" marker-end="url(#arrow-slate)"/>
+        <text x="735" y="788" fill="#94a3b8" font-size="9" text-anchor="middle">confirmed fraud, trusted challenge, appeal and drift update feature reliability, graph edges and policy thresholds</text>
+
+        <!-- Stage nodes -->
+        <rect x="55" y="155" width="200" height="105" rx="6" fill="#020617"/><rect x="55" y="155" width="200" height="105" rx="6" fill="rgba(8,51,68,.52)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="155" y="187" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Web and Edge</text><text x="155" y="214" fill="#22d3ee" font-size="8" text-anchor="middle">HTTP / TLS / runtime / behavior</text><text x="155" y="237" fill="#94a3b8" font-size="8" text-anchor="middle">first-party state + server observation</text>
+        <rect x="55" y="400" width="200" height="105" rx="6" fill="#020617"/><rect x="55" y="400" width="200" height="105" rx="6" fill="rgba(8,51,68,.52)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="155" y="432" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Android Runtime</text><text x="155" y="459" fill="#22d3ee" font-size="8" text-anchor="middle">scoped IDs / Build / app / sensors</text><text x="155" y="482" fill="#94a3b8" font-size="8" text-anchor="middle">collection failure remains explicit</text>
+
+        <rect x="345" y="270" width="200" height="120" rx="6" fill="#020617"/><rect x="345" y="270" width="200" height="120" rx="6" fill="rgba(120,53,15,.44)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="445" y="302" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Event-bound Evidence</text><text x="445" y="329" fill="#fbbf24" font-size="8" text-anchor="middle">schema / action / nonce / timestamp</text><text x="445" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">request signature + Play Integrity</text><text x="445" y="373" fill="#fb7185" font-size="8" text-anchor="middle">client claims are not authorization</text>
+
+        <rect x="635" y="270" width="200" height="120" rx="6" fill="#020617"/><rect x="635" y="270" width="200" height="120" rx="6" fill="rgba(76,29,149,.48)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="735" y="302" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Probabilistic Profile</text><text x="735" y="329" fill="#a78bfa" font-size="8" text-anchor="middle">candidate recall + similarity</text><text x="735" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">collision / drift / split / merge</text><text x="735" y="373" fill="#94a3b8" font-size="8" text-anchor="middle">profile ID + confidence + conflicts</text>
+
+        <rect x="925" y="270" width="200" height="120" rx="6" fill="#020617"/><rect x="925" y="270" width="200" height="120" rx="6" fill="rgba(6,78,59,.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1025" y="302" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Business Risk Graph</text><text x="1025" y="329" fill="#34d399" font-size="8" text-anchor="middle">account / IP / order / payment</text><text x="1025" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">address / content / merchant / time</text><text x="1025" y="373" fill="#94a3b8" font-size="8" text-anchor="middle">typed and decaying relationships</text>
+
+        <rect x="1215" y="270" width="230" height="120" rx="6" fill="#020617"/><rect x="1215" y="270" width="230" height="120" rx="6" fill="rgba(136,19,55,.46)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1330" y="302" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Tiered Policy</text><text x="1330" y="329" fill="#fb7185" font-size="8" text-anchor="middle">allow / limit / challenge</text><text x="1330" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">review / delay / deny</text><text x="1330" y="373" fill="#94a3b8" font-size="8" text-anchor="middle">reason code + model version</text>
+        <rect x="1215" y="520" width="230" height="110" rx="6" fill="#020617"/><rect x="1215" y="520" width="230" height="110" rx="6" fill="rgba(30,41,59,.72)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="1330" y="552" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Governed Feedback</text><text x="1330" y="579" fill="#94a3b8" font-size="8" text-anchor="middle">outcome source + confidence + cooldown</text><text x="1330" y="602" fill="#34d399" font-size="8" text-anchor="middle">aging / rollback / appeal / deletion</text>
+
+        <!-- Questions anchor each chapter -->
+        <text x="155" y="660" fill="#22d3ee" font-size="9" text-anchor="middle">看到了什么？谁看见的？</text>
+        <text x="445" y="660" fill="#fbbf24" font-size="9" text-anchor="middle">能否验来源、绑定和新鲜度？</text>
+        <text x="735" y="660" fill="#a78bfa" font-size="9" text-anchor="middle">像哪个历史环境？有多确定？</text>
+        <text x="1025" y="660" fill="#34d399" font-size="9" text-anchor="middle">这次业务关系是否异常？</text>
+        <text x="1330" y="680" fill="#fb7185" font-size="9" text-anchor="middle">该增加多少摩擦？结果可信吗？</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>设备不是结论</h3></div><ul><li>客户端只提交有来源和版本的观察值</li><li>指纹输出画像候选和置信度，不输出业务授权</li><li>完整性证明也必须绑定到本次关键动作</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>关系决定语义</h3></div><ul><li>同一台设备登录、领券、付款的风险含义不同</li><li>账号、网络、支付、地址和行为把设备节点放进场景</li><li>国内外产品的差异主要发生在这一层</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>处置必须闭环</h3></div><ul><li>放行与拒绝之间还应有限额、挑战和复核</li><li>反馈来源不同，不能以同一权重更新画像</li><li>安全效果、误伤、漂移和隐私成本一起验收</li></ul></div>
+    </div>
+    <p class="footer">Device risk evidence mainline - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'risk-evidence-decision-mainline.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('risk-evidence-decision-mainline.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>

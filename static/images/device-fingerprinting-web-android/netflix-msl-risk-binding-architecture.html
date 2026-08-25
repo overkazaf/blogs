@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Netflix MSL Entity Session and Risk Binding Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #e50914; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.violet { background: #a78bfa; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Netflix MSL Entity, Session and Risk Binding</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">MSL 不靠一个更长的 device_id，而是把实体能力、会话、用户与本次控制消息放进同一个密码学上下文</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 1050" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Netflix MSL entity session user and licensed manifest binding architecture</title>
+        <desc id="diagram-desc">A client entity capability establishes an MSL session, a user token binds to the master token, protected messages bind control actions, and Netflix policy returns a licensed manifest and Widevine license response.</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Trust domains -->
+        <rect x="20" y="55" width="310" height="735" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-dasharray="8,5"/>
+        <text x="40" y="84" fill="#22d3ee" font-size="12" font-weight="600">CLIENT AND ENTITY</text>
+        <rect x="350" y="55" width="320" height="735" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-dasharray="8,5"/>
+        <text x="370" y="84" fill="#fbbf24" font-size="12" font-weight="600">MSL SESSION</text>
+        <rect x="690" y="55" width="350" height="735" rx="12" fill="rgba(167,139,250,.018)" stroke="#a78bfa" stroke-dasharray="8,5"/>
+        <text x="710" y="84" fill="#a78bfa" font-size="12" font-weight="600">PROTECTED MESSAGE</text>
+        <rect x="1060" y="55" width="420" height="735" rx="12" fill="rgba(251,113,133,.018)" stroke="#fb7185" stroke-dasharray="8,5"/>
+        <text x="1080" y="84" fill="#fb7185" font-size="12" font-weight="600">NETFLIX CONTROL AND POLICY</text>
+
+        <!-- Arrows painted before nodes -->
+        <path d="M290 195 L390 195" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M290 375 L390 375" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M290 555 L730 555" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M630 195 L730 195" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrow-amber)"/>
+        <path d="M630 375 L730 375" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M865 245 L865 325" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M865 425 L865 505" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M1000 195 L1100 195" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M1000 555 L1100 375" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M1265 245 L1265 325" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M1265 425 L1265 505" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M1100 555 C1015 720 515 730 275 610" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="7,6" marker-end="url(#arrow-slate)"/>
+        <text x="720" y="732" fill="#94a3b8" font-size="8" text-anchor="middle">playback outcome, token renewal, concurrency and device/session telemetry feed later policy decisions</text>
+
+        <!-- Client nodes -->
+        <rect x="60" y="135" width="230" height="110" rx="6" fill="#020617"/><rect x="60" y="135" width="230" height="110" rx="6" fill="rgba(8,51,68,.52)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="175" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Device and App Context</text><text x="175" y="193" fill="#22d3ee" font-size="8" text-anchor="middle">ESN / profile / client capability</text><text x="175" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">observations inform policy; not proof alone</text>
+        <rect x="60" y="315" width="230" height="110" rx="6" fill="#020617"/><rect x="60" y="315" width="230" height="110" rx="6" fill="rgba(120,53,15,.43)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="175" y="346" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Entity Crypto Capability</text><text x="175" y="373" fill="#fbbf24" font-size="8" text-anchor="middle">RSA keypair OR Widevine CryptoSession</text><text x="175" y="397" fill="#94a3b8" font-size="8" text-anchor="middle">proof strength depends on selected route</text>
+        <rect x="60" y="505" width="230" height="105" rx="6" fill="#020617"/><rect x="60" y="505" width="230" height="105" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="175" y="536" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">User and Playback Intent</text><text x="175" y="563" fill="#a78bfa" font-size="8" text-anchor="middle">account / viewable / profiles / challenge</text><text x="175" y="587" fill="#94a3b8" font-size="8" text-anchor="middle">must be authorized inside session context</text>
+
+        <!-- Session nodes -->
+        <rect x="390" y="135" width="240" height="110" rx="6" fill="#020617"/><rect x="390" y="135" width="240" height="110" rx="6" fill="rgba(120,53,15,.43)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="510" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Key Exchange Request</text><text x="510" y="193" fill="#fbbf24" font-size="8" text-anchor="middle">ASYMMETRIC_WRAPPED or WIDEVINE</text><text x="510" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">entityauthdata + keyrequestdata</text>
+        <rect x="390" y="315" width="240" height="110" rx="6" fill="#020617"/><rect x="390" y="315" width="240" height="110" rx="6" fill="rgba(120,53,15,.43)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="510" y="346" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">MasterToken and Session Keys</text><text x="510" y="373" fill="#fbbf24" font-size="8" text-anchor="middle">Kenc / Khmac OR key IDs in CDM</text><text x="510" y="397" fill="#94a3b8" font-size="8" text-anchor="middle">serial + sequence + renewal + expiration</text>
+        <rect x="390" y="505" width="240" height="105" rx="6" fill="#020617"/><rect x="390" y="505" width="240" height="105" rx="6" fill="rgba(30,41,59,.72)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="510" y="536" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Proof of Possession</text><text x="510" y="563" fill="#94a3b8" font-size="8" text-anchor="middle">encrypt / sign / decrypt capability</text><text x="510" y="587" fill="#fb7185" font-size="8" text-anchor="middle">non-exportable key does not stop oracle abuse</text>
+
+        <!-- Message nodes -->
+        <rect x="730" y="135" width="270" height="110" rx="6" fill="#020617"/><rect x="730" y="135" width="270" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="865" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">MasterToken</text><text x="865" y="193" fill="#a78bfa" font-size="8" text-anchor="middle">server-issued session context</text><text x="865" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">token alone is not message capability</text>
+        <rect x="730" y="315" width="270" height="110" rx="6" fill="#020617"/><rect x="730" y="315" width="270" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="865" y="346" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">UserIdToken Binding</text><text x="865" y="373" fill="#a78bfa" font-size="8" text-anchor="middle">UIT.mtserialnumber == MT.serialnumber</text><text x="865" y="397" fill="#94a3b8" font-size="8" text-anchor="middle">prevents cross-session token splicing</text>
+        <rect x="730" y="505" width="270" height="110" rx="6" fill="#020617"/><rect x="730" y="505" width="270" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="865" y="536" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Encrypted Header and Payload</text><text x="865" y="563" fill="#a78bfa" font-size="8" text-anchor="middle">encrypt-then-MAC / messageid / chunks</text><text x="865" y="587" fill="#94a3b8" font-size="8" text-anchor="middle">optional nonreplayableid requires server state</text>
+
+        <!-- Netflix nodes -->
+        <rect x="1100" y="135" width="330" height="110" rx="6" fill="#020617"/><rect x="1100" y="135" width="330" height="110" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1265" y="166" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">MSL Verification Boundary</text><text x="1265" y="193" fill="#fb7185" font-size="8" text-anchor="middle">token / proof / HMAC / binding / freshness</text><text x="1265" y="217" fill="#94a3b8" font-size="8" text-anchor="middle">verify before decrypt and business parsing</text>
+        <rect x="1100" y="315" width="330" height="110" rx="6" fill="#020617"/><rect x="1100" y="315" width="330" height="110" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1265" y="346" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Playback Authorization Policy</text><text x="1265" y="373" fill="#fb7185" font-size="8" text-anchor="middle">account / title / plan / region / device class</text><text x="1265" y="397" fill="#94a3b8" font-size="8" text-anchor="middle">household, concurrency and risk are service policy</text>
+        <rect x="1100" y="505" width="330" height="110" rx="6" fill="#020617"/><rect x="1100" y="505" width="330" height="110" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1265" y="536" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">licensedManifest Response</text><text x="1265" y="563" fill="#34d399" font-size="8" text-anchor="middle">tracks + CDN streams + Widevine license</text><text x="1265" y="587" fill="#94a3b8" font-size="8" text-anchor="middle">one protected per-play control exchange</text>
+
+        <!-- Legend and evidence labels -->
+        <line x1="45" y1="855" x2="105" y2="855" stroke="#a78bfa" stroke-width="2"/><text x="120" y="859" fill="#94a3b8" font-size="8">protocol and local log evidence</text>
+        <line x1="380" y1="855" x2="440" y2="855" stroke="#64748b" stroke-width="2" stroke-dasharray="7,6"/><text x="455" y="859" fill="#94a3b8" font-size="8">service policy integration: architecture inference</text>
+        <rect x="845" y="844" width="18" height="11" rx="2" fill="rgba(120,53,15,.43)" stroke="#fbbf24"/><text x="875" y="855" fill="#94a3b8" font-size="8">session trust</text>
+        <rect x="1045" y="844" width="18" height="11" rx="2" fill="rgba(136,19,55,.45)" stroke="#fb7185"/><text x="1075" y="855" fill="#94a3b8" font-size="8">verification / policy</text>
+        <text x="45" y="910" fill="#64748b" font-size="9">Binding chain: entity capability -> MasterToken -> UserIdToken -> protected message -> licensedManifest policy decision.</text>
+        <text x="45" y="940" fill="#64748b" font-size="9">Security boundary: MSL limits token splicing and detached replay; it does not make a controlled authorized endpoint honest or protect decoded frames.</text>
+        <text x="45" y="970" fill="#64748b" font-size="9">Device-risk lesson: stable identity is only an input. Netflix adds proof of possession, short-lived session context and per-play authorization.</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>不是超级设备 ID</h3></div><ul><li>ESN、profile 和设备观察负责提供上下文</li><li>真正的协议强度来自实体能力与会话证明</li><li>软件 RSA 与 Widevine CDM 路线不能同级评价</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>四层绑定逐步收窄复用</h3></div><ul><li>MasterToken 绑定会话，UserIdToken 再绑定用户</li><li>消息绑定 key、HMAC、messageid 与可选非重放状态</li><li>licensedManifest 把播放参数和 License challenge 合并授权</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>合法端点仍可能被滥用</h3></div><ul><li>不可导出密钥降低克隆，不阻止 CryptoSession oracle</li><li>完整消息可重放性仍取决于服务端窗口与业务幂等</li><li>最终要靠账号、并发、策略和播放反馈限制规模</li></ul></div>
+    </div>
+    <p class="footer">Netflix MSL risk binding architecture - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'netflix-msl-risk-binding-architecture.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('netflix-msl-risk-binding-architecture.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>

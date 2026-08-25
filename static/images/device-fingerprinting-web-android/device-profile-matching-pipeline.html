@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Probabilistic Device Profile Matching Pipeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #a78bfa; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.violet { background: #a78bfa; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Probabilistic Device Profile Matching Pipeline</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">指纹不是一次 Hash，而是有版本、有缺失语义、有冲突处理和时间衰减的画像归并过程</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 900" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Probabilistic device profile matching and risk graph pipeline</title>
+        <desc id="diagram-desc">Versioned observations are normalized, candidates are recalled, similarity and conflicts are evaluated, profiles are split or merged, and business feedback ages the resulting risk graph.</desc>
+        <defs>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Ownership boundaries -->
+        <rect x="20" y="55" width="330" height="650" rx="12" fill="rgba(34,211,238,.018)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="38" y="82" fill="#22d3ee" font-size="12" font-weight="600">OBSERVATION INTAKE</text>
+        <rect x="370" y="55" width="340" height="650" rx="12" fill="rgba(251,191,36,.018)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="388" y="82" fill="#fbbf24" font-size="12" font-weight="600">FEATURE PROCESSING</text>
+        <rect x="730" y="55" width="370" height="650" rx="12" fill="rgba(167,139,250,.018)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="748" y="82" fill="#a78bfa" font-size="12" font-weight="600">IDENTITY RESOLUTION</text>
+        <rect x="1120" y="55" width="360" height="650" rx="12" fill="rgba(52,211,153,.018)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,5"/>
+        <text x="1138" y="82" fill="#34d399" font-size="12" font-weight="600">RISK AND FEEDBACK</text>
+
+        <!-- Arrows painted before nodes -->
+        <path d="M315 170 L410 170" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M315 350 L410 350" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrow-cyan)"/>
+        <path d="M315 530 L410 530" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M540 220 L540 300" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M540 400 L540 480" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M670 530 L770 170" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M670 530 L770 350" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M915 220 L915 300" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M915 400 L915 480" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <path d="M1060 530 L1160 170" fill="none" stroke="#a78bfa" stroke-width="2.5" marker-end="url(#arrow-violet)"/>
+        <path d="M1300 220 L1300 300" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-slate)"/>
+        <path d="M1300 400 L1300 480" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+        <path d="M1160 530 C1090 670 680 675 620 580" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6,5" marker-end="url(#arrow-slate)"/>
+        <text x="875" y="668" fill="#94a3b8" font-size="8" text-anchor="middle">feedback updates reliability weights, TTL and profile lineage</text>
+
+        <!-- Intake nodes -->
+        <rect x="55" y="120" width="260" height="100" rx="6" fill="#020617"/><rect x="55" y="120" width="260" height="100" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="185" y="150" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Versioned Observations</text><text x="185" y="175" fill="#22d3ee" font-size="8" text-anchor="middle">browser / Android / edge / behavior</text><text x="185" y="195" fill="#94a3b8" font-size="8" text-anchor="middle">source + observed_at + schema + consent</text>
+        <rect x="55" y="300" width="260" height="100" rx="6" fill="#020617"/><rect x="55" y="300" width="260" height="100" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="185" y="330" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Event-bound Envelope</text><text x="185" y="355" fill="#22d3ee" font-size="8" text-anchor="middle">bizId / session / nonce / timestamp</text><text x="185" y="375" fill="#fb7185" font-size="8" text-anchor="middle">claims remain untrusted until verified</text>
+        <rect x="55" y="480" width="260" height="100" rx="6" fill="#020617"/><rect x="55" y="480" width="260" height="100" rx="6" fill="rgba(30,41,59,.68)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="185" y="510" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Scoped Stable Hints</text><text x="185" y="535" fill="#94a3b8" font-size="8" text-anchor="middle">first-party ID / app GUID / account</text><text x="185" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">reset semantics constrain identity links</text>
+
+        <!-- Feature nodes -->
+        <rect x="410" y="120" width="260" height="100" rx="6" fill="#020617"/><rect x="410" y="120" width="260" height="100" rx="6" fill="rgba(120,53,15,.42)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="540" y="150" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Normalize and Validate</text><text x="540" y="175" fill="#fbbf24" font-size="8" text-anchor="middle">canonicalize / bucket / cross-check</text><text x="540" y="195" fill="#94a3b8" font-size="8" text-anchor="middle">missing is data; ERROR is not SAFE</text>
+        <rect x="410" y="300" width="260" height="100" rx="6" fill="#020617"/><rect x="410" y="300" width="260" height="100" rx="6" fill="rgba(120,53,15,.42)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="540" y="330" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Feature Registry</text><text x="540" y="355" fill="#fbbf24" font-size="8" text-anchor="middle">stability / entropy / integrity / TTL</text><text x="540" y="375" fill="#94a3b8" font-size="8" text-anchor="middle">weights vary by platform and version</text>
+        <rect x="410" y="480" width="260" height="100" rx="6" fill="#020617"/><rect x="410" y="480" width="260" height="100" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="540" y="510" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Candidate Recall</text><text x="540" y="535" fill="#34d399" font-size="8" text-anchor="middle">strong-ID index / SimHash / ANN</text><text x="540" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">retrieve a small historical profile set</text>
+
+        <!-- Resolution nodes -->
+        <rect x="770" y="120" width="290" height="100" rx="6" fill="#020617"/><rect x="770" y="120" width="290" height="100" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="915" y="150" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Availability-aware Similarity</text><text x="915" y="175" fill="#a78bfa" font-size="8" text-anchor="middle">sum(w * available * sim) / sum(w * available)</text><text x="915" y="195" fill="#94a3b8" font-size="8" text-anchor="middle">exact / distance / set / temporal decay</text>
+        <rect x="770" y="300" width="290" height="100" rx="6" fill="#020617"/><rect x="770" y="300" width="290" height="100" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="915" y="330" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Conflict and Collision Guard</text><text x="915" y="355" fill="#fb7185" font-size="8" text-anchor="middle">impossible reuse / concurrent location / drift</text><text x="915" y="375" fill="#94a3b8" font-size="8" text-anchor="middle">match / new profile / split / merge / review</text>
+        <rect x="770" y="480" width="290" height="100" rx="6" fill="#020617"/><rect x="770" y="480" width="290" height="100" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="915" y="510" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Versioned Profile Store</text><text x="915" y="535" fill="#a78bfa" font-size="8" text-anchor="middle">confidence / lineage / first_seen / last_seen</text><text x="915" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">raw signals and derived IDs have separate TTLs</text>
+
+        <!-- Risk nodes -->
+        <rect x="1160" y="120" width="280" height="100" rx="6" fill="#020617"/><rect x="1160" y="120" width="280" height="100" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1300" y="150" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Risk Graph Join</text><text x="1300" y="175" fill="#a78bfa" font-size="8" text-anchor="middle">device / account / IP / order / address</text><text x="1300" y="195" fill="#94a3b8" font-size="8" text-anchor="middle">typed, directed, timestamped confidence edges</text>
+        <rect x="1160" y="300" width="280" height="100" rx="6" fill="#020617"/><rect x="1160" y="300" width="280" height="100" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1300" y="330" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Tiered Decision</text><text x="1300" y="355" fill="#fb7185" font-size="8" text-anchor="middle">allow / limit / challenge / review / deny</text><text x="1300" y="375" fill="#94a3b8" font-size="8" text-anchor="middle">reason codes + model version + appeal path</text>
+        <rect x="1160" y="480" width="280" height="100" rx="6" fill="#020617"/><rect x="1160" y="480" width="280" height="100" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1300" y="510" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Outcome and Aging</text><text x="1300" y="535" fill="#34d399" font-size="8" text-anchor="middle">confirmed fraud / appeal / trusted auth</text><text x="1300" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">decay stale edges; prevent label poisoning</text>
+
+        <!-- Legend outside boundaries -->
+        <text x="30" y="760" fill="#fff" font-size="9" font-weight="600">LEGEND</text>
+        <rect x="95" y="750" width="18" height="11" rx="2" fill="rgba(8,51,68,.5)" stroke="#22d3ee"/><text x="122" y="760" fill="#94a3b8" font-size="8">observation</text>
+        <rect x="280" y="750" width="18" height="11" rx="2" fill="rgba(120,53,15,.42)" stroke="#fbbf24"/><text x="307" y="760" fill="#94a3b8" font-size="8">feature semantics</text>
+        <rect x="520" y="750" width="18" height="11" rx="2" fill="rgba(76,29,149,.46)" stroke="#a78bfa"/><text x="547" y="760" fill="#94a3b8" font-size="8">profile / relationship</text>
+        <rect x="790" y="750" width="18" height="11" rx="2" fill="rgba(136,19,55,.45)" stroke="#fb7185"/><text x="817" y="760" fill="#94a3b8" font-size="8">conflict / decision</text>
+        <rect x="1030" y="750" width="18" height="11" rx="2" fill="rgba(6,78,59,.48)" stroke="#34d399"/><text x="1057" y="760" fill="#94a3b8" font-size="8">server processing</text>
+        <text x="30" y="815" fill="#64748b" font-size="9">Core invariant: an exact hash can index observations, but identity resolution must tolerate legitimate drift and expose uncertainty.</text>
+        <text x="30" y="842" fill="#64748b" font-size="9">Governance invariant: reset intent, purpose scope and retention policy constrain which historical profiles may be linked.</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>先召回，再精确匹配</h3></div><ul><li>强标识、SimHash 或近邻索引只负责缩小候选集</li><li>最终判断必须处理可用字段、冲突和时间衰减</li><li>没有候选不等于恶意，可能只是合法的新设备</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot violet"></div><h3>画像允许分裂与合并</h3></div><ul><li>升级与重装可能造成碎片，同型号设备可能误合并</li><li>画像需要 lineage、置信度和可回滚的版本历史</li><li>碰撞检测应独立于产生指纹的同一套逻辑</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>反馈也可能污染系统</h3></div><ul><li>登录成功、短信通过和人工申诉不是同强度证据</li><li>错误标签若直接回灌，会把一次误判训练成长期事实</li><li>反馈更新应有来源权重、冷却期和审计记录</li></ul></div>
+    </div>
+    <p class="footer">Device profile matching reference architecture - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'device-profile-matching-pipeline.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('device-profile-matching-pipeline.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>

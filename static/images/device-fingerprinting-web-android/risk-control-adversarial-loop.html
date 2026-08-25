@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Risk Control Adversarial Loop</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #fb7185; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.rose { background: #fb7185; } .card-dot.amber { background: #fbbf24; } .card-dot.green { background: #34d399; }
+    .card h3 { font-size: .875rem; font-weight: 600; letter-spacing: 0; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Device Risk Control Adversarial Loop</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions"><button onclick="copyAsImage(this)">Copy</button><button onclick="downloadPNG(this)">PNG</button><button onclick="downloadPDF(this)">PDF</button></div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">...</button>
+        </div>
+      </div>
+      <p class="subtitle">所谓“绕过”不是一个开关，而是让证据缺失、失真、失去绑定，或把攻击迁移到完整性证明覆盖不到的业务层</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 1000" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Device risk control attack surface and defensive observables</title>
+        <desc id="diagram-desc">Six adversarial strategies target collection, binding, attestation, identity resolution, graph analysis and feedback. Each leaves residual observations addressed by layered controls.</desc>
+        <defs>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Lanes -->
+        <rect x="25" y="55" width="1450" height="300" rx="12" fill="rgba(136,19,55,.025)" stroke="#fb7185" stroke-dasharray="8,5"/>
+        <text x="45" y="84" fill="#fb7185" font-size="12" font-weight="600">ADVERSARY: REDUCE EVIDENCE QUALITY OR MOVE THE ABUSE</text>
+        <rect x="25" y="390" width="1450" height="185" rx="12" fill="rgba(30,41,59,.24)" stroke="#64748b" stroke-dasharray="8,5"/>
+        <text x="45" y="420" fill="#94a3b8" font-size="12" font-weight="600">PROTECTED EVIDENCE PIPELINE</text>
+        <rect x="25" y="610" width="1450" height="280" rx="12" fill="rgba(6,78,59,.025)" stroke="#34d399" stroke-dasharray="8,5"/>
+        <text x="45" y="640" fill="#34d399" font-size="12" font-weight="600">DEFENDER: OBSERVE RESIDUALS, ADD COST, PRESERVE FALLBACKS</text>
+
+        <!-- Arrows painted before nodes -->
+        <path d="M155 260 L155 440" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M390 260 L390 440" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M625 260 L625 440" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M860 260 L860 440" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M1095 260 L1095 440" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M1330 260 L1330 440" fill="none" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M260 500 L295 500" fill="none" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+        <path d="M495 500 L530 500" fill="none" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+        <path d="M730 500 L765 500" fill="none" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+        <path d="M965 500 L1000 500" fill="none" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+        <path d="M1200 500 L1235 500" fill="none" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow-slate)"/>
+        <path d="M155 670 L155 545" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M390 670 L390 545" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M625 670 L625 545" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M860 670 L860 545" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M1095 670 L1095 545" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+        <path d="M1330 670 L1330 545" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+        <!-- Attack nodes -->
+        <rect x="60" y="125" width="190" height="135" rx="6" fill="#020617"/><rect x="60" y="125" width="190" height="135" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="155" y="154" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">State Reset</text><text x="155" y="180" fill="#fb7185" font-size="8" text-anchor="middle">clear storage / reinstall / rotate ID</text><text x="155" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">goal: force cold start</text><text x="155" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">residual: repeated first-seen pattern</text>
+        <rect x="295" y="125" width="190" height="135" rx="6" fill="#020617"/><rect x="295" y="125" width="190" height="135" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="390" y="154" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Coherent Spoofing</text><text x="390" y="180" fill="#fb7185" font-size="8" text-anchor="middle">align visible browser / OS claims</text><text x="390" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">goal: resemble a common cluster</text><text x="390" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">residual: cross-layer contradictions</text>
+        <rect x="530" y="125" width="190" height="135" rx="6" fill="#020617"/><rect x="530" y="125" width="190" height="135" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="625" y="154" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Replay or Relay</text><text x="625" y="180" fill="#fb7185" font-size="8" text-anchor="middle">reuse valid token or remote trust</text><text x="625" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">goal: detach proof from action</text><text x="625" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">residual: timing and binding mismatch</text>
+        <rect x="765" y="125" width="190" height="135" rx="6" fill="#020617"/><rect x="765" y="125" width="190" height="135" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="860" y="154" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Real-device Farm</text><text x="860" y="180" fill="#fb7185" font-size="8" text-anchor="middle">genuine hardware, scripted workflow</text><text x="860" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">goal: pass environment checks</text><text x="860" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">residual: velocity and shared graph</text>
+        <rect x="1000" y="125" width="190" height="135" rx="6" fill="#020617"/><rect x="1000" y="125" width="190" height="135" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="1095" y="154" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Graph Fragmentation</text><text x="1095" y="180" fill="#fb7185" font-size="8" text-anchor="middle">rotate account / network / address</text><text x="1095" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">goal: keep every edge weak</text><text x="1095" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">residual: motifs and resource reuse</text>
+        <rect x="1235" y="125" width="190" height="135" rx="6" fill="#020617"/><rect x="1235" y="125" width="190" height="135" rx="6" fill="rgba(136,19,55,.45)" stroke="#fb7185"/>
+        <text x="1330" y="154" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Feedback Poisoning</text><text x="1330" y="180" fill="#fb7185" font-size="8" text-anchor="middle">age accounts and earn trust slowly</text><text x="1330" y="205" fill="#94a3b8" font-size="8" text-anchor="middle">goal: train the wrong baseline</text><text x="1330" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">residual: provenance and later loss</text>
+
+        <!-- Pipeline nodes -->
+        <rect x="60" y="455" width="200" height="90" rx="6" fill="#020617"/><rect x="60" y="455" width="200" height="90" rx="6" fill="rgba(8,51,68,.5)" stroke="#22d3ee"/><text x="160" y="488" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Signals and State</text><text x="160" y="516" fill="#94a3b8" font-size="8" text-anchor="middle">Web / Android / edge</text>
+        <rect x="295" y="455" width="200" height="90" rx="6" fill="#020617"/><rect x="295" y="455" width="200" height="90" rx="6" fill="rgba(120,53,15,.43)" stroke="#fbbf24"/><text x="395" y="488" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Envelope and Binding</text><text x="395" y="516" fill="#94a3b8" font-size="8" text-anchor="middle">action / nonce / request digest</text>
+        <rect x="530" y="455" width="200" height="90" rx="6" fill="#020617"/><rect x="530" y="455" width="200" height="90" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa"/><text x="630" y="488" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Trust Verification</text><text x="630" y="516" fill="#94a3b8" font-size="8" text-anchor="middle">signature / Integrity / freshness</text>
+        <rect x="765" y="455" width="200" height="90" rx="6" fill="#020617"/><rect x="765" y="455" width="200" height="90" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa"/><text x="865" y="488" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Profile Resolution</text><text x="865" y="516" fill="#94a3b8" font-size="8" text-anchor="middle">similarity / conflict / lineage</text>
+        <rect x="1000" y="455" width="200" height="90" rx="6" fill="#020617"/><rect x="1000" y="455" width="200" height="90" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/><text x="1100" y="488" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Risk Graph and Policy</text><text x="1100" y="516" fill="#94a3b8" font-size="8" text-anchor="middle">event context / tiered friction</text>
+        <rect x="1235" y="455" width="200" height="90" rx="6" fill="#020617"/><rect x="1235" y="455" width="200" height="90" rx="6" fill="rgba(30,41,59,.72)" stroke="#94a3b8"/><text x="1335" y="488" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Outcome Feedback</text><text x="1335" y="516" fill="#94a3b8" font-size="8" text-anchor="middle">fraud / appeal / trusted proof</text>
+
+        <!-- Defensive nodes -->
+        <rect x="60" y="670" width="190" height="145" rx="6" fill="#020617"/><rect x="60" y="670" width="190" height="145" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="155" y="700" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Lifecycle Memory</text><text x="155" y="727" fill="#34d399" font-size="8" text-anchor="middle">reset-aware profile + rate</text><text x="155" y="751" fill="#94a3b8" font-size="8" text-anchor="middle">distinguish new from repeatedly new</text><text x="155" y="775" fill="#94a3b8" font-size="8" text-anchor="middle">keep purpose and TTL boundaries</text>
+        <rect x="295" y="670" width="190" height="145" rx="6" fill="#020617"/><rect x="295" y="670" width="190" height="145" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="390" y="700" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Cross-layer Consistency</text><text x="390" y="727" fill="#34d399" font-size="8" text-anchor="middle">client + edge + history</text><text x="390" y="751" fill="#94a3b8" font-size="8" text-anchor="middle">model missing and privacy modes</text><text x="390" y="775" fill="#94a3b8" font-size="8" text-anchor="middle">avoid one-field denial rules</text>
+        <rect x="530" y="670" width="190" height="145" rx="6" fill="#020617"/><rect x="530" y="670" width="190" height="145" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="625" y="700" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">One-action Freshness</text><text x="625" y="727" fill="#34d399" font-size="8" text-anchor="middle">server challenge + critical digest</text><text x="625" y="751" fill="#94a3b8" font-size="8" text-anchor="middle">single-use and short validity</text><text x="625" y="775" fill="#94a3b8" font-size="8" text-anchor="middle">business idempotency still required</text>
+        <rect x="765" y="670" width="190" height="145" rx="6" fill="#020617"/><rect x="765" y="670" width="190" height="145" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="860" y="700" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Behavior and Capacity</text><text x="860" y="727" fill="#34d399" font-size="8" text-anchor="middle">velocity / concurrency / workflow</text><text x="860" y="751" fill="#94a3b8" font-size="8" text-anchor="middle">step up high-value events</text><text x="860" y="775" fill="#94a3b8" font-size="8" text-anchor="middle">Integrity is one feature, not allow</text>
+        <rect x="1000" y="670" width="190" height="145" rx="6" fill="#020617"/><rect x="1000" y="670" width="190" height="145" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="1095" y="700" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Temporal Graph Motifs</text><text x="1095" y="727" fill="#34d399" font-size="8" text-anchor="middle">typed edges + shared resources</text><text x="1095" y="751" fill="#94a3b8" font-size="8" text-anchor="middle">weak edges aggregate over time</text><text x="1095" y="775" fill="#94a3b8" font-size="8" text-anchor="middle">protect shared-household cohorts</text>
+        <rect x="1235" y="670" width="190" height="145" rx="6" fill="#020617"/><rect x="1235" y="670" width="190" height="145" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399"/>
+        <text x="1330" y="700" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Feedback Provenance</text><text x="1330" y="727" fill="#34d399" font-size="8" text-anchor="middle">source weights + delayed loss</text><text x="1330" y="751" fill="#94a3b8" font-size="8" text-anchor="middle">cooldown / rollback / holdout</text><text x="1330" y="775" fill="#94a3b8" font-size="8" text-anchor="middle">appeal can correct the model</text>
+
+        <text x="45" y="930" fill="#64748b" font-size="9">Security invariant: a bypass of one signal is not a bypass of the decision if independent evidence remains bound to the same business event.</text>
+        <text x="45" y="956" fill="#64748b" font-size="9">Safety invariant: publish attack classes and validation methods; do not publish current thresholds, token construction details or production evasion recipes.</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>绕过首先是证据降级</h3></div><ul><li>清状态、改参数和中继都在削弱某一类证据</li><li>真正成熟的攻击会把业务迁移到真机与低频行为</li><li>因此不能把一次 Token 成功等同于系统失守</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot amber"></div><h3>防守依赖剩余痕迹</h3></div><ul><li>攻击者必须维持跨层一致性、资源成本和时间成本</li><li>边缘观察、业务图谱和结果反馈不共享同一失败模式</li><li>缺失值、超时和不确定性必须进入模型</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot green"></div><h3>验证不等于生产对抗</h3></div><ul><li>在自有环境中用控制变量测试每个证据层</li><li>记录可检测残差、误伤人群和降级路径</li><li>对外材料保留方法论，不暴露线上阈值与协议细节</li></ul></div>
+    </div>
+    <p class="footer">Device risk adversarial loop - Cocoon AI diagram - 2026-08-25</p>
+  </div>
+  <script>
+    function reportEmbeddedSize() { if (window.parent === window) return; requestAnimationFrame(() => { const root = document.getElementById('report-container'); const style = getComputedStyle(document.body); const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom); window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin); }); }
+    if (window.parent !== window) { new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container')); window.addEventListener('load', reportEmbeddedSize); window.addEventListener('message', e => { if (e.origin === window.location.origin && e.data && e.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); }); if (document.fonts) document.fonts.ready.then(reportEmbeddedSize); }
+    async function captureDiagram() { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + scrollX - pad, y: r.top + scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); }
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'risk-control-adversarial-loop.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = 'Working'; try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('risk-control-adversarial-loop.pdf'); btn.textContent = 'Done'; } catch (e) { btn.textContent = 'Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>
