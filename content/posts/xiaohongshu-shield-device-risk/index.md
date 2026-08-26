@@ -2,7 +2,7 @@
 title: "Shield 之后还有什么 - 小红书请求签名与设备风控材料复核"
 slug: "xiaohongshu-shield-device-risk-evidence-boundaries"
 date: 2026-05-26T18:10:00+08:00
-lastmod: 2026-08-26T15:14:00+08:00
+lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Xiaohongshu", "Shield", "Android", "Reverse-Engineering", "Device-Fingerprinting", "Risk-Control", "API-Security", "Privacy"]
 categories: ["security-research"]
@@ -135,6 +135,14 @@ math: false
 ## 六、读下一篇 Shield 分析时先问什么
 
 与其背算法名称，不如先核对五项元数据：
+
+{{< cocoon-diagram
+  src="images/xiaohongshu-shield-device-risk/evidence-upgrade-gates.html"
+  title="Xiaohongshu Shield Evidence Upgrade Gates"
+  height="1010"
+>}}
+
+这张图没有把历史线索判成“无效”，而是给它划定句子的长度：样本身份解决归属，生命周期对照解决状态变化，服务端结果才有资格讨论接受与处置。缺哪一门，结论就停在哪一门之前。
 
 1. APK 版本、渠道、ABI 和 Hash 是否完整；
 2. 找到的是请求签名、安装注册，还是画像句柄；

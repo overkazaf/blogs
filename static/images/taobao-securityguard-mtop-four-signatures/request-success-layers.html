@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一次请求里的三种成功</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh; padding: 2rem; color: #f8fafc; background:
+        radial-gradient(circle at 12% 4%, rgba(34,211,238,.09), transparent 27rem),
+        radial-gradient(circle at 90% 18%, rgba(251,113,133,.08), transparent 24rem), #020617;
+      font-family: "JetBrains Mono", "Noto Sans SC", "Microsoft YaHei", monospace;
+    }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: .85rem; }
+    .pulse-dot { width: 11px; height: 11px; border-radius: 50%; background: #22d3ee; animation: pulse 2.2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,211,238,.35); } 50% { opacity: .62; box-shadow: 0 0 0 7px rgba(34,211,238,0); } }
+    h1 { font-size: 1.5rem; letter-spacing: -.035em; }
+    .subtitle { margin: .55rem 0 0 1.65rem; color: #94a3b8; font-size: .78rem; line-height: 1.6; }
+    .diagram-container { max-width: 100%; overflow-x: auto; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 1rem; background: rgba(15,23,42,.54); box-shadow: 0 24px 80px rgba(0,0,0,.25); }
+    svg { display: block; width: 100%; height: auto; min-width: 960px; }
+    .cards { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; margin-top: 1.35rem; }
+    .card { padding: 1.05rem; border: 1px solid #1e293b; border-radius: .75rem; background: rgba(15,23,42,.54); }
+    .card-header { display: flex; align-items: center; gap: .55rem; margin-bottom: .62rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+    .cyan { background: #22d3ee; } .amber { background: #fbbf24; } .rose { background: #fb7185; }
+    .card h3 { font-size: .84rem; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .72rem; line-height: 1.7; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .7rem; text-align: center; }
+    .toolbar { display: flex; gap: .5rem; margin-left: auto; align-items: center; flex-shrink: 0; }
+    .toolbar-toggle { padding: .25rem .5rem; border: 0; border-radius: .375rem; color: #475569; background: transparent; cursor: pointer; font-size: 1.25rem; }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .7rem; border: 1px solid #334155; border-radius: .375rem; color: #94a3b8; background: rgba(30,41,59,.8); font: .72rem inherit; cursor: pointer; white-space: nowrap; }
+    @media (max-width: 700px) { body { padding: .75rem; } h1 { font-size: 1.08rem; } .subtitle { margin-left: 0; } .diagram-container { padding: .35rem; } .cards { grid-template-columns: 1fr; } }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <header class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>一次接口返回，最多跨过了哪一道门？</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">Three nested successes · B 级概念图 · 不是淘宝内部拓扑，也不是线上验证结果</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1160 670" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">一次请求中可解析、协议接受和业务响应三种成功的边界</title>
+        <desc id="diagram-desc">请求依次经过格式解析、协议安全材料校验和业务响应。每一步只能包含前一步，不代表账号可信、交易低风险或后续没有处置。单次观察窗口之外还有延迟审核、权益处置与关系更新。</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fb7185"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="1160" height="670" fill="#020617"/><rect width="1160" height="670" fill="url(#grid)"/>
+
+        <!-- Arrows first, so opaque cards mask their paths. -->
+        <line x1="205" y1="195" x2="260" y2="195" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <line x1="475" y1="195" x2="530" y2="195" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+        <line x1="745" y1="195" x2="800" y2="195" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <path d="M910 250 C910 355 235 345 235 430" fill="none" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+        <path d="M910 250 C910 365 580 355 580 430" fill="none" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+        <path d="M910 250 C910 365 925 365 925 430" fill="none" stroke="#fb7185" stroke-width="1.7" stroke-dasharray="7,6" marker-end="url(#arrow-rose)"/>
+
+        <rect x="30" y="70" width="1100" height="285" rx="13" fill="rgba(8,51,68,.07)" stroke="#22d3ee" stroke-dasharray="8,5"/>
+        <text x="50" y="96" fill="#22d3ee" font-size="10" font-weight="700">SINGLE REQUEST / 可观察窗口</text>
+        <text x="50" y="114" fill="#64748b" font-size="8">三个“成功”是逐层包含关系，不是同义词</text>
+
+        <rect x="65" y="155" width="140" height="80" rx="8" fill="#0f172a" stroke="#64748b" stroke-width="1.4"/>
+        <text x="135" y="185" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">发出请求</text>
+        <text x="135" y="207" fill="#94a3b8" font-size="8" text-anchor="middle">参数 · 会话 · 协议字段</text>
+        <text x="135" y="222" fill="#64748b" font-size="7" text-anchor="middle">客户端观察</text>
+
+        <rect x="265" y="140" width="210" height="110" rx="8" fill="#0f172a"/><rect x="265" y="140" width="210" height="110" rx="8" fill="rgba(8,51,68,.38)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="370" y="169" fill="#22d3ee" font-size="9" font-weight="700" text-anchor="middle">SUCCESS ①</text>
+        <text x="370" y="193" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">请求可解析</text>
+        <text x="370" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">最多说明格式、路由可处理</text>
+        <text x="370" y="234" fill="#64748b" font-size="7.2" text-anchor="middle">不说明安全材料已通过</text>
+
+        <rect x="535" y="140" width="210" height="110" rx="8" fill="#0f172a"/><rect x="535" y="140" width="210" height="110" rx="8" fill="rgba(6,78,59,.36)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="640" y="169" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">SUCCESS ②</text>
+        <text x="640" y="193" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">协议材料被接受</text>
+        <text x="640" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">最多说明跨过该协议门槛</text>
+        <text x="640" y="234" fill="#64748b" font-size="7.2" text-anchor="middle">不说明设备与账号可信</text>
+
+        <rect x="805" y="140" width="210" height="110" rx="8" fill="#0f172a"/><rect x="805" y="140" width="210" height="110" rx="8" fill="rgba(120,53,15,.34)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="910" y="169" fill="#fbbf24" font-size="9" font-weight="700" text-anchor="middle">SUCCESS ③</text>
+        <text x="910" y="193" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">得到业务响应</text>
+        <text x="910" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">说明当时出现一个可见结果</text>
+        <text x="910" y="234" fill="#64748b" font-size="7.2" text-anchor="middle">不说明后续处置不存在</text>
+
+        <rect x="265" y="285" width="750" height="38" rx="7" fill="#0f172a" stroke="#fb7185" stroke-width="1.2"/>
+        <text x="640" y="309" fill="#fb7185" font-size="9" font-weight="700" text-anchor="middle">三步都不等于：自然人已确认 · 设备永久可信 · 账号/交易已获得持续授权</text>
+
+        <rect x="30" y="405" width="1100" height="180" rx="13" fill="rgba(136,19,55,.07)" stroke="#fb7185" stroke-dasharray="8,5"/>
+        <text x="50" y="431" fill="#fb7185" font-size="10" font-weight="700">OUTSIDE ONE RESPONSE / 单次返回看不到的时间轴</text>
+
+        <rect x="80" y="455" width="310" height="85" rx="8" fill="#0f172a"/><rect x="80" y="455" width="310" height="85" rx="8" fill="rgba(76,29,149,.34)" stroke="#a78bfa" stroke-width="1.4"/>
+        <text x="235" y="484" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">设备 / 账号历史更新</text>
+        <text x="235" y="507" fill="#94a3b8" font-size="8" text-anchor="middle">候选、冲突、漂移、置信度与时间衰减</text>
+        <text x="235" y="525" fill="#64748b" font-size="7.2" text-anchor="middle">B：服务端职责，不是已知内部实现</text>
+
+        <rect x="425" y="455" width="310" height="85" rx="8" fill="#0f172a"/><rect x="425" y="455" width="310" height="85" rx="8" fill="rgba(136,19,55,.34)" stroke="#fb7185" stroke-width="1.4"/>
+        <text x="580" y="484" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">延迟审核与关系判断</text>
+        <text x="580" y="507" fill="#94a3b8" font-size="8" text-anchor="middle">账号 · 订单 · 地址 · 支付 · 权益 · 历史结果</text>
+        <text x="580" y="525" fill="#64748b" font-size="7.2" text-anchor="middle">一次响应没有覆盖长期观察</text>
+
+        <rect x="770" y="455" width="310" height="85" rx="8" fill="#0f172a"/><rect x="770" y="455" width="310" height="85" rx="8" fill="rgba(120,53,15,.34)" stroke="#fbbf24" stroke-width="1.4"/>
+        <text x="925" y="484" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">后续业务处置</text>
+        <text x="925" y="507" fill="#94a3b8" font-size="8" text-anchor="middle">观察 · 挑战 · 限额 · 复核 · 申诉</text>
+        <text x="925" y="525" fill="#64748b" font-size="7.2" text-anchor="middle">是否发生，需要另一类证据</text>
+
+        <text x="40" y="623" fill="#f8fafc" font-size="9" font-weight="700">LEGEND</text>
+        <circle cx="115" cy="620" r="5" fill="#22d3ee"/><text x="128" y="624" fill="#94a3b8" font-size="8">解析</text>
+        <circle cx="205" cy="620" r="5" fill="#34d399"/><text x="218" y="624" fill="#94a3b8" font-size="8">协议</text>
+        <circle cx="295" cy="620" r="5" fill="#fbbf24"/><text x="308" y="624" fill="#94a3b8" font-size="8">可见业务响应</text>
+        <line x1="445" y1="620" x2="470" y2="620" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,5"/><text x="482" y="624" fill="#94a3b8" font-size="8">响应后的未观察过程</text>
+        <text x="40" y="651" fill="#475569" font-size="8">B = 通用职责模型 · 这张图解释推理上限，不声称复现淘宝线上门槛</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>成功是逐层限定</h3></div><ul><li>• 可解析，只跨过格式与路由</li><li>• 协议接受，只跨过对应门槛</li><li>• 有响应，只证明当时可见结果</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot amber"></div><h3>观察窗口决定结论上限</h3></div><ul><li>• 单次抓包没有长期历史</li><li>• 一次响应没有延迟处置</li><li>• 缺原因码就不能倒推规则</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>文章应当怎样落笔</h3></div><ul><li>• 写清通过的是哪一道门</li><li>• 不把字段接受写成业务授权</li><li>• 把未知留给新的证据类型</li></ul></div>
+    </div>
+    <p class="footer">Type B evidence review · 2026-04-17 · Conceptual diagram, not an internal Taobao topology</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin);
+      });
+    }
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', event => { if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize(); });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = '✓ Copied!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPNG(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a'); link.download = 'taobao-request-success-layers.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPDF(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: e => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png'); const { jsPDF } = window.jspdf; const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('taobao-request-success-layers.pdf'); btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

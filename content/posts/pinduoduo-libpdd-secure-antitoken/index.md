@@ -2,7 +2,7 @@
 title: "拆开 anti-token 以后 - 拼多多历史样本中的环境记录与服务端盲区"
 slug: "pinduoduo-libpdd-secure-antitoken-evidence-boundaries"
 date: 2026-07-23T09:20:00+08:00
-lastmod: 2026-08-26T15:14:00+08:00
+lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Android", "Pinduoduo", "libpdd_secure.so", "anti-token", "Device-Fingerprinting", "Risk-Control", "Reverse-Engineering", "Privacy"]
 categories: ["security-research"]
@@ -129,6 +129,14 @@ Build 类信息变化慢，网络和时间变化快，传感器可能只在特�
 ### 4.1 版本不是一条数字
 
 分析这类材料时，至少要同时记录 App build、Native Hash、渠道/签名、ABI/Android/OEM 和服务端协议代际。同一个 App 版本可能因渠道和 ABI 带来不同 SO；客户端不升级，服务端解析与模型权重也照样能变化。
+
+{{< cocoon-diagram
+  src="images/pinduoduo-libpdd-secure-antitoken/five-version-axes.html"
+  title="Pinduoduo anti-token Five Independent Version Axes"
+  height="1030"
+>}}
+
+五条轴合在一起才是一份可复核的观察身份。只写“7.80”或“7.85”，等于把另外四个坐标留空；随后出现的字段对不上、偏移失效或服务端语义变化，也就无法区分是样本差异还是系统演进。
 
 字段顺序、偏移、前缀和函数地址适合作为带 Hash 的样本注释，不适合作为跨版本知识。它们最容易复制，也最先过期。
 

@@ -2,7 +2,7 @@
 title: "签名过了，订单就安全吗 - 重读美团 mtgsig、DFP 与服务端风控"
 slug: "meituan-mtgsig-dfp-risk-control-boundaries"
 date: 2026-06-18T21:40:00+08:00
-lastmod: 2026-08-26T15:14:00+08:00
+lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Meituan", "mtgsig", "Device-Fingerprinting", "Android", "Risk-Control", "Anti-Fraud", "Privacy", "Reverse-Engineering"]
 categories: ["security-research"]
@@ -125,6 +125,14 @@ value + source + scope + observed_at
 2020 年 Zeus 文章描述了场景、规则、因子和决策，并给出登录、下单、支付等事件的累计因子，以及用户、商户、订单和收银台等接入节点。文章还讨论多事件判断、历史数据回捞，以及实时、异步、离线引擎的分工。
 
 这是 A 级历史事实，不是今天的线上配置。它能说明美团公开过一种围绕业务事件工作的风控方式，不能说明所有业务线仍使用同一个 Zeus 实例或阈值。
+
+{{< cocoon-diagram
+  src="images/meituan-mtgsig-dfp-risk-control/conflicting-evidence-decision.html"
+  title="Meituan Conflict-Aware Evidence Decision Model"
+  height="1060"
+>}}
+
+这里刻意不画统一的“可信分”。请求结果、画像置信度和业务动作各自保留原因，冲突本身才有机会被看见。图下方两组组合正对应接下来的反例：签名正常不能抹掉业务异常，画像未知也不应自动升级成恶意。
 
 下面几个反例比抽象定义更能说明三层为何不能合并：
 

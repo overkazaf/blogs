@@ -2,7 +2,7 @@
 title: "淘四神究竟守哪道门 - 重读 SecurityGuard 与 MTOP 的公开证据"
 slug: "taobao-securityguard-mtop-four-signatures-boundaries"
 date: 2026-04-17T20:35:00+08:00
-lastmod: 2026-08-26T15:14:00+08:00
+lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Taobao", "SecurityGuard", "MTOP", "Android-Security", "Device-Fingerprinting", "Risk-Control", "Anti-Fraud"]
 categories: ["security-research"]
@@ -118,6 +118,14 @@ math: false
 ## 五、一次成功请求，成功了哪一步
 
 > “接口返回了”是逆向文章里最容易收尾的时刻，也是风控判断刚刚开始变得不可见的时刻。
+
+{{< cocoon-diagram
+  src="images/taobao-securityguard-mtop-four-signatures/request-success-layers.html"
+  title="Taobao Request Success Layers and Observation Limits"
+  height="980"
+>}}
+
+把三种“成功”放到同一条线上，混用发生在哪里就很清楚了：后一步通常包含前一步，却不会继承一份无限扩张的证明力。图中响应之后的虚线区域也不是已知的淘宝流程，而是单次抓包天然缺失的观察窗口。
 
 | 可观察结果 | 最多说明 | 还没有说明 |
 |---|---|---|
