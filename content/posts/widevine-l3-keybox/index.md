@@ -30,6 +30,56 @@ math: false
 
 vendor_key 和 key_mask 作为编译时概念在运行时二进制中已不可恢复，但这对批量 keybox 生产目标不构成阻碍。
 
+### Research Evidence
+
+#### 实验环境
+
+| 项目 | 配置 |
+|------|------|
+| 主机 | Ubuntu 22.04 LTS, x86_64, Dual Intel Xeon E5-2673 v4 (80 threads), 96 GB RAM |
+| Android 模拟器 | Android Studio Emulator, API 28 (Android 9), x86 镜像 |
+| 目标二进制 | `libwvhidl.so` — CDM build 4464, 2018-04-20, x86 |
+| 仿真框架 | Qiling 1.4.6 (Unicorn 底层引擎) |
+| DFA 密钥恢复 | phoenixAES (SideChannelMarvels/JeanGrey) |
+| 静态分析 | Ghidra 11.0 (headless 反编译 84 个 VM 函数) |
+| 动态插桩 | Frida 16.x, KeyDive |
+| 流量代理 | mitmproxy 10.x |
+| 可视化与存储 | matplotlib 3.8, SQLite 3.x |
+| 密码学依赖 | pycryptodome, construct 2.10 |
+
+#### 假设清单
+
+| ID | 假设内容 | 出处 | 标记 | 结果 |
+|----|---------|------|------|------|
+| H1 | CDM 的 AES 实现是白盒密码学——密钥不以任何可识别形式存在于静态二进制或运行时内存中 | §2.1.2 | **推断** | ✅ 确认 |
+| H2 | d 区域 AES 加密与 ROOT_KEY AES 解密共享同一白盒实现（同一 `FAULT_START_ADDR`） | §4.3.1 | **假设** | ❌ 证伪（9,600 次注入, 0 命中） |
+| H3 | `0x6802E275` 仅属于加载模式解密路径，创建模式使用独立代码段 | §4.3.1 | **推断** | ✅ 确认（两种模式 trace 对比） |
+| H4 | CDM 内部存在多条独立白盒 AES 实现，各自拥有不同的 VM PC 地址段和密钥 | §4.3.1 | **假设** | ✅ 确认（trace 发现 3 组独立 AES 簇） |
+| H5 | d 区域明文以 `device_key` 为前缀 | §4.4 | **假设** | ✅ 确认（内存 dump 前 16 字节逐字节匹配） |
+| H6 | d 区域字节 16-35（20 字节）= `SHA1(device_key)` | §4.4 | **猜测** | ✅ 确认（`hashlib.sha1()` 精确匹配） |
+| H7 | ROOT_KEY = `SHA1("")[:16]`（Qiling 中空 serial 的退化值） | §4.2 | **猜测** | ✅ 确认（真机 ROOT_KEY = `SHA1(serial)[:16]` 同样验证通过） |
+| H8 | 存在 `AES(aes_key, input) = c` 的运行时计算路径 | §6.1 | **假设** | ❌ 证伪（c 是 `c6` mov 立即数，编译时常量） |
+
+#### 实验记录
+
+| ID | 实验 | 方法 | 结果 | 关键证据 |
+|----|------|------|------|---------|
+| E01 | ROOT_KEY DFA（加载模式） | Neodyme `fault.py` 复现，`FAULT_START=0x6802E275` | ✅ | 150 次干净列故障 → 轮密钥反推 → ROOT_KEY |
+| E02 | ROOT_KEY = SHA1("")[:16] 验证 | `hashlib.sha1(b'').hexdigest()[:32]` 比对 | ✅ | hex 完全匹配；真机预测 `SHA1("EMULATOR36X5X11X0")[:16]` 亦验证通过 |
+| E03 | 复用加载模式地址攻击 d 区域 | `FAULT_START=0x6802E275`，创建模式运行 | ❌ | 9,600 次注入, 0 命中——该代码段在创建模式未执行 |
+| E04 | 加载/创建模式执行路径对比 | 同一二进制，`ay64.dat` 存在 vs 删除 | ✅ | `0x6802E275` 仅加载模式执行；`0x6802A2A2` 仅创建模式出现 |
+| E05 | 创建模式全量内存 trace | Qiling `hook_mem_read/write` → SQLite | ✅ | 637,000 条记录，覆盖完整 `l3_init()` |
+| E06 | T-table 定位与确认 | 热力图 + 4KB 滑动窗口 + Ghidra 逐字节比对 OpenSSL Te0-Te3 | ✅ | G+H 区 `0x68026000`-`0x68027000`，4 个 256x4B 表完全匹配 |
+| E07 | T-table 时间分布分析 | IC 柱状图 + SQL 查询 VM PC | ✅ | 3 组独立 AES 簇（IC ~10M / 11.25M / 13.2M），目标 = IC ~11.25M |
+| E08 | d 区域 AES DFA（创建模式） | `fault_d_creation.py`，`FAULT_START=0x6802A2A2` | ✅ | 95 次干净列故障 → derived_key |
+| E09 | d 区域明文结构还原 | 内存 dump + SHA-1 校验 + AES-CBC 双向解密 | ✅ | `dk` ‖ `SHA1(dk)` ‖ `0x03` ‖ `zeros` |
+| E10 | gen_keybox.py 字节匹配 | `--verify` 模式，与模拟器原生 `ay64.dat` 逐字节比对 | ✅ | MATCH = True |
+| E11 | Google Provisioning 批量验证 | 6 个随机 `device_key` + 自定义 `device_id` | ✅ | 全部 HTTP 200，含 `CLONED_DEVICE_42` |
+| E12 | Netflix 端到端验证 | MSL 客户端 → licensedManifest → Content Key | ✅ | 视频 + 音频双密钥，mp4decrypt 解密无 artifact |
+| E13 | BGE T-table 代数攻击 | 提取 T0-T3 与 OpenSSL 参考逐字节对比 | ❌ | T-table 无密钥混入，BGE 前提不成立 |
+| E14 | Frida Chrome CDM hook | `RSA_public_encrypt` hook 提取服务端公钥 | ⚠️ | 公钥提取成功；HMAC 签名密钥在白盒内部，穷举候选均未命中 |
+| E15 | 全内存暴力搜索签名密钥 | 63MB 堆 dump → 8M 个 16B 候选 → HMAC 验证 | ❌ | 0 命中 |
+
 ---
 
 
@@ -543,7 +593,7 @@ ROOT_KEY = da39a3ee5e6b******55bfef95601890
 
 **验证与推断**：拿到 ROOT_KEY 后，笔者首先通过解密 `ay64.dat` 验证其正确性——解密后的 keybox 最后 4 字节为 `kbox` magic，CRC32-MPEG2 校验通过。
 
-随后笔者注意到一个值得深究的巧合：ROOT_KEY 的 hex 值 `da39a3ee5e6b******55bfef95601890` 看起来非常眼熟。笔者提出**猜测**：这是否是某个已知值的哈希？
+🧑‍🔬 随后笔者注意到一个值得深究的巧合：ROOT_KEY 的 hex 值 `da39a3ee5e6b******55bfef95601890` 看起来非常眼熟。笔者提出**猜测**：这是否是某个已知值的哈希？
 
 验证：
 ```python
@@ -567,7 +617,7 @@ Keybox 中的 `d` 区域（48 字节）是 provisioning token 的核心数据。
 
 基于这一假设，笔者直接复用了 Neodyme 的 `FAULT_START_ADDR = 0x6802E275` 对 d 区域发起 DFA。**结果：0 次命中。** 在 9,600 余个 fault target 中，没有任何一次改变了 d 区域的输出。
 
-9,600 次全部未命中意味着什么？笔者逐步排除可能的原因：
+🧑‍🔬 9,600 次全部未命中意味着什么？笔者逐步排除可能的原因：
 
 1. **故障窗口选错了？** 不太可能——同一个窗口对 ROOT_KEY 的 DFA 能产生 150 次干净故障，代码本身是可以被注入的。
 2. **d 区域的输出观测点选错了？** 笔者验证了观测点确实指向 d 区域在内存中的写入位置，没有问题。
@@ -600,11 +650,11 @@ Neodyme 在博客中对这一步的描述非常简洁：*"trace 内存访问 →
 
 ##### 第一步：采数据
 
-笔者编写 `trace_creation.py`，**删除 `ay64.dat` 强制 CDM 进入创建模式**（Neodyme 未提及这一操作——他们的 `fault.py` 只针对加载模式；要触发 d 区域加密，必须让 CDM "认为"自己首次启动）。通过 Qiling 的 `ql.hook_mem_read()` / `ql.hook_mem_write()` 记录每条内存访问，存入 SQLite。采集结果：**637,000 条记录**。
+🤖 笔者编写 `trace_creation.py`，**删除 `ay64.dat` 强制 CDM 进入创建模式**（Neodyme 未提及这一操作——他们的 `fault.py` 只针对加载模式；要触发 d 区域加密，必须让 CDM "认为"自己首次启动）。通过 Qiling 的 `ql.hook_mem_read()` / `ql.hook_mem_write()` 记录每条内存访问，存入 SQLite。采集结果：**637,000 条记录**。
 
 ##### 第二步：画热力图，圈出可疑区域
 
-把 637K 条记录画成热力图：X 轴 = 内存地址，Y 轴 = 时间（IC），颜色深浅 = 该位置被访问的次数（右侧色阶条：暗 = 少，亮 = 多）。**不做任何过滤，直接画全量数据。**
+🧑‍🔬 把 637K 条记录画成热力图：X 轴 = 内存地址，Y 轴 = 时间（IC），颜色深浅 = 该位置被访问的次数（右侧色阶条：暗 = 少，亮 = 多）。**不做任何过滤，直接画全量数据。**
 
 ![热力图 + 全部活跃区域标注](https://overkazaf.github.io/blogs/images/widevine/trace_neodyme_style.png)
 *热力图中标注了 A–J 共 10 个活跃地址区域（右侧图例逐一说明）。每个有亮度的区域都需要判断：是不是 AES T-table？*
@@ -678,7 +728,7 @@ Neodyme 在博客中对这一步的描述非常简洁：*"trace 内存访问 →
 
 所以实际流程是：**热力图发现候选 → Ghidra 确认数据结构 → 热力图继续分析时间分布**。第三步的 Ghidra 确认是一个"插入验证"，验证完后回到热力图继续分析。
 
-确认了 T-table 之后，下一个问题是：**CDM 在什么时间点使用了 T-table？** 热力图上 G+H 区的亮竖条从上到下贯穿整个时间轴，说明 CDM 在多个时间点都在查 T-table——但笔者只关心 d 区域 AES（创建模式下加密 keybox 的那次调用）。
+🧑‍🔬 确认了 T-table 之后，下一个问题是：**CDM 在什么时间点使用了 T-table？** 热力图上 G+H 区的亮竖条从上到下贯穿整个时间轴，说明 CDM 在多个时间点都在查 T-table——但笔者只关心 d 区域 AES（创建模式下加密 keybox 的那次调用）。
 
 把 G+H 区内的所有读取按时间（IC）统计为柱状图：
 
@@ -762,7 +812,7 @@ Trace 可视化 + T-table 模式识别不仅限于 Widevine，它是一个**通�
 
 4. **列故障过滤**：有效故障必须符合 AES 第 9 轮 ShiftRows 后的列传播模式——故障影响必须精确覆盖 `{0,7,10,13}`、`{1,4,11,14}`、`{2,5,8,15}` 或 `{3,6,9,12}` 之一，其余字节与参考密文完全一致。
 
-经过自动扫描，共收集 **95 次干净的列故障**（每列约 24 次，覆盖全部 4 列）。将这些故障数据输入 [phoenixAES](https://github.com/SideChannelMarvels/JeanGrey) 的 `phoenixAES.crack_bytes()` 接口，直接恢复第 10 轮轮密钥：
+🔬 经过自动扫描，共收集 **95 次干净的列故障**（每列约 24 次，覆盖全部 4 列）。将这些故障数据输入 [phoenixAES](https://github.com/SideChannelMarvels/JeanGrey) 的 `phoenixAES.crack_bytes()` 接口，直接恢复第 10 轮轮密钥：
 
 ```
 round_10_key = 49B7a21e3c8f******d9e0c17bFB68
@@ -806,7 +856,7 @@ derived_key 确认后，下一个问题是：d 区域的 48 字节明文到底�
 
 **第一步：模式识别。** 笔者首先注意到前 16 字节 `002200182942******448c0411248400` 与 keybox 中的 `device_key` 字段（偏移 `0x20`）**逐字节一致**。这立即产生了一个**假设**：d 区域的明文以 `device_key` 为前缀，其后的 32 字节可能是某种校验或派生数据。
 
-**第二步：假设检验——哈希猜测。** 字节 16–35 共 20 字节（`2b78402e...09472c5d`），20 字节恰好是 SHA-1 摘要的长度。笔者提出**猜测**：这 20 字节可能是 `SHA1(device_key)`。
+🤖 **第二步：假设检验——哈希猜测。** 字节 16–35 共 20 字节（`2b78402e...09472c5d`），20 字节恰好是 SHA-1 摘要的长度。笔者提出**猜测**：这 20 字节可能是 `SHA1(device_key)`。
 
 验证：
 ```python
@@ -832,7 +882,7 @@ d = AES_CBC_ENCRYPT(derived_key, d_plaintext, IV=b'\x00' * 16)
 
 > 理论上，前三个 Phase 的产出已经构成了离线生成 keybox 的充分条件。但"理论上充分"和"工程上正确"之间往往隔着若干细节陷阱。笔者在实现 `gen_keybox.py` 的过程中踩了两个坑：version/l3_version 字段是大端序（不是 x86 的小端序），CRC32 使用的是 MPEG-2 变体（多项式 `0x04C11DB7`，初始值 `0xFFFFFFFF`，不做最终取反）而非 zlib 的标准 CRC32。最终的验证标准也是最严格的：与模拟器原生输出**逐字节完美匹配**。
 
-掌握 ROOT_KEY、derived_key 和 d 区域明文结构后，实现离线 keybox 生成器就是直接的密码学编排工作。但细节中有两个陷阱值得记录。
+🤖 掌握 ROOT_KEY、derived_key 和 d 区域明文结构后，实现离线 keybox 生成器就是直接的密码学编排工作。但细节中有两个陷阱值得记录。
 
 `gen_keybox.py` 的核心函数 `make_keybox(device_id, device_key)` 按以下步骤生成 128 字节明文 keybox：
 
@@ -865,13 +915,13 @@ d = AES_CBC_ENCRYPT(derived_key, d_plaintext, IV=b'\x00' * 16)
 
 Widevine provisioning 是 CDM 向 Google 的 `clientauth.googleapis.com` 注册设备身份的过程。CDM 使用 keybox 中的 `device_key` 派生加密密钥，构建 provisioning request protobuf，通过 RSA-OAEP 加密传输，Google 服务器验证后返回设备证书（包含 RSA 私钥，由 Google 签名）。
 
-笔者设计了一套**两步法 Provisioning 流程**（解决 KeyDive Frida hooks 导致 HTTPS 超时的问题）：
+🧑‍🔬 笔者设计了一套**两步法 Provisioning 流程**（解决 KeyDive Frida hooks 导致 HTTPS 超时的问题）：
 
 ![Provisioning 两步法完整流程](https://overkazaf.github.io/blogs/images/widevine/provisioning_flow.png)
 
 具体操作：将 `gen_keybox.py` 生成的 keybox 注入 Android 模拟器的 `ay64.dat` 路径，通过 [mitmproxy](https://mitmproxy.org/) 上游中继将流量转发至 Google 真实服务器。
 
-笔者测试了 6 个不同的 `device_key` 值，全部获得 HTTP 200 响应：
+🔬 笔者测试了 6 个不同的 `device_key` 值，全部获得 HTTP 200 响应：
 
 | device_key | Google Provisioning 结果 |
 |------------|--------------------------|
@@ -921,7 +971,7 @@ Widevine provisioning 是 CDM 向 Google 的 `clientauth.googleapis.com` 注册�
 
 > 最终验证需要走完从 keybox 到视频解密的全部链路。笔者原本计划让 KeyDive 和 DrmTrigger 同时运行以一步完成 provisioning + 密钥提取，但 Frida 的 hook 开销导致 DrmTrigger 的 HTTPS 请求反复超时。解决方案是将流程拆为两步：先不带 KeyDive 完成 provisioning（让 CDM 全速运行），再重启 HAL 后单独用 KeyDive 抓取已安装的证书。这个看似简单的工程妥协花了笔者近两个小时才定位到根因。
 
-Provisioning 完成后，通过 [KeyDive](https://github.com/hyugogirubato/KeyDive) 从 CDM 内存中提取 RSA 私钥，使用 [pywidevine](https://github.com/devine-dl/pywidevine) 打包为 `.wvd` 格式设备文件。
+🔬 Provisioning 完成后，通过 [KeyDive](https://github.com/hyugogirubato/KeyDive) 从 CDM 内存中提取 RSA 私钥，使用 [pywidevine](https://github.com/devine-dl/pywidevine) 打包为 `.wvd` 格式设备文件。
 
 随后通过一位友人孙先生慷慨提供的 Netflix MSL（Message Security Layer）协议客户端脚本发起完整的 DRM 流程验证。MSL 是 Netflix 开源的、配置驱动的应用层安全框架；本文观测到的 Netflix 实例使用 CBOR 编码和 Widevine Key Exchange，但这不是所有 MSL 部署的固定属性。这段脚本的原始作者在 MSL 协议逆向上做了大量工作，笔者在此表示感谢。具体的线格式与安全边界见[独立的 MSL 协议分析](https://overkazaf.github.io/blogs/posts/netflix-msl-protocol-reverse-engineering/)。
 

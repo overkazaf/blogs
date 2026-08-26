@@ -36,6 +36,55 @@ math: false
 
 ---
 
+## 〇.一、研究证据 (Research Evidence)
+
+### 实验环境
+
+| 维度 | 配置 |
+|------|------|
+| 设备 | Android Studio AVD — Pixel 8 Pro 模拟器 |
+| OS / API | Android 8.1 (API 27), x86_64 |
+| 目标应用 | Apple Music v3.6.0-beta |
+| 目标 SO | libandroidappmusic.so (x86_64, 附 arm 版用于交叉验证) |
+| Frida | 16.6.6 |
+| IDA Pro | 9.1 |
+| radare2 | 5.8.9 |
+| Jadx-GUI | 1.5.1 |
+| objection | 1.11.0 |
+| ADB | 35.0.2 |
+| AI 辅助 | Gemini 2.5 Pro / ChatGPT 4o / Claude 3.7 |
+
+### 假设清单
+
+| ID | 假设 | 状态 | 验证节 |
+|----|------|------|--------|
+| H1 | FairPlay DRM 在 Android 上的解密逻辑封装在 Native SO 库（libandroidappmusic.so）中，而非纯 Java 层实现 | ✓ 确认 | §2.2, §3.1 |
+| H2 | 解密流程遵循「初始化 → 密钥获取 → 解密上下文创建 → 逐样本解密」的四阶段模式，与 Widevine DRM 大方向一致 | ✓ 确认 | §6.2 |
+| H3 | 7000+ 导出函数中的核心解密函数可通过分组 hook + 二分法精确定位 | ✓ 确认 | §3.2 |
+| H4 | 解密函数采用 in-place 模式——输入和输出共用同一个 buffer 指针 | ✓ 确认 | §3.3, §5.2 |
+| H5 | 解密输出为裸 ALAC 样本序列，可通过 Frida 流式 dump 获取 | ✓ 确认（需容器封装） | §5.2, §6.3 |
+
+### 实验记录
+
+| ID | 实验 | 方法 | 结果 | 证据 |
+|----|------|------|------|------|
+| E01 | Jadx 反编译定位 DRM 入口 | Jadx-GUI 搜索 foothill / decrypt 关键词 | 发现 `FootHillDecryptionKey` 类为 FairPlay Java 层入口 | §2.1 截图 |
+| E02 | radare2 过滤 Native 函数 | `iE \| grep -i "foothill\|decrypt"` | 定位 3 个候选函数：decryptContext / WithPersistentKey / WithCkcKey | §2.2 终端输出 |
+| E03 | Frida + objection 动态验证调用链 | objection hook getFpsCert / getPersistentKey + Frida hook decryptContext | 确认入口 A 函数 → 持久化密钥分支 B 函数的调用路径 | §3.1 backtrace 截图 |
+| E04 | 分组 hook 定位解密核心 | 7000+ 函数分 16 组（每组 ~1k，区分 \_ZN 前缀），逐组 hook + grep 汇总 | 定位到 `NfcRKVnxuKZy04KWbdFu***` 为实际解密函数 | §3.2 sum.log |
+| E05 | N 函数参数语义分析 | 多次播放采集动态参数模式 + IDA 伪代码交叉验证 | 确认 5 参数语义：ref / type=0x05 / buffer(in) / buffer(out=in) / size | §3.3 参数表 |
+| E06 | 跨架构参数对比 | IDA Pro 分别加载 x86 和 arm 版本 SO 交叉比对函数签名 | 确认 getPersistentKey 为 9 参数函数 | §4.1 arm 截图 |
+| E07 | 流式 dump 加密/解密 buffer | Frida onEnter dump 密文 / onLeave dump 明文至设备文件系统 | enc/dec 文件大小一致（47MB），确认 in-place 解密，输出为裸 ALAC 样本序列 | §5.2 文件对比 |
+
+### AI 边界说明
+
+本文的逆向分析中，AI 工具和人工判断各有明确的分工边界：
+
+- **AI 擅长的工作**：Gemini 2.5 Pro 在分析 `FootHillDecryptionKey` 类的调用流程（§2.1）和对 7000+ 导出函数进行分类分组（§3.2）时表现出色，能够快速总结类结构和推测函数用途，节省了大量人工阅读反编译代码的时间。ChatGPT 4o 和 Claude 3.7 在编写 Frida hook 脚本模板和解释 IDA 伪代码时提供了辅助。
+- **AI 无法替代的工作**：核心策略决策（选择分组 hook + 二分法而非暴力全量 hook）、参数模式的人工识别（从动态 trace 中发现 args2 == args3 意味着 in-place 解密）、跨架构交叉比对的判断力、以及近一周反复测试和调试的耐心——这些都依赖笔者的逆向工程经验和对 DRM 系统的领域知识。AI 提供了"快速阅读"的能力，但"知道该看什么"和"看到后如何行动"仍然是人的工作。
+
+---
+
 ## 一、背景
 
 ### 1.1 Apple Music 的音频保护机制
@@ -54,7 +103,7 @@ Apple Music 提供两种音频获取模式：
 1. **Frida 插桩还原**：参考之前 Widevine DRM 方案下 Apple Music 流式播放解密的经验，通过播放触发解密流程，在解密过程中 dump 解密流
 2. **核心算法 hook + 仿真还原**：逆向分析 FairPlay DRM 协议的调用流程，将核心解密流程还原，实现脱离真机环境的解密
 
-第一个方案主要基于 Frida 插桩还原；第二个方案涉及到核心算法 hook、真机环境模拟和还原。为了快速验证思路，笔者优先采用第一个方案。
+第一个方案主要基于 Frida 插桩还原；第二个方案涉及到核心算法 hook、真机环境模拟和还原。为了快速验证思路，笔者优先采用第一个方案。🧑‍🔬 **Human**：策略判断——优先选择低成本的 Frida 插桩方案以快速验证可行性，将算法还原作为后备路径。
 
 ### 1.3 工具清单
 
@@ -94,7 +143,7 @@ Apple Music 提供两种音频获取模式：
 
 关键类：`com.apple.android.music.playback.player.cache.FootHillDecryptionKey`
 
-通过 Gemini 分析，结合笔者之前的 Widevine DRM 还原经验，这个类的作用是在播放器开始播放后完成以下操作：
+通过 Gemini 分析（🤖 **AI**：Gemini 2.5 Pro 快速总结类结构与 9 步调用流程，节省大量人工阅读反编译代码的时间），结合笔者之前的 Widevine DRM 还原经验，这个类的作用是在播放器开始播放后完成以下操作：
 
 - 使用 FPS（FairPlay Streaming）证书，根据 adamId（Apple Music 的音频资源唯一 ID）获取解密密钥
 - 使用解密密钥 KeyData 实例来解密音频数据
@@ -107,7 +156,7 @@ Apple Music 提供两种音频获取模式：
 
 ### 2.2 IDA Pro + radare2 — Native 层定位
 
-结论是 Apple Music 更大的概率是会通过内部的 SO 库进行相关逻辑的封装，下一步就需要找到这个库来动态调试了。
+结论是 Apple Music 更大的概率是会通过内部的 SO 库进行相关逻辑的封装（🧑‍🔬 **Human**：基于 DRM 系统经验判断——核心加解密逻辑不会停留在 Java 层），下一步就需要找到这个库来动态调试了。
 
 确认了发生 FairPlay DRM 解密的流程大概率是在 `libandroidappmusic.so` 这个文件中。**注意，本文主要选中的是 x86 架构下的 SO 文件进行分析，arm 架构下的 SO 文件对应函数定义会有较大差异，文中主要用于关键函数的参考对比。**
 
@@ -157,7 +206,7 @@ android hooking watch class_method \
 ![objection 拦截 getPersistentKey](https://overkazaf.github.io/blogs/images/fairplay-drm-reversing/screenshots/img-041.png)
 *objection 拦截 getPersistentKey 调用的 backtrace*
 
-这个过程与 IDA Pro 看到的代码一致，入口是 A 函数，接着按条件走到了使用持久化 key 解密的分支，即 B 函数。
+这个过程与 IDA Pro 看到的代码一致，入口是 A 函数，接着按条件走到了使用持久化 key 解密的分支，即 B 函数。🔬 **Experimental**：动态验证结果与静态分析完全吻合，确认 H1（Native 层解密）和调用链假设成立。
 
 ![VS Code Frida hook 脚本与终端输出](https://overkazaf.github.io/blogs/images/fairplay-drm-reversing/screenshots/img-011.png)
 *VS Code 中的 Frida hook.js 脚本 + 终端输出：decryptContext 调用链*
@@ -166,9 +215,9 @@ android hooking watch class_method \
 
 因为将全部函数进行拦截和日志打印大概率会触发应用 crash，这里介绍个技巧：
 
-1. 先通过 Gemini 对 SO 文件的导出函数总结进行分类、分组，推测不同组别函数的作用并标记
+1. 先通过 Gemini 对 SO 文件的导出函数总结进行分类、分组，推测不同组别函数的作用并标记（🤖 **AI**：利用 LLM 的文本分类能力批量处理大量函数名，快速建立功能分组假设）
 2. 类似于二分法的思路，将 7k+ 函数进行分组和调用标记，确认执行过程中使用到的函数
-3. 将 7k+ 函数分组，每组 1k 个。在此基础之上，区分开函数名带 `_ZN` 前缀和不带 `_ZN` 前缀的部分。合计要做 16 次手动拦截和 grep 汇总
+3. 将 7k+ 函数分组，每组 1k 个。在此基础之上，区分开函数名带 `_ZN` 前缀和不带 `_ZN` 前缀的部分。合计要做 16 次手动拦截和 grep 汇总（🧑‍🔬 **Human**：设计分组 + 二分定位策略，避免全量 hook 导致应用 crash——这一策略选择是 AI 无法替代的经验判断）
 
 ![分组检测 Frida 脚本](https://overkazaf.github.io/blogs/images/fairplay-drm-reversing/screenshots/img-013.png)
 *detect_music_functions.js：Frida 分组检测脚本，每组 1k 函数*
@@ -186,7 +235,7 @@ grep "calling" *.log | sort | uniq > summary/g1.log
 ![汇总日志定位 NfcRKV](https://overkazaf.github.io/blogs/images/fairplay-drm-reversing/screenshots/img-016.png)
 *sum.log 汇总结果：成功定位 NfcRKVnxuKZy04KWbdFu*** 和相关 crypto 函数*
 
-经过近一周的测试，笔者使用了组合方法（根据函数名分类 + 分组逐步标记定位，1000 个函数一组，排除特定函数前缀等方式穷举），最终定位到解密流触发的函数 **`NfcRKVnxuKZy04KWbdFu***`**。
+经过近一周的测试（🔬 **Experimental**：16 轮分组 hook + 日志交叉比对，验证 H3），笔者使用了组合方法（根据函数名分类 + 分组逐步标记定位，1000 个函数一组，排除特定函数前缀等方式穷举），最终定位到解密流触发的函数 **`NfcRKVnxuKZy04KWbdFu***`**。
 
 ### 3.3 N 函数参数分析
 
@@ -200,6 +249,8 @@ grep "calling" *.log | sort | uniq > summary/g1.log
 - **args5**: 恒为 0x0
 - **args6**: 在会话中为恒定值
 - **args7**: 恒为 0x7f7f7f7f7f7f7f
+
+🧑‍🔬 **Human**：从多次播放 trace 中识别参数模式——args2 == args3（输入输出指向同一 buffer）暗示 in-place 解密，这一模式识别是本文的关键突破点。
 
 ![IDA Pro decryptSample 中的 NfcRKV 调用](https://overkazaf.github.io/blogs/images/fairplay-drm-reversing/screenshots/img-017.png)
 *IDA Pro x86 decryptSample 伪代码：红框标注 NfcRKV 函数调用*
@@ -229,7 +280,7 @@ grep "calling" *.log | sort | uniq > summary/g1.log
 
 ### 4.1 getPersistentKey — 9 个参数
 
-通过反复对比 x86 和 arm 两个函数定义，推断 getPersistentKey 函数一共需要 9 个参数：
+通过反复对比 x86 和 arm 两个函数定义（🔬 **Experimental**：跨架构交叉验证消除单一平台分析的偏差），推断 getPersistentKey 函数一共需要 9 个参数：
 
 | # | 参数名 | 来源 | 说明 |
 |---|--------|------|------|
@@ -301,6 +352,8 @@ __int64 __fastcall SVFootHillPContext::kdContext(SVFootHillPContext *this)
 | v8 | buffer 指针 | 输出数据（明文，与 v7 相同 = in-place） |
 | v9 | size | 数据大小 |
 
+🧑‍🔬 **Human**：v7 == v8（输入输出共享 buffer）是 in-place 解密的决定性证据，结合 `DECRYPTOR_TYPE_PASTIS_TS = 0x05` 枚举值确认了 sample-AES 模式——这一判断依赖对 DRM 解密实现模式的领域知识。
+
 ![IDA decryptSample 完整流程](https://overkazaf.github.io/blogs/images/fairplay-drm-reversing/screenshots/img-048.png)
 *IDA Pro x86 decryptSample 伪代码：红框标注 kdContext 获取 → NfcRKV 调用的完整流程*
 
@@ -348,6 +401,8 @@ dec_1809814459.bin  47M  2025-05-05 21:56
 - 播放过程中流式 dump 出来的解密前后音频样本大小一致（**确认 in-place 解密**）
 - 但与应用内下载的 mp4 文件有所差别——因为 dump 的是**裸 ALAC 样本序列**，还需要 M4A 容器重封装
 
+🔬 **Experimental**：端到端验证 H4（in-place 解密，enc/dec 文件大小一致 47MB）和 H5（裸 ALAC 输出），两个假设均得到确认。
+
 ---
 
 ## 六、逆向分析总结
@@ -384,6 +439,8 @@ dec_1809814459.bin  47M  2025-05-05 21:56
 ### 6.3 裸数据的局限
 
 解密完成后的原始数据只是裸 ALAC 音频样本序列，没有包含任何容器格式的元素，播放器无法识别如何解析和播放这些原始数据。因此，客户端程序还需要收集所有解密后的 ALAC 数据块，组装成完整的音频数据流通过 M4A 容器封装才可正确使用。
+
+🧑‍🔬 **Human**：识别出 Frida dump 方案的工程局限——裸样本缺少容器元数据（采样率、声道、编解码器信息），直接 dump 无法得到可播放文件，需要 ISO BMFF 解析和 M4A 重封装。这一认知成为 Part 2 优化的核心驱动力。
 
 这正是 [Part 2（优化篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-decrypt-pipeline-optimization/) 要解决的问题——笔者在 [aria](https://github.com/overkazaf/aria) 项目中，基于 rootfs chroot 方案将 Apple 自家的 FairPlay 实现封装到 TCP 服务中（m3u8 RPC 端口 47020，解密端口 47010），并通过 ISO BMFF 容器解析 + TCP 管线化实现了 57x 的速度提升和 94% 的内存优化。
 

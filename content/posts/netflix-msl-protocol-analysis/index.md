@@ -41,6 +41,54 @@ math: false
 
 ---
 
+## 研究证据与实验基础
+
+### 实验环境
+
+| 项目 | 配置 |
+|------|------|
+| **目标设备** | Android 真机（已 root，具备 Widevine L3 CDM） |
+| **目标 App** | Netflix Android APK（混淆版本） |
+| **对照客户端** | Chrome CDM（桌面）、Rave、Hearo、nfmsl.py |
+| **架构** | ARM64（Android 设备）、x86_64（Chrome / 桌面分析） |
+| **动态分析** | Frida — hook MediaDrm / CryptoSession / MessageHeader / OkHttp / SSL_write |
+| **协议工具** | Python 3.x + cbor2 + hashlib、mitmproxy / SSL hook |
+| **静态分析** | APK 反编译（混淆类映射）、Chrome CDM 二进制 S-box / T-table 扫描 |
+| **实现验证** | nfmsl.py（单文件 Python 研究客户端）、Android MslClient（真机 MediaDrm 路径） |
+| **密码学栈** | AES-128-CBC（NoPadding，手动 PKCS7）、HMAC-SHA256、RSA-2048-OAEP、GZIP |
+
+### 假设清单
+
+| ID | 假设 | 出处 | 验证结果 |
+|----|------|------|----------|
+| H1 | Chrome CDM 中有可 hook 的标准 AES 入口 | §三 | **否决** — BoringSSL 入口存在但不触发，疑为链接残留 / dead code |
+| H2 | CDM 白盒是可 DFA 的 T-table 结构 | §三 | **否决** — S-box / T-table / key schedule 扫描未匹配标准 AES 结构 |
+| H3 | 存在稳定硬件 AES 路径（`aesenc`） | §三 | **否决** — 软件白盒与 OLLVM 调度器占主导，无稳定硬件路径 |
+| H4 | MSL HMAC 签名输入是 headerdata 明文 | §4.2 | **否决** — 签名输入是 encrypted envelope 的完整 bytes（encrypt-then-MAC） |
+| H5 | `headerdata`（键 33）可内联为 CBOR map | §4.4 | **否决** — 必须是 encrypted envelope 的 byte string（`0x58` vs `0xa3`），否则 502 |
+| H6 | CBOR `bytes` 与 `text` 类型可互换 | §4.4 | **否决** — major type 2 vs 3，差一个 bit（`0x40` vs `0x60`），首包即废 |
+| H7 | 必须破解 CDM 才能使用其加密签名能力 | §5.3 | **否决** — 可将 CDM 当 oracle 调用（encrypt / sign / decrypt），无需导出密钥 |
+| H8 | MasterToken 与 UserIdToken 可跨会话自由拼接 | §六 | **否决** — `UserIdToken.mtserialnumber == MasterToken.serialnumber` 字段级绑定 |
+| H9 | Key Exchange 成功即代表协议链路闭环 | §七 | **否决** — `licensedManifest` 能稳定解密才算真正闭环 |
+
+### 实验记录
+
+| ID | 实验 | 方法 | 结果 | 证据类型 |
+|----|------|------|------|----------|
+| E01 | Hook Chrome CDM BoringSSL AES 入口 | Frida hook AES 函数 | 入口存在但运行时不触发 | 🔬 动态观测 |
+| E02 | CDM 二进制 S-box / T-table 扫描 | 内存模式扫描 | 无标准 AES 结构匹配 | 🔬 静态扫描 |
+| E03 | `aesenc` 硬件指令 trap | 异常 trap + perf profile | 无稳定硬件 AES 调用路径 | 🔬 性能剖析 |
+| E04 | 三方客户端横向拆解（Rave / Hearo / nfmsl.py） | 架构对比 + wire format diff | 区分出「协议必需」vs「实现习惯」 | 🧑‍🔬 对照分析 |
+| E05 | Frida hook CryptoSession encrypt / sign / decrypt | 打印输入输出 bytes 的前缀与长度 | sign 入参前缀为 `a3 08…`（envelope），非明文 | 🔬 字节级验证 |
+| E06 | CBOR integer key vs string key 编码对比 | Python cbor2 编解码 | 同字段整数键 14 字节 vs 字符串键 31 字节 | 🔬 可复现数据 |
+| E07 | Handshake 空签名类型测试 | 分别发 `0x40`（byte string）和 `0x60`（text） | `0x40` 被服务端接受，`0x60` 被拒 | 🔬 服务端验证 |
+| E08 | headerdata 值类型测试 | 分别发 byte string（`0x58`）和 map（`0xa3`） | byte string 成功，map 导致 502 | 🔬 服务端验证 |
+| E09 | Token 跨会话拼接测试 | 替换不同会话的 MasterToken / UserIdToken 组合 | `mtserialnumber != serialnumber` 时返回 `106039` | 🔬 错误码归因 |
+| E10 | licensedManifest 端到端构造 | Key Exchange → headerdata/payload 加密 → 发送 → 解密响应 | 响应可解密、解压、解析出 tracks 与 license | 🔬 端到端验证 |
+| E11 | 错误码分层定位序列 | 逐层修正 CBOR 结构，观察错误码变化轨迹 | 502 → 认证失败 → 业务失败，逐层前进 | 🧑‍🔬 方法论验证 |
+
+---
+
 ## 一、路线总览
 
 这条路线不是一开始就瞄准 MSL 的。笔者最初仍沿着 DRM 研究的惯性去看 Chrome CDM 和内容密钥，走了一段才意识到那不是最高杠杆的地方。
@@ -122,7 +170,7 @@ MSL 的每一条设计，都是在回答上面某一条：
 | 白盒是可 DFA 的 T-table 结构 | 扫描 S-box / T-table / key schedule | 没有标准 AES 结构 | 不是老版本 Android L3 那种可 DFA 的实现 |
 | 存在稳定硬件 AES 路径 | `aesenc` trap + perf profile | 没有稳定硬件 AES 路径 | 软件白盒与 OLLVM 调度器占主导 |
 
-这一步的价值不在「失败」，而在**尽早排除错误战场**。如果目标是写一篇白盒密码学论文，继续啃 CDM 也许合理；但如果目标是理解 Netflix 播放链路，收益更高的地方在 MSL——因为服务端最终关心的从来不是「你能否 dump 出密钥」，而是「你能否建立合法 MSL 会话、能否拿到 Manifest、能否把 Widevine challenge 放进正确的加密信封」。这个判断把后面的工作从「找密钥」转成了「复现协议」。
+这一步的价值不在「失败」，而在**尽早排除错误战场**。如果目标是写一篇白盒密码学论文，继续啃 CDM 也许合理；但如果目标是理解 Netflix 播放链路，收益更高的地方在 MSL——因为服务端最终关心的从来不是「你能否 dump 出密钥」，而是「你能否建立合法 MSL 会话、能否拿到 Manifest、能否把 Widevine challenge 放进正确的加密信封」。🧑‍🔬 **[Human: 战场选择]** 这个判断把后面的工作从「找密钥」转成了「复现协议」。
 
 在动手写代码前，笔者还横向拆了三个现成样本，用来区分「协议要求」和「某客户端的实现习惯」：
 
@@ -132,7 +180,7 @@ MSL 的每一条设计，都是在回答上面某一条：
 | **Hearo** | 远程 extractors 管理 | `WIDEVINE` / MediaDrm | 设备 CDM 的 CryptoSession 内部 | 接近官方播放，客户端复杂 |
 | **nfmsl.py** | CBOR integer key | 两种都支持 | Python 可见或 pywidevine 解析 | 协议理解最深，维护成本最高 |
 
-三个样本各自回答一个问题：Rave 说明 Web JSON MSL 是低门槛路线；Hearo 说明真实设备 CDM 可以当加密签名 oracle（§5.3 展开）；nfmsl.py 适合把协议细节完全摊开。**只有一个样本时，很容易把某客户端的实现细节误当成协议必需项；有三个样本对照，才能把二者分开。**
+三个样本各自回答一个问题：Rave 说明 Web JSON MSL 是低门槛路线；Hearo 说明真实设备 CDM 可以当加密签名 oracle（§5.3 展开）；nfmsl.py 适合把协议细节完全摊开。🧑‍🔬 **[Human: 对照方法论]** **只有一个样本时，很容易把某客户端的实现细节误当成协议必需项；有三个样本对照，才能把二者分开。**
 
 ---
 
@@ -175,7 +223,7 @@ Layer C                        ciphertext 解密后 = headerdata 明文 map
 5. header     = CBOR({32: mastertoken, 33: envelope, 16: signature})
 ```
 
-**签名的输入是第 3 步整段 encrypted envelope 的字节，而不是第 1 步的明文。** 校验方向相反：服务端先用 `Khmac` 验 `signature` 覆盖的是不是 `33` 的那段 bytes，验过了才解密。这决定了两件在调试中反复咬人的事：
+🔬 **[Experimental: encrypt-then-MAC 验证]** **签名的输入是第 3 步整段 encrypted envelope 的字节，而不是第 1 步的明文。** 校验方向相反：服务端先用 `Khmac` 验 `signature` 覆盖的是不是 `33` 的那段 bytes，验过了才解密。这决定了两件在调试中反复咬人的事：
 
 - 只要 envelope 的**任何一个字节**（包括 iv、keyid 的编码）和签名输入不一致，HMAC 就对不上，服务端根本不会尝试解密——你会得到一个「解析/认证失败」而不是「业务失败」，很容易误判成 payload 写错了。
 - **handshake 首包没有会话密钥**，此时 `16 signature` 应当是**空 byte string**（CBOR `0x40`）而不是空 text（`0x60`），更不是省略字段。这个区别只有一个字节，却是首包能不能被接受的分水岭（§4.4 会看到这两个字节）。
@@ -197,7 +245,7 @@ payload chunk 同理：`64 payload` 是 payload 明文（`sequencenumber` + `mes
 
 字符串键把 `"messageid"`、`"timestamp"` 的键名（各占 10 字节：1 字节长度 + 9 字节 ASCII）原样塞进每条消息，两个键就是 20 字节；整数键把这两个键压成 3 字节（`16` 表示 22、`18 18` 表示 24）。仅这两个字段，header 就从 31 字节降到 14 字节——**对一个每次播放都要发大量消息、字段高度固定的协议，整数键把 header 体积砍掉一半以上。** 代价是可读性归零，这也是为什么静态看混淆类名意义不大，必须拿到线上字节反查含义。
 
-笔者逆向出的整数键映射如下（按位置分组，与上面的结构图一致）：
+🔬 **[Experimental: 协议字段映射]** 笔者逆向出的整数键映射如下（按位置分组，与上面的结构图一致）：
 
 | Integer key | 含义 | 所在位置 |
 |-------------|------|----------|
@@ -239,7 +287,7 @@ b''      ->  40              ← 空 byte string（handshake signature 应该长
  ''      ->  60              ← 空 text string（写成这样首包就废了）
 ```
 
-同样只差高位那一个 bit（`0x40` vs `0x60`）。§4.2 说的「handshake signature 应是空 byte string」，落到字节上就是**必须是 `0x40` 而不是 `0x60`**。
+同样只差高位那一个 bit（`0x40` vs `0x60`）。§4.2 说的「handshake signature 应是空 byte string」，落到字节上就是**必须是 `0x40` 而不是 `0x60`**。🔬 **[Experimental: 单字节差异的服务端验证]**
 
 有了这些，笔者后面修字段时形成了一个固定习惯：**不看「代码像不像」，只看两件事**——(1) CBOR decode 后的结构类型是否和官方客户端逐字节一致；(2) 服务端错误码是否从「解析失败」前进到「认证失败」或「业务失败」。这比在混淆 Java 类名里猜字段含义可靠得多。
 
@@ -279,7 +327,7 @@ Android / Hearo / MslClient 路线是 `WIDEVINE`：
 
 ### 5.3 把 CDM 当能力，而不是当靶子
 
-上面那句话是整个 Android 路线的关键抽象，值得单独点一下。传统逆向习惯把 CDM 当成必须攻破的黑盒；但在 MSL 这条链路里，更省力的姿势是把它当成一个**加密签名能力提供者**：
+上面那句话是整个 Android 路线的关键抽象，值得单独点一下。🧑‍🔬 **[Human: 范式切换]** 传统逆向习惯把 CDM 当成必须攻破的黑盒；但在 MSL 这条链路里，更省力的姿势是把它当成一个**加密签名能力提供者**：
 
 ```text
 我给它 plaintext + key id + IV   →   它给我 ciphertext     （§4.2 第 2 步）
@@ -346,7 +394,7 @@ Netflix 的 `licensedManifest` 很适合当协议逆向的验收点，因为它�
 4. CBOR 编码 → GZIP → AES-CBC 加密 → HMAC 签名（§4.2 的 encrypt-then-MAC）；
 5. 解密响应，解析 `video_tracks` / `audio_tracks` / license response。
 
-这条链路给了笔者一个清晰的验收标准：**只做成 Key Exchange 还不算真懂 MSL；只有 licensedManifest 能稳定解密，协议兼容模型才算闭环。** 但这个成功只证明客户端在当时的账号、设备和服务端策略下完成了一次受授权交互，不证明防重放、撤销、硬件防克隆或内容输出保护已经被绕过。这里的「解析」是实验室验证——确认协议链路可解释、响应结构可解析，不涉及任何真实账号或内容密钥材料。
+这条链路给了笔者一个清晰的验收标准：🧑‍🔬 **[Human: 验收标准定义]** **只做成 Key Exchange 还不算真懂 MSL；只有 licensedManifest 能稳定解密，协议兼容模型才算闭环。** 但这个成功只证明客户端在当时的账号、设备和服务端策略下完成了一次受授权交互，不证明防重放、撤销、硬件防克隆或内容输出保护已经被绕过。这里的「解析」是实验室验证——确认协议链路可解释、响应结构可解析，不涉及任何真实账号或内容密钥材料。
 
 ---
 
@@ -383,11 +431,11 @@ CS.sign.implementation = function (keyId, message) {
 };
 ```
 
-抓下来发现 `sign` 的入参前两字节正是 encrypted envelope 的 `a3 08…`（map 开头），而不是明文 headerdata——这就从字节上确认了「签的是密文」。
+抓下来发现 `sign` 的入参前两字节正是 encrypted envelope 的 `a3 08…`（map 开头），而不是明文 headerdata——🔬 **[Experimental: 签名输入字节确认]** 这就从字节上确认了「签的是密文」。
 
 ### 8.2 错误码是定位仪，不是终点
 
-协议逆向里，错误码不是失败提示，而是告诉你「卡在哪一层」的定位仪：
+🧑‍🔬 **[Human: 错误码分层方法论]** 协议逆向里，错误码不是失败提示，而是告诉你「卡在哪一层」的定位仪：
 
 | 现象 | 常见含义 | 下一步 |
 |------|----------|--------|
@@ -457,7 +505,7 @@ MasterToken / UIT / session key 是否来自同一会话（§六）
 | **内容密钥与明文输出** | MSL 只保护 license/控制面运输 | 低 | content key 与 sample/frame 安全由 DRM、CDM、解码器和输出链负责 |
 | **可用性** | 无直接保证 | 可能为负 | 多层解析、压缩、状态同步和续期会增加 DoS、误拒绝与恢复复杂度 |
 
-最重要的结论是：**MSL 的强项是应用消息保护和上下文绑定，不是让受授权客户端失去协议能力。** 如果攻击者已控制一个合法端点，他可能不需要导出会话密钥，只需借该端点完成加密、签名和解密。此时防线会自然转移到服务端授权、频率控制、设备证明和结果可复用性上。
+🧑‍🔬 **[Human: 安全边界判断]** 最重要的结论是：**MSL 的强项是应用消息保护和上下文绑定，不是让受授权客户端失去协议能力。** 如果攻击者已控制一个合法端点，他可能不需要导出会话密钥，只需借该端点完成加密、签名和解密。此时防线会自然转移到服务端授权、频率控制、设备证明和结果可复用性上。
 
 ### 10.2 信任根与爆炸半径
 
@@ -510,7 +558,7 @@ MSL 开源文档还允许不同 cipher/authentication 方案，因此上面的�
 | **M2：上下文绑定会话** | entity/user/token 绑定、非重放状态、撤销、续期和业务授权均生效 | 能显著限制 token 拼接、重放和跨上下文滥用 |
 | **M3：硬件协同实体** | 会话能力绑定硬件证明，具备 anti-rollback、不可克隆密钥与服务端风险控制 | 降低设备克隆和规模化自动化；仍不等于内容明文不可见 |
 
-本文的实验已经充分达到 **M0**，并给出了 M1 的线格式证据和部分 M2 的结构/行为证据；Widevine API 路径只说明存在向 M3 设计的可能，不能证明当前测试环境达到硬件级绑定。准确评级还需验证：同一消息重放是否被拒、跨节点重放窗口是否一致、旧 token/sequence 能否续期、不同设备等级接受哪些 scheme、撤销传播时间，以及被控 oracle 能否跨账号或跨内容复用。
+🔬 **[Experimental: 安全等级实证]** 本文的实验已经充分达到 **M0**，并给出了 M1 的线格式证据和部分 M2 的结构/行为证据；Widevine API 路径只说明存在向 M3 设计的可能，不能证明当前测试环境达到硬件级绑定。准确评级还需验证：同一消息重放是否被拒、跨节点重放窗口是否一致、旧 token/sequence 能否续期、不同设备等级接受哪些 scheme、撤销传播时间，以及被控 oracle 能否跨账号或跨内容复用。
 
 ### 10.6 综合结论
 
@@ -693,7 +741,24 @@ MSL 在这几点上是结构性的强：
 | 绑定强度 | token + `guid` 软标识 | MSL 实体 + session；Widevine 路径可进一步绑定设备 |
 | 一句话 | 给明文请求**盖个客户端签名章** | 把控制面装进与**实体/session 绑定**的加密信封 |
 
-两者都体现了在 TLS 之外增加应用层请求保护的思路。但 `cKey` 主要给请求参数增加认证，MSL 还可以提供 payload 机密性，并把消息与 entity/user/session 上下文绑定。更准确的判断是：**单独获得 MSL token 通常不足以构造新消息，还需要对应 session key 或可调用的 crypto capability；该能力是否必须来自硬件设备，则取决于实际 entity authentication 与 Key Exchange。**
+🧑‍🔬 **[Human: 横向对比判断]** 两者都体现了在 TLS 之外增加应用层请求保护的思路。但 `cKey` 主要给请求参数增加认证，MSL 还可以提供 payload 机密性，并把消息与 entity/user/session 上下文绑定。更准确的判断是：**单独获得 MSL token 通常不足以构造新消息，还需要对应 session key 或可调用的 crypto capability；该能力是否必须来自硬件设备，则取决于实际 entity authentication 与 Key Exchange。**
+
+---
+
+## AI 工具使用边界
+
+本文研究过程**未使用 AI 辅助工具**进行核心逆向分析、协议结构判断或安全评估。具体而言：
+
+| 环节 | AI 参与情况 | 说明 |
+|------|-------------|------|
+| **战场选择**（§三） | 无 AI 参与 | 排除 Chrome CDM、选择协议层——这类「在哪一层投入精力」的战略判断依赖逆向经验和对成本收益的直觉 |
+| **字节级调试**（§四） | 无 AI 参与 | CBOR 类型错误（`0x40` vs `0x60`、`0x58` vs `0xa3`）的定位靠逐字节 diff 官方客户端 wire bytes，无法描述为可提示词化的任务 |
+| **CDM oracle 抽象**（§5.3） | 无 AI 参与 | 把 CDM 从「必须攻破的靶子」转化为「可调用的能力提供者」是一次认知框架切换，来自对三个样本的横向对比 |
+| **错误码归因**（§八） | 无 AI 参与 | 502 / `106039` / `204035` / `205032` 的分层定位依赖对 MSL 信封结构的理解和服务端实时反馈的交互式调试 |
+| **安全评估**（§十） | 无 AI 参与 | M0–M3 四级框架和攻击面分析基于笔者对密码协议和系统安全的判断，不适合交给概率模型 |
+| **文章撰写** | 部分辅助 | 排版校对、表格格式化等机械工作有使用 AI 辅助；技术判断、结论表述和安全边界描述均为人工 |
+
+**总结**：协议逆向的核心难点不在「知道该做什么」，而在「判断当前卡在哪一层、下一步该试什么」。这类交互式、状态依赖的推理链路，在本文写作时（2026 年 8 月）仍处于 AI 辅助的能力边界之外。AI 擅长的是给定明确输入后的格式转换和批量处理，而不是在 502 和可能的二十种原因之间做排除法。
 
 ---
 

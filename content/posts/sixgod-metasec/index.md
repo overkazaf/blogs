@@ -31,6 +31,50 @@ math: false
 
 ---
 
+## 研究证据概览 (Research Evidence)
+
+### 实验环境
+
+| 项目 | 配置 |
+|------|------|
+| **目标应用** | 抖音 (Douyin) v37.5.0 (`com.ss.android.ugc.aweme`) |
+| **目标库** | `libmetasec_ml.so` (3.8 MB, ELF64 ARM64) |
+| **主机** | Ubuntu 22.04 LTS, x86_64, Dual Intel Xeon E5-2673 v4 (80 threads), 96GB RAM |
+| **仿真框架** | unidbg + Unicorn2 后端, Java 11 (Temurin) |
+| **反编译** | JADX (DEX → Java), radare2 5.8.9 (SO 静态分析) |
+| **辅助工具** | Capstone (JIT 反汇编), 自定义 Java hook (指令 trace + CAS 分析) |
+| **分析周期** | 2026-03-27 ~ 2026-03-29 (2 个完整周末) |
+
+### 假设清单
+
+| ID | 假设 | 章节 | 结果 |
+|----|------|------|------|
+| **H1** | RegisterNatives 注册在 `Object` 而非 `MS` 类上是故意的 JNI 混淆手法 | §4.2 | ✓ **确认** — JADX 追踪发现 `MS → i2 → Object` 超类遍历逻辑 |
+| **H2** | Phase 2 失败源于缺少某个环境前置条件 | §4.5 | ✓ **确认** — JADX 发现 `Os.setenv("28d7fdd567361198183fa7b8e", "a7")` |
+| **H3** | 时间戳相关的路径选择是刻意的 anti-analysis 设计 | §4.6 | ✓ **确认** — 两条路径功能等价，仅在调试环境中表现为非确定性 |
+| **H4** | 配置 field[4] sdkVersion 应使用 native 解密出的 SDK 版本字符串 | §4.7 | ✗ **推翻** — 正确值来自 Java 静态字段 `d4.a = "v06.05.40-dy"` |
+| **H5** | JIT 中的 CAS (`ldaxrh`/`stxrh`) 循环是 anti-emulation 陷阱 | §4.8 | ✗ **推翻** — 单线程仿真器中 4 次迭代自然收敛 |
+
+### 实验记录
+
+| ID | 实验 | 步骤 | 结果 | 关键证据 |
+|----|------|------|------|---------|
+| **E01** | JNI 入口定位 | RegisterNatives 日志 + JADX 追踪超类遍历 | ✓ | 入口 `SO+0x271938`, `MS → i2 → Object` |
+| **E02** | 自毁处理器中和 | 反汇编 3 个 handler → 统一 patch `adr x0, #0; ret` | ✓ | ~71 个调用点全部中和 (0x266a38/0x266b0c/0x266be0) |
+| **E03** | Vtable 校验绕过 | `cbz` → 无条件 `b` patch | ✓ | Phase 1 JNI_OnLoad 正常返回 |
+| **E04** | 环境变量门发现 | JADX 追踪 `n3.a()` → `Os.setenv` 调用 | ✓ | `28d7fdd567361198183fa7b8e=a7` |
+| **E05** | 非确定性分发诊断 | Phase 2 连续运行 5 次 | ✗ 3/5 | 3 次返回 0 (成功), 2 次返回 -1 (失败) |
+| **E06** | 时间戳固定 → 确定性分发 | 固定 `currentTimeMillis` + `UUID.randomUUID` | ✓ | Phase 2 连续 5 次 100% 返回 0 |
+| **E07** | 配置 field[4] = native 解密值 | `sdkVersion = "v04.09.09.07-bugfix"` | ✗ | VM 进入 `ms_config.h:254` 无限循环 |
+| **E08** | 配置 field[4] = Java 静态字段值 | `sdkVersion = "v06.05.40-dy"` (来自 `d4.a`) | ✓ | VM 执行 3173 条指令 → `Boolean.TRUE` |
+| **E09** | 完整 17 字段配置验证 | 所有字段语义正确 → Phase 3 | ✓ | Phase 3 → true, Phase 4 → handle `0x12731000` |
+| **E10** | JIT CAS 循环收敛 | 观察 `ldaxrh`/`stxrh` 迭代次数 | ✓ | 4 次迭代, w20=w12=0x2000 时收敛 |
+| **E11** | 六神签名生成 | `getFeatureHash(0x2000006)` | ✓ | 6 个签名头全部输出 |
+| **E12** | 设备注册端到端 | TTEncrypt + 六神签名 → POST device_register | ✓ | HTTP 200, `device_id_str` + `install_id_str` 返回 |
+| **E13** | API 验证 | Feed + Search API 请求携带六神签名 | ✓ | HTTP 200, 正常数据返回 |
+
+---
+
 ## 一、路线总览
 
 先用一张图说清楚整个初始化到签名输出的完整序列：
@@ -129,7 +173,7 @@ MetaSec SDK 不仅保护抖音，还部署在字节跳动全系 APP 中——Tik
 | **B. Frida Hook** | 在真机上 hook 签名函数，RPC 转发 | 快速验证 | 依赖真机/模拟器；Anti-Frida 检测 |
 | **C. unidbg 仿真** | 在 JVM 中加载 SO，模拟 ARM64 执行 | 无需真机；可复现；可 trace | 需要补全 JNI 环境；工程量大 |
 
-笔者选择了 **路线 C**，原因有三：
+🧑‍🔬 **Human** 笔者选择了 **路线 C**，原因有三：
 
 1. **可复现性**：unidbg 的执行是确定性的（固定时间戳后），同一输入永远产出同一签名，方便自动化测试
 2. **深度可观测**：可以在任意地址设置 hook，trace 每一条 ARM64 指令，这对理解 VM 内部逻辑至关重要
@@ -211,7 +255,7 @@ Java 层
 
 > 第一个问题是找到签名函数的 native 入口。字节跳动没有使用常规的静态注册（`Java_com_xx_method`），而是在 `JNI_OnLoad` 中动态注册——而且注册目标类经过了混淆。
 
-unidbg 的 `RegisterNatives` 日志捕获到：
+🔬 **Experimental** unidbg 的 `RegisterNatives` 日志捕获到：
 
 ```
 RegisterNatives(java/lang/Object, 1 method)
@@ -240,7 +284,7 @@ br   x1              ; → 0x173ec4 (OLLVM 主调度器)
 
 > 首次运行 unidbg 加载 SO，仿真器立刻崩溃——跳转到未映射地址 0x1000。笔者需要找到并中和所有自毁处理器，才能让 JNI_OnLoad 正常完成。
 
-三个自毁处理器结构相同（以 `SO+0x266a38` 为例）：
+🔬 **Experimental** 三个自毁处理器结构相同（以 `SO+0x266a38` 为例）：
 
 ```armasm
 str  xzr, [x29]      ; 清除栈帧
@@ -281,7 +325,7 @@ byte[] branchAlways = { 0x03, 0x00, 0x00, 0x14 }; // b #12
 
 > 解决了崩溃和校验问题后，Phase 2（`0x5000001`）能跑了，但总是走失败分支返回 -1。笔者尝试了 trace 分支条件、修改寄存器、甚至暴力搜索——全部无效。突破来自 JADX。
 
-笔者注意到 JADX 反编译的 `ms.bd.c.n3` 类中有一段关键代码：
+🧑‍🔬 **Human** 笔者注意到 JADX 反编译的 `ms.bd.c.n3` 类中有一段关键代码：
 
 ```java
 public abstract class n3 {
@@ -294,7 +338,7 @@ public abstract class n3 {
 
 在加载 native 库**之前**，Java 层设置了一个环境变量 `28d7fdd567361198183fa7b8e=a7`。这个环境变量的名字本身就是一个哈希值——32 位十六进制，显然经过设计以逃避关键词搜索。
 
-**验证**：在 unidbg 的 `AndroidElfLoader` 初始化阶段注入这个环境变量后：
+🔬 **Experimental** **验证**：在 unidbg 的 `AndroidElfLoader` 初始化阶段注入这个环境变量后：
 
 ```
 [Before fix]
@@ -314,7 +358,7 @@ Phase 2 (0x5000001): dispatch → SO+0x272fb4 → getBytes("utf-8") path
 
 > Phase 2 解决后出现了新问题：同一代码跑 5 次，3 次成功 2 次失败。非确定性行为是仿真调试的大敌。
 
-追踪发现，Phase 2 存在两条分发路径：
+🔬 **Experimental** 追踪发现，Phase 2 存在两条分发路径：
 
 - `SO+0x272fb4` → 使用 `getBytes("utf-8")` → **返回 0**（成功）
 - `SO+0x2acca8` → 使用 `GetStringUtfChars` → **返回 -1**（失败）
@@ -332,7 +376,7 @@ return UUID.fromString("12345678-1234-1234-1234-123456789abc");
 
 修复后，Phase 2 在 5 次连续运行中 **100% 返回 0**。
 
-**推断**：时间戳相关的路径选择是一种 anti-analysis 设计——在真实设备上两条路径功能等价（都能成功），但在调试环境中表现为非确定性行为，浪费逆向工程师的时间去追查"为什么有时成功有时失败"。
+🧑‍🔬 **Human** **推断**：时间戳相关的路径选择是一种 anti-analysis 设计——在真实设备上两条路径功能等价（都能成功），但在调试环境中表现为非确定性行为，浪费逆向工程师的时间去追查"为什么有时成功有时失败"。
 
 ### 4.7 步骤 ⑥：配置 JSON 逆向——打开一切的钥匙
 
@@ -375,7 +419,7 @@ jSONArray.put(this.LJIIL);     // [12] versionCode
 | [12] versionCode | `"99999"` | `"370500"` | App 的实际 versionCode |
 | [16][1] kSt value | `"v04.09.09.07-bugfix"` | `"v06.05.40-dy"` | 必须与 [4] 一致 |
 
-**核心突破**：字段 [4] 的值来自 `d4.a`——一个 Java 静态字段。笔者最初假设它应该与 native 解密出的 SDK 版本字符串一致（`"v04.09.09.07-bugfix"`），但 VM 始终拒绝。经过反复排查，笔者发现 `d4.a` 在 Java 层被初始化为 `"v06.05.40-dy"`——一个完全不同的版本号。native 代码验证的是 **Java 层的值**，而非自身解密出的值。这两个"版本号"分别代表 MetaSec SDK 的 Java wrapper 版本和 native core 版本，VM 校验的是前者。
+🧑‍🔬 **Human** **核心突破**：字段 [4] 的值来自 `d4.a`——一个 Java 静态字段。笔者最初假设它应该与 native 解密出的 SDK 版本字符串一致（`"v04.09.09.07-bugfix"`），但 VM 始终拒绝。经过反复排查，笔者发现 `d4.a` 在 Java 层被初始化为 `"v06.05.40-dy"`——一个完全不同的版本号。native 代码验证的是 **Java 层的值**，而非自身解密出的值。这两个"版本号"分别代表 MetaSec SDK 的 Java wrapper 版本和 native core 版本，VM 校验的是前者。
 
 **最终正确配置**：
 
@@ -422,7 +466,7 @@ Phase 3 → true  →  Phase 4 → 0x12731000  →  getFeatureHash → 签名!
 0x12598ab8: b      #0x12598a10    ; loop back
 ```
 
-笔者最初担心这是一个 anti-emulation 陷阱（单线程仿真器无法正确模拟多核 CAS），但实际观察到它在 **4 次迭代内自然收敛**：
+🔬 **Experimental** 笔者最初担心这是一个 anti-emulation 陷阱（单线程仿真器无法正确模拟多核 CAS），但实际观察到它在 **4 次迭代内自然收敛**：
 
 ```
 [CAS #1] w20=0x2000 w12=0x2008 match=false
@@ -435,7 +479,7 @@ Phase 3 → true  →  Phase 4 → 0x12731000  →  getFeatureHash → 签名!
 
 ### 4.9 步骤 ⑨：六神降临
 
-所有前置步骤完成后，`getFeatureHash(0x2000006, 0, handle, url, body)` 返回了完整的六神签名。以下是 unidbg 的实际执行输出（敏感值已脱敏）：
+🔬 **Experimental** 所有前置步骤完成后，`getFeatureHash(0x2000006, 0, handle, url, body)` 返回了完整的六神签名。以下是 unidbg 的实际执行输出（敏感值已脱敏）：
 
 ```
 ========== DouyinMetaSec 签名生成 ==========
@@ -682,12 +726,12 @@ v37.5 相比 v23.3 新增了**至少 5 层防护**。dy233 的 v23.3 方案在 v
 
 笔者在研究过程中使用了 AI 辅助（Claude Code），以下是诚实的评估：
 
-**AI 帮上忙的**：
+🤖 **AI** **AI 帮上忙的**：
 - JNI 回调补全：50+ 个 `callStaticMethod` / `callObjectMethod` 回调的模板代码生成
 - 错误模式分析：将 native 日志中的 `ms_config.cc:41` 与配置字段关联
 - 汇编解读：CAS 循环的 ARM64 指令语义解释
 
-**AI 做不到的**：
+🧑‍🔬 **Human** **AI 做不到的**：
 - 发现环境变量门——需要在 JADX 输出的数万行 Java 代码中注意到 `Os.setenv` 调用
 - 判断 `d4.a` 是 Java 层值而非 native 值——需要跨越 Java/Native 两个分析维度的推理
 - 区分"真正的无限循环"和"VM 执行错误路径"——需要对 VM 行为的直觉判断
