@@ -1,5 +1,5 @@
 ---
-title: "Chrome 下的 VMP 保护 - 从 VM 调度器到白盒数据路径的工程剖析"
+title: "Chrome 里藏了个虚拟机，它到底在保护什么"
 slug: "chrome-vmp-protection-vm-dispatch-whitebox"
 date: 2026-08-23T03:30:00+08:00
 lastmod: 2026-08-23T03:30:00+08:00

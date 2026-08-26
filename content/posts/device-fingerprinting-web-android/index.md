@@ -1,5 +1,5 @@
 ---
-title: "一个 Canvas 当然认不出你：海内外主流 Web / Android 设备指纹与风控体系全景"
+title: "一个 Canvas 当然认不出你，但三十个可以"
 slug: "device-fingerprinting-web-android-mainstream-platforms"
 date: 2026-08-25T10:30:00+08:00
 lastmod: 2026-08-25T13:53:17+08:00

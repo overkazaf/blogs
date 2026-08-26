@@ -1,5 +1,5 @@
 ---
-title: "学习拉马努金提高注意力的解题模式 - 谈谈基于DFA的Widevine L3 keybox量产技术"
+title: "拉马努金式的注意力：用 DFA 量产 L3 keybox"
 slug: "widevine-l3-keybox-mass-production"
 date: 2026-04-29
 lastmod: 2026-08-23

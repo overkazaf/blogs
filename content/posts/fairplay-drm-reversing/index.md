@@ -1,5 +1,5 @@
 ---
-title: "五个函数，一条链 - Apple FairPlay DRM 的 Frida 逆向全记录"
+title: "用 Frida 拆开 FairPlay 的五个解密函数"
 slug: "fairplay-drm-frida-reversing"
 date: 2026-05-10
 lastmod: 2026-06-04
