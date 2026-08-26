@@ -1,5 +1,5 @@
 ---
-title: "把 Netflix MSL 拆成字节"
+title: "把 Netflix MSL 拆成字节 - 一次协议逆向的路线、踩坑与经验"
 slug: "netflix-msl-protocol-reverse-engineering"
 date: 2026-08-15
 lastmod: 2026-08-23

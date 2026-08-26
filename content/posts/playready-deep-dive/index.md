@@ -1,5 +1,5 @@
 ---
-title: "一段 UTF-16 XML，为什么能管住 4K？ - Microsoft PlayReady 从 PRO 到 SL3000 的完整解剖"
+title: "一段 UTF-16 XML 凭什么管住 4K？PlayReady 的套娃式架构"
 slug: "playready-pro-license-sl3000-deep-dive"
 date: 2026-08-24T14:00:00+08:00
 lastmod: 2026-08-24T14:00:00+08:00

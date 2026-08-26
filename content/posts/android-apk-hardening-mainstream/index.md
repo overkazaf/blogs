@@ -1,5 +1,5 @@
 ---
-title: "把 classes.dex 藏起来，就等于安全吗？——主流 Android APK 加固体系全景"
+title: "把 classes.dex 藏起来就安全了？主流加固方案的真实防线"
 slug: "android-apk-hardening-packer-vmp-rasp-mainstream"
 date: 2026-08-25T14:50:00+08:00
 lastmod: 2026-08-25T15:03:51+08:00

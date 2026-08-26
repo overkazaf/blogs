@@ -1,5 +1,5 @@
 ---
-title: "谁在铸造破解白盒的武器？ - Quarkslab 十年开源攻防全纪实"
+title: "谁在铸造破解白盒的武器？Quarkslab 的十年"
 slug: "quarkslab-drm-whitebox-cryptanalysis-arsenal"
 date: 2026-05-08
 lastmod: 2026-05-08

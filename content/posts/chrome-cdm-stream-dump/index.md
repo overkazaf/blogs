@@ -1,5 +1,5 @@
 ---
-title: "13 种攻击全部失败之后 - Chrome Widevine CDM 白盒 AES 的工程突围"
+title: "13 种攻击全部失败之后，Chrome CDM 白盒 AES 到底怎么绕"
 slug: "chrome-cdm-stream-dump-widevine-vtable-hook"
 date: 2026-05-04
 lastmod: 2026-05-04

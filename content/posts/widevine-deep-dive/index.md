@@ -1,5 +1,5 @@
 ---
-title: "一个 PSSH，为什么还拿不到 Key？ - Google Widevine 从 License Proxy 到 L1 的完整解剖"
+title: "有了 PSSH 还是拿不到 Key，从 L3 到 L1 有多远"
 slug: "widevine-pssh-license-l1-deep-dive"
 date: 2026-08-22T14:00:00+08:00
 lastmod: 2026-08-24T17:18:00+08:00

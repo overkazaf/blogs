@@ -1,5 +1,5 @@
 ---
-title: "源码都在手里，为什么还是过不了 Widevine？ - Cromite/Bromite 流导出失败全记录"
+title: "Cromite 源码在手，Widevine 还是过不了"
 slug: "cromite-bromite-widevine-stream-export-failure"
 date: 2026-08-23T04:15:00+08:00
 lastmod: 2026-08-24T01:30:00+08:00

@@ -1,5 +1,5 @@
 ---
-title: "六个神和七十一处自毁"
+title: "驯服六头蛇：驾驭希腊诸神 - 抖音六神签名算法的 unidbg 逆向全记录"
 slug: "douyin-sixgod-metasec-unidbg-reverse-engineering"
 date: 2026-03-29
 lastmod: 2026-03-30
