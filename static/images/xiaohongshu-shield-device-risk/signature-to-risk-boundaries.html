@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xiaohongshu Shield to Risk Decision Evidence Boundaries</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', 'Noto Sans SC', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #fb7185; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: 0; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow-x: auto; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 960px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .card { min-width: 0; padding: 1.1rem; border: 1px solid #1e293b; border-radius: 8px; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: none; border-radius: 6px; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: 6px; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { width: 100%; max-width: 100%; margin-bottom: 1rem; overflow: hidden; }
+      .header-row { display: grid; width: 100%; grid-template-columns: 9px minmax(0, 1fr) 28px; align-items: flex-start; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { width: 100%; max-width: 100%; font-size: 1rem; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+      .subtitle { width: 100%; max-width: 100%; margin: .5rem 0 0; font-size: .7rem; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
+      .toolbar { position: relative; width: 28px; margin-left: 0; }
+      .toolbar-toggle { width: 28px; padding: .25rem 0; }
+      .toolbar-actions { position: absolute; z-index: 10; top: 1.75rem; right: 0; flex-direction: column; padding: .4rem; border: 1px solid #334155; border-radius: 6px; background: #0f172a; }
+      .diagram-container { width: 100%; min-width: 0; padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+      .card { padding: .9rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Xiaohongshu Shield to Risk Decision</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">一枚请求签名，只覆盖证据链的一段；设备画像、内容关系与业务处置仍属于服务端边界</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1440 820" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Xiaohongshu Shield to risk decision evidence boundaries</title>
+        <desc id="diagram-desc">Historical request context and device-side state feed a native Shield component. The protected envelope reaches server validation, while profile resolution, content graph analysis and tiered decisions remain server-side and externally unconfirmed.</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#fb7185"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Boundaries -->
+        <rect x="25" y="70" width="500" height="650" rx="12" fill="rgba(34,211,238,.02)" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="8,5"/>
+        <text x="45" y="98" fill="#22d3ee" font-size="12" font-weight="600">APP PROCESS / CLIENT-CONTROLLED</text>
+        <rect x="555" y="70" width="235" height="650" rx="12" fill="rgba(251,191,36,.02)" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="8,5"/>
+        <text x="575" y="98" fill="#fbbf24" font-size="12" font-weight="600">PROTOCOL EDGE</text>
+        <rect x="820" y="70" width="595" height="650" rx="12" fill="rgba(52,211,153,.02)" stroke="#34d399" stroke-width="1.2" stroke-dasharray="8,5"/>
+        <text x="840" y="98" fill="#34d399" font-size="12" font-weight="600">SERVER / EXTERNALLY UNOBSERVABLE</text>
+
+        <!-- Arrows behind boxes -->
+        <path d="M245 220 C285 220 280 330 320 330" fill="none" stroke="#22d3ee" stroke-width="2.2" marker-end="url(#arrow-cyan)"/>
+        <path d="M245 545 C285 545 280 390 320 390" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-dasharray="6,5" marker-end="url(#arrow-amber)"/>
+        <path d="M500 360 L590 360" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+        <path d="M755 360 L855 230" fill="none" stroke="#fbbf24" stroke-width="2.2" marker-end="url(#arrow-amber)"/>
+        <path d="M755 390 L855 515" fill="none" stroke="#a78bfa" stroke-width="2.2" marker-end="url(#arrow-violet)"/>
+        <path d="M1045 230 L1130 315" fill="none" stroke="#34d399" stroke-width="2.2" marker-end="url(#arrow-emerald)"/>
+        <path d="M1045 515 L1130 385" fill="none" stroke="#a78bfa" stroke-width="2.2" marker-end="url(#arrow-violet)"/>
+        <path d="M1245 430 L1245 515" fill="none" stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+        <path d="M1130 610 C1030 700 930 690 950 590" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="7,6" marker-end="url(#arrow-violet)"/>
+        <text x="1015" y="685" fill="#94a3b8" font-size="9" text-anchor="middle">outcomes may update confidence and graph edges</text>
+
+        <!-- Client nodes -->
+        <rect x="55" y="155" width="190" height="130" rx="6" fill="#020617"/>
+        <rect x="55" y="155" width="190" height="130" rx="6" fill="rgba(8,51,68,.55)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="150" y="188" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Request Context</text>
+        <text x="150" y="217" fill="#22d3ee" font-size="9" text-anchor="middle">path / params / platform</text>
+        <text x="150" y="241" fill="#94a3b8" font-size="8" text-anchor="middle">historical sample observation</text>
+        <rect x="176" y="257" width="50" height="18" rx="9" fill="rgba(251,113,133,.18)" stroke="#fb7185"/>
+        <text x="201" y="270" fill="#fb7185" font-size="8" text-anchor="middle">C grade</text>
+
+        <rect x="55" y="470" width="190" height="150" rx="6" fill="#020617"/>
+        <rect x="55" y="470" width="190" height="150" rx="6" fill="rgba(120,53,15,.38)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="150" y="503" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Device-side Evidence</text>
+        <text x="150" y="532" fill="#fbbf24" font-size="8" text-anchor="middle">IDs / runtime / apps</text>
+        <text x="150" y="553" fill="#fbbf24" font-size="8" text-anchor="middle">network / sensors / failures</text>
+        <text x="150" y="577" fill="#94a3b8" font-size="8" text-anchor="middle">policy categories, not wire schema</text>
+        <rect x="176" y="592" width="50" height="18" rx="9" fill="rgba(52,211,153,.16)" stroke="#34d399"/>
+        <text x="201" y="605" fill="#34d399" font-size="8" text-anchor="middle">A grade</text>
+
+        <rect x="320" y="285" width="180" height="150" rx="6" fill="#020617"/>
+        <rect x="320" y="285" width="180" height="150" rx="6" fill="rgba(136,19,55,.44)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="410" y="320" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Native Shield</text>
+        <text x="410" y="349" fill="#fb7185" font-size="9" text-anchor="middle">versioned request protection</text>
+        <text x="410" y="375" fill="#94a3b8" font-size="8" text-anchor="middle">libshield.so (historical)</text>
+        <text x="410" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">current library / algorithm unknown</text>
+        <text x="410" y="420" fill="#fbbf24" font-size="8" text-anchor="middle">historical C-grade evidence only</text>
+
+        <!-- Edge node -->
+        <rect x="590" y="285" width="165" height="150" rx="6" fill="#020617"/>
+        <rect x="590" y="285" width="165" height="150" rx="6" fill="rgba(120,53,15,.4)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="672" y="320" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Protected Envelope</text>
+        <text x="672" y="349" fill="#fbbf24" font-size="9" text-anchor="middle">HTTPS + Shield</text>
+        <text x="672" y="375" fill="#94a3b8" font-size="8" text-anchor="middle">format / freshness / state</text>
+        <text x="672" y="401" fill="#fb7185" font-size="8" text-anchor="middle">valid format != authorization</text>
+
+        <!-- Server nodes -->
+        <rect x="855" y="155" width="190" height="150" rx="6" fill="#020617"/>
+        <rect x="855" y="155" width="190" height="150" rx="6" fill="rgba(6,78,59,.48)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="950" y="190" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Protocol Validation</text>
+        <text x="950" y="219" fill="#34d399" font-size="9" text-anchor="middle">schema / binding / replay</text>
+        <text x="950" y="245" fill="#94a3b8" font-size="8" text-anchor="middle">exact online semantics unknown</text>
+        <rect x="974" y="270" width="52" height="18" rx="9" fill="rgba(167,139,250,.16)" stroke="#a78bfa"/>
+        <text x="1000" y="283" fill="#a78bfa" font-size="8" text-anchor="middle">B / ?</text>
+
+        <rect x="855" y="440" width="190" height="150" rx="6" fill="#020617"/>
+        <rect x="855" y="440" width="190" height="150" rx="6" fill="rgba(76,29,149,.48)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="950" y="475" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Profile Resolution</text>
+        <text x="950" y="504" fill="#a78bfa" font-size="9" text-anchor="middle">candidate / drift / conflict</text>
+        <text x="950" y="530" fill="#94a3b8" font-size="8" text-anchor="middle">profile ID and confidence unknown</text>
+        <text x="950" y="555" fill="#fb7185" font-size="8" text-anchor="middle">no public lifecycle experiment</text>
+
+        <rect x="1130" y="250" width="230" height="180" rx="6" fill="#020617"/>
+        <rect x="1130" y="250" width="230" height="180" rx="6" fill="rgba(6,78,59,.46)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1245" y="286" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Account + Content Graph</text>
+        <text x="1245" y="317" fill="#34d399" font-size="8" text-anchor="middle">account / note / comment / follow</text>
+        <text x="1245" y="340" fill="#34d399" font-size="8" text-anchor="middle">network / creator / merchant / order</text>
+        <text x="1245" y="370" fill="#94a3b8" font-size="8" text-anchor="middle">action type + time sequence</text>
+        <text x="1245" y="396" fill="#fbbf24" font-size="8" text-anchor="middle">architectural mapping, not disclosure</text>
+
+        <rect x="1130" y="515" width="230" height="125" rx="6" fill="#020617"/>
+        <rect x="1130" y="515" width="230" height="125" rx="6" fill="rgba(136,19,55,.44)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1245" y="549" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Tiered Decision</text>
+        <text x="1245" y="578" fill="#fb7185" font-size="9" text-anchor="middle">allow / limit / challenge</text>
+        <text x="1245" y="602" fill="#94a3b8" font-size="8" text-anchor="middle">review / delay / deny / feedback</text>
+        <text x="1245" y="625" fill="#fbbf24" font-size="8" text-anchor="middle">thresholds and reasons unknown</text>
+
+        <!-- Bottom evidence legend, outside boundaries -->
+        <rect x="240" y="755" width="960" height="42" rx="8" fill="rgba(30,41,59,.65)" stroke="#334155"/>
+        <circle cx="285" cy="776" r="6" fill="#34d399"/><text x="301" y="780" fill="#94a3b8" font-size="9">A: official source</text>
+        <circle cx="520" cy="776" r="6" fill="#a78bfa"/><text x="536" y="780" fill="#94a3b8" font-size="9">B: architecture inference</text>
+        <circle cx="790" cy="776" r="6" fill="#fb7185"/><text x="806" y="780" fill="#94a3b8" font-size="9">C: historical sample</text>
+        <circle cx="1025" cy="776" r="6" fill="#fbbf24"/><text x="1041" y="780" fill="#94a3b8" font-size="9">?: unconfirmed</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="card-header"><div class="card-dot cyan"></div><h3>可以确认</h3></div><ul><li>历史版本存在 Native 请求保护边界</li><li>官方政策覆盖多类设备与运行证据</li><li>当前实现仍处于外部不可确认范围</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot amber"></div><h3>不能确认</h3></div><ul><li>当前 Shield 的完整输入与服务端校验</li><li>设备画像的注册、合并与置信度</li><li>账号、内容和交易处置的具体阈值</li></ul></div>
+      <div class="card"><div class="card-header"><div class="card-dot rose"></div><h3>审计重点</h3></div><ul><li>请求签名、设备证据和业务授权分层</li><li>记录版本、来源、失败与漂移语义</li><li>用新鲜挑战和业务关系抵抗单层复现</li></ul></div>
+    </div>
+    <p class="footer">Xiaohongshu Shield evidence boundaries - Cocoon AI diagram - 2026-05-26</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin);
+      });
+    }
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', event => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize();
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+    async function captureDiagram() {
+      const el = document.getElementById('report-container');
+      const rect = el.getBoundingClientRect();
+      const pad = 32;
+      return html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: element => element.classList && element.classList.contains('toolbar'), x: rect.left + scrollX - pad, y: rect.top + scrollY - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 });
+    }
+    async function copyAsImage(btn) {
+      const original = btn.textContent;
+      try { const canvas = await captureDiagram(); const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = 'Copied'; }
+      catch (error) { btn.textContent = 'Failed'; }
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+    async function downloadPNG(btn) {
+      const original = btn.textContent; btn.textContent = 'Working';
+      try { const canvas = await captureDiagram(); const link = document.createElement('a'); link.download = 'xiaohongshu-shield-risk-boundaries.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = 'Done'; }
+      catch (error) { btn.textContent = 'Failed'; }
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+    async function downloadPDF(btn) {
+      const original = btn.textContent; btn.textContent = 'Working';
+      try { const canvas = await captureDiagram(); const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('xiaohongshu-shield-risk-boundaries.pdf'); btn.textContent = 'Done'; }
+      catch (error) { btn.textContent = 'Failed'; }
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pinduoduo Environment Evidence Pipeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; padding: 2rem; overflow-x: hidden; background: #020617; color: #fff; font-family: 'JetBrains Mono', monospace; }
+    .container { width: 100%; max-width: 1500px; min-width: 0; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; min-width: 0; margin-bottom: .5rem; }
+    .pulse-dot { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 50%; background: #22d3ee; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    h1 { min-width: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -.025em; overflow-wrap: anywhere; }
+    .subtitle { margin-left: 1.75rem; color: #94a3b8; font-size: .875rem; line-height: 1.6; overflow-wrap: anywhere; }
+    .diagram-container { max-width: 100%; padding: 1.25rem; overflow: hidden; border: 1px solid #1e293b; border-radius: 1rem; background: rgba(15, 23, 42, .5); }
+    svg { display: block; width: 100%; height: auto; min-width: 0; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .card { min-width: 0; padding: 1.15rem; border: 1px solid #1e293b; border-radius: .75rem; background: rgba(15, 23, 42, .5); }
+    .card-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+    .card-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.amber { background: #fbbf24; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: .875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: .75rem; line-height: 1.65; }
+    .card li { margin-bottom: .375rem; }
+    .footer { margin-top: 1.25rem; color: #475569; font-size: .75rem; text-align: center; }
+    .toolbar { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
+    .toolbar-toggle { padding: .25rem .5rem; border: 0; border-radius: .375rem; background: transparent; color: #475569; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, .5); }
+    .toolbar-actions { display: none; gap: .5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { padding: .375rem .75rem; border: 1px solid #334155; border-radius: .375rem; background: rgba(30, 41, 59, .8); color: #94a3b8; font-family: inherit; font-size: .75rem; white-space: nowrap; cursor: pointer; }
+    .toolbar-actions button:hover { color: #fff; border-color: #475569; background: rgba(51, 65, 85, .8); }
+    @media (max-width: 700px) {
+      body { min-height: 0; padding: .75rem; }
+      .header { margin-bottom: 1rem; }
+      .header-row { align-items: flex-start; flex-wrap: wrap; gap: .5rem; }
+      .pulse-dot { width: 9px; height: 9px; margin-top: .35rem; }
+      h1 { flex: 1 1 220px; font-size: 1rem; line-height: 1.4; }
+      .subtitle { margin: .5rem 0 0; font-size: .7rem; }
+      .toolbar { margin-left: auto; }
+      .toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+      .diagram-container { padding: .35rem; }
+      .cards { grid-template-columns: 1fr; gap: .75rem; margin-top: 1rem; }
+    }
+    @media print { body { padding: 1rem; background: #020617; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Pinduoduo Environment Evidence Pipeline</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">历史客户端观察止于网络边界；设备画像、业务图谱与处置仅作防守架构映射，并非拼多多生产实现披露</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1500 920" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">拼多多环境证据包到服务端风控的证据边界</title>
+        <desc id="diagram-desc">官方披露和历史逆向材料支持客户端环境记录与版本化封装；越过网络边界后，接入校验、概率画像、业务图谱和分级处置均为未确认的防守架构映射。</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+          <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0 L0 0 0 40" fill="none" stroke="#1e293b" stroke-width=".5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Evidence and architecture boundaries -->
+        <rect x="20" y="95" width="280" height="665" rx="12" fill="rgba(30,41,59,.16)" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="8,4"/>
+        <rect x="325" y="95" width="450" height="665" rx="12" fill="rgba(8,51,68,.08)" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="8,4"/>
+        <rect x="825" y="95" width="650" height="665" rx="12" fill="rgba(136,19,55,.045)" stroke="#fb7185" stroke-width="1.2" stroke-dasharray="8,4"/>
+        <text x="38" y="120" fill="#94a3b8" font-size="11" font-weight="600">SOURCES / EVIDENCE GRADE</text>
+        <text x="343" y="120" fill="#22d3ee" font-size="11" font-weight="600">C-LEVEL / HISTORICAL CLIENT OBSERVATION</text>
+        <text x="843" y="120" fill="#fb7185" font-size="11" font-weight="600">B-LEVEL / DEFENSIVE MAPPING — NOT CONFIRMED</text>
+
+        <!-- Network boundary -->
+        <line x1="800" y1="120" x2="800" y2="735" stroke="#fb7185" stroke-width="2" stroke-dasharray="5,5"/>
+        <rect x="738" y="445" width="124" height="44" rx="6" fill="#020617" stroke="#fb7185" stroke-width="1"/>
+        <text x="800" y="462" fill="#fb7185" font-size="8" font-weight="600" text-anchor="middle">NETWORK BOUNDARY</text>
+        <text x="800" y="478" fill="#94a3b8" font-size="7" text-anchor="middle">public visibility stops</text>
+
+        <!-- Arrows painted before components -->
+        <path d="M270 235 L365 235" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-dasharray="5,4" marker-end="url(#arrow-amber)"/>
+        <path d="M270 425 C320 425 320 285 365 265" fill="none" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+        <path d="M535 235 L575 235" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M660 280 L660 345" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M660 445 L660 525" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <path d="M745 580 L865 580 L865 270" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-rose)"/>
+        <path d="M1035 220 L1080 220" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-violet)"/>
+        <path d="M1250 220 L1290 220" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-emerald)"/>
+        <path d="M1365 270 L1365 390 L1270 390" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-emerald)"/>
+        <path d="M1170 440 L1055 440 L1055 555" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-rose)"/>
+        <path d="M1140 610 C1240 720 1400 650 1370 500" fill="none" stroke="#64748b" stroke-width="1.6" stroke-dasharray="7,6" marker-end="url(#arrow-slate)"/>
+
+        <!-- Source nodes -->
+        <rect x="50" y="175" width="220" height="120" rx="6" fill="#020617"/>
+        <rect x="50" y="175" width="220" height="120" rx="6" fill="rgba(120,53,15,.36)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="160" y="204" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">A / Official Policy</text>
+        <text x="160" y="229" fill="#fbbf24" font-size="8" text-anchor="middle">device · app · network · sensors</text>
+        <text x="160" y="251" fill="#94a3b8" font-size="8" text-anchor="middle">IMEI boundary: before v6.63.0</text>
+        <text x="160" y="273" fill="#94a3b8" font-size="8" text-anchor="middle">actual collection may vary</text>
+
+        <rect x="50" y="355" width="220" height="140" rx="6" fill="#020617"/>
+        <rect x="50" y="355" width="220" height="140" rx="6" fill="rgba(8,51,68,.42)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="160" y="384" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">C / Reverse Reports</text>
+        <text x="160" y="410" fill="#22d3ee" font-size="8" text-anchor="middle">C: 2025-12-02 v7.80; author mentions v7.85</text>
+        <text x="160" y="432" fill="#94a3b8" font-size="8" text-anchor="middle">C: 2026-07-06 anti-token; AI-assisted</text>
+        <text x="160" y="454" fill="#94a3b8" font-size="8" text-anchor="middle">sample metadata not independently complete</text>
+        <text x="160" y="476" fill="#fb7185" font-size="8" text-anchor="middle">never extrapolate to current production</text>
+
+        <rect x="50" y="555" width="220" height="145" rx="6" fill="#020617"/>
+        <rect x="50" y="555" width="220" height="145" rx="6" fill="rgba(30,41,59,.62)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="160" y="584" fill="#fff" font-size="12" font-weight="600" text-anchor="middle">Missing Metadata</text>
+        <text x="160" y="610" fill="#94a3b8" font-size="8" text-anchor="middle">APK / SO hash · channel · ABI</text>
+        <text x="160" y="632" fill="#94a3b8" font-size="8" text-anchor="middle">device · OS build · capture time</text>
+        <text x="160" y="654" fill="#94a3b8" font-size="8" text-anchor="middle">tool versions · server experiment</text>
+        <text x="160" y="678" fill="#fbbf24" font-size="8" text-anchor="middle">therefore: Type B review only</text>
+
+        <!-- Historical client nodes -->
+        <rect x="365" y="180" width="170" height="110" rx="6" fill="#020617"/>
+        <rect x="365" y="180" width="170" height="110" rx="6" fill="rgba(8,51,68,.48)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="450" y="209" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Environment Reads</text>
+        <text x="450" y="234" fill="#22d3ee" font-size="8" text-anchor="middle">system / Build / network</text>
+        <text x="450" y="255" fill="#94a3b8" font-size="8" text-anchor="middle">SIM state / time / randomness</text>
+        <text x="450" y="276" fill="#fbbf24" font-size="7" text-anchor="middle">categories vary by version and event</text>
+
+        <rect x="575" y="180" width="170" height="110" rx="6" fill="#020617"/>
+        <rect x="575" y="180" width="170" height="110" rx="6" fill="rgba(251,146,60,.28)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="660" y="209" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Versioned Records</text>
+        <text x="660" y="234" fill="#fb923c" font-size="8" text-anchor="middle">structured record container</text>
+        <text x="660" y="255" fill="#94a3b8" font-size="8" text-anchor="middle">cached + dynamic observations</text>
+        <text x="660" y="276" fill="#fbbf24" font-size="7" text-anchor="middle">existence ≠ refresh on every call</text>
+
+        <rect x="575" y="345" width="170" height="100" rx="6" fill="#020617"/>
+        <rect x="575" y="345" width="170" height="100" rx="6" fill="rgba(136,19,55,.38)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="660" y="375" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Package Protection</text>
+        <text x="660" y="400" fill="#fb7185" font-size="8" text-anchor="middle">Gzip → AES → Base64</text>
+        <text x="660" y="423" fill="#94a3b8" font-size="8" text-anchor="middle">historical structure-level observation</text>
+
+        <rect x="575" y="525" width="170" height="110" rx="6" fill="#020617"/>
+        <rect x="575" y="525" width="170" height="110" rx="6" fill="rgba(76,29,149,.46)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="660" y="554" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">anti-token Output</text>
+        <text x="660" y="579" fill="#a78bfa" font-size="8" text-anchor="middle">event-adjacent evidence envelope</text>
+        <text x="660" y="601" fill="#94a3b8" font-size="8" text-anchor="middle">not inherently a stable device ID</text>
+        <text x="660" y="622" fill="#fb7185" font-size="7" text-anchor="middle">not a server authorization decision</text>
+
+        <!-- Defensive architecture inference nodes -->
+        <rect x="865" y="165" width="170" height="110" rx="6" fill="#020617"/>
+        <rect x="865" y="165" width="170" height="110" rx="6" fill="rgba(136,19,55,.35)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="950" y="194" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Ingress Validation</text>
+        <text x="950" y="219" fill="#fb7185" font-size="8" text-anchor="middle">schema / version / freshness</text>
+        <text x="950" y="241" fill="#94a3b8" font-size="8" text-anchor="middle">provenance / missing semantics</text>
+        <text x="950" y="262" fill="#fbbf24" font-size="7" text-anchor="middle">architecture inference</text>
+
+        <rect x="1080" y="165" width="170" height="110" rx="6" fill="#020617"/>
+        <rect x="1080" y="165" width="170" height="110" rx="6" fill="rgba(76,29,149,.4)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1165" y="194" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Probabilistic Profile</text>
+        <text x="1165" y="219" fill="#a78bfa" font-size="8" text-anchor="middle">candidate recall / confidence</text>
+        <text x="1165" y="241" fill="#94a3b8" font-size="8" text-anchor="middle">collision / drift / split / merge</text>
+        <text x="1165" y="262" fill="#fbbf24" font-size="7" text-anchor="middle">not a copied client field</text>
+
+        <rect x="1290" y="165" width="150" height="110" rx="6" fill="#020617"/>
+        <rect x="1290" y="165" width="150" height="110" rx="6" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1365" y="194" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Business Graph</text>
+        <text x="1365" y="219" fill="#34d399" font-size="8" text-anchor="middle">account / campaign / order</text>
+        <text x="1365" y="241" fill="#94a3b8" font-size="8" text-anchor="middle">address / payment / time</text>
+        <text x="1365" y="262" fill="#fbbf24" font-size="7" text-anchor="middle">relationship gives meaning</text>
+
+        <rect x="1170" y="385" width="200" height="110" rx="6" fill="#020617"/>
+        <rect x="1170" y="385" width="200" height="110" rx="6" fill="rgba(136,19,55,.42)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1270" y="414" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Tiered Decision</text>
+        <text x="1270" y="439" fill="#fb7185" font-size="8" text-anchor="middle">allow / limit / challenge</text>
+        <text x="1270" y="461" fill="#94a3b8" font-size="8" text-anchor="middle">delay / review / deny / appeal</text>
+        <text x="1270" y="482" fill="#fbbf24" font-size="7" text-anchor="middle">action-specific, not device-wide</text>
+
+        <rect x="940" y="555" width="200" height="110" rx="6" fill="#020617"/>
+        <rect x="940" y="555" width="200" height="110" rx="6" fill="rgba(30,41,59,.66)" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1040" y="584" fill="#fff" font-size="11" font-weight="600" text-anchor="middle">Governed Feedback</text>
+        <text x="1040" y="609" fill="#94a3b8" font-size="8" text-anchor="middle">outcome / confidence / decay</text>
+        <text x="1040" y="631" fill="#34d399" font-size="8" text-anchor="middle">rollback / audit / deletion</text>
+        <text x="1040" y="652" fill="#fbbf24" font-size="7" text-anchor="middle">never learn blindly from denials</text>
+
+        <!-- Boundary statement -->
+        <rect x="1190" y="585" width="240" height="95" rx="6" fill="#020617"/>
+        <rect x="1190" y="585" width="240" height="95" rx="6" fill="rgba(120,53,15,.24)" stroke="#fbbf24" stroke-width="1.2"/>
+        <text x="1310" y="613" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">PUBLIC MATERIAL CANNOT CONFIRM</text>
+        <text x="1310" y="638" fill="#94a3b8" font-size="8" text-anchor="middle">matching formula · model features</text>
+        <text x="1310" y="660" fill="#94a3b8" font-size="8" text-anchor="middle">thresholds · retention · current protocol</text>
+
+        <!-- Legend outside all boundary boxes -->
+        <text x="30" y="820" fill="#fff" font-size="10" font-weight="600">LEGEND / ASSERTION STRENGTH</text>
+        <rect x="30" y="840" width="18" height="11" rx="2" fill="rgba(120,53,15,.36)" stroke="#fbbf24"/>
+        <text x="56" y="849" fill="#94a3b8" font-size="8">A: official disclosure</text>
+        <rect x="260" y="840" width="18" height="11" rx="2" fill="rgba(8,51,68,.42)" stroke="#22d3ee"/>
+        <text x="286" y="849" fill="#94a3b8" font-size="8">C: historical reverse observation</text>
+        <rect x="590" y="840" width="18" height="11" rx="2" fill="rgba(76,29,149,.4)" stroke="#a78bfa" stroke-dasharray="3,3"/>
+        <text x="616" y="849" fill="#94a3b8" font-size="8">B: architecture inference, not confirmed</text>
+        <line x1="990" y1="845" x2="1020" y2="845" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+        <text x="1030" y="849" fill="#94a3b8" font-size="8">observed client flow</text>
+        <line x1="1220" y1="845" x2="1250" y2="845" stroke="#fb7185" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-rose)"/>
+        <text x="1260" y="849" fill="#94a3b8" font-size="8">inferred / unknown flow</text>
+        <text x="750" y="885" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">environment record ≠ full collection ≠ stable device ID ≠ backend profile</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>客户端只看到包裹</h3></div>
+        <ul><li>• 历史样本支持环境记录与版本化封装</li><li>• 缓存、权限和触发场景决定本次实际内容</li><li>• 动态证据包不天然等于稳定设备编号</li></ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>版本是证据的一部分</h3></div>
+        <ul><li>• App、SO Hash、渠道、ABI、OS 各自演进</li><li>• 字段、偏移、前缀和客户端秘密不可跨版本外推</li><li>• 缺少样本元数据时只能保留 C 级结论</li></ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>决策发生在边界之后</h3></div>
+        <ul><li>• 画像需要历史召回、碰撞和漂移治理</li><li>• 账号、活动、订单与支付关系赋予风险语义</li><li>• 公开逆向不能确认模型、阈值和处置规则</li></ul>
+      </div>
+    </div>
+    <p class="footer">Type B evidence-boundary diagram • Cocoon AI architecture-diagram • 2026-07-23</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin);
+      });
+    }
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', event => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize();
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+    async function captureDiagram() {
+      const el = document.getElementById('report-container');
+      const r = el.getBoundingClientRect();
+      const pad = 32;
+      return html2canvas(document.body, {
+        backgroundColor: '#020617', scale: 2, useCORS: true,
+        ignoreElements: element => element.classList && element.classList.contains('toolbar'),
+        x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad,
+        width: r.width + pad * 2, height: r.height + pad * 2
+      });
+    }
+    async function copyAsImage(btn) {
+      const original = btn.textContent;
+      try {
+        const canvas = await captureDiagram();
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (error) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+    async function downloadPNG(btn) {
+      const original = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const canvas = await captureDiagram();
+        const link = document.createElement('a');
+        link.download = 'pinduoduo-environment-evidence-pipeline.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (error) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+    async function downloadPDF(btn) {
+      const original = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const canvas = await captureDiagram();
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('pinduoduo-environment-evidence-pipeline.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (error) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => { btn.textContent = original; }, 2000);
+    }
+  </script>
+</body>
+</html>

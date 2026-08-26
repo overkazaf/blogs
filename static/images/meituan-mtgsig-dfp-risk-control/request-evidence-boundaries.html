@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>美团请求、设备证据与风险决策边界</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      padding: 2rem;
+      color: #f8fafc;
+      background:
+        radial-gradient(circle at 12% 4%, rgba(34, 211, 238, 0.09), transparent 27rem),
+        radial-gradient(circle at 91% 18%, rgba(251, 113, 133, 0.08), transparent 24rem),
+        #020617;
+      font-family: "JetBrains Mono", "Noto Sans SC", "Microsoft YaHei", monospace;
+    }
+
+    .container {
+      max-width: 1260px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 1.6rem;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      margin-bottom: 0.55rem;
+    }
+
+    .pulse-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #22d3ee;
+      box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.45);
+      animation: pulse 2.2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35); }
+      50% { opacity: 0.62; box-shadow: 0 0 0 7px rgba(34, 211, 238, 0); }
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+    }
+
+    .subtitle {
+      margin-left: 1.65rem;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      line-height: 1.6;
+    }
+
+    .diagram-container {
+      overflow-x: auto;
+      padding: 1.25rem;
+      border: 1px solid #1e293b;
+      border-radius: 1rem;
+      background: rgba(15, 23, 42, 0.54);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      min-width: 1060px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.4rem;
+    }
+
+    .card {
+      padding: 1.15rem;
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      background: rgba(15, 23, 42, 0.54);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-bottom: 0.72rem;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+    }
+
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 {
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.72rem;
+      line-height: 1.75;
+    }
+
+    .card li {
+      margin-bottom: 0.18rem;
+    }
+
+    .footer {
+      margin-top: 1.35rem;
+      color: #475569;
+      font-size: 0.7rem;
+      text-align: center;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+
+    .toolbar-toggle {
+      padding: 0.25rem 0.5rem;
+      border: none;
+      border-radius: 0.375rem;
+      color: #475569;
+      background: transparent;
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .toolbar-toggle:hover {
+      color: #94a3b8;
+      background: rgba(30, 41, 59, 0.5);
+    }
+
+    .toolbar-actions {
+      display: none;
+      gap: 0.5rem;
+    }
+
+    .toolbar.expanded .toolbar-actions { display: flex; }
+
+    .toolbar-actions button {
+      padding: 0.375rem 0.75rem;
+      border: 1px solid #334155;
+      border-radius: 0.375rem;
+      color: #94a3b8;
+      background: rgba(30, 41, 59, 0.8);
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .toolbar-actions button:hover {
+      color: white;
+      border-color: #475569;
+      background: rgba(51, 65, 85, 0.8);
+    }
+
+    @media (max-width: 760px) {
+      body { padding: 1rem; }
+      h1 { font-size: 1.1rem; }
+      .subtitle { margin-left: 0; }
+    }
+
+    @media print {
+      body { padding: 1rem; background: #020617; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>请求签名、DFP 与服务端风控：证据边界图</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">Evidence-graded conceptual architecture · 不是美团内部拓扑 · 实线表示证据流，虚线表示处置反馈</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1160 710" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">美团请求、设备证据与服务端风险决策的分层边界</title>
+        <desc id="diagram-desc">客户端请求保护、设备环境观察和业务事件分别进入服务端验证、画像归并和风险决策。历史 mtgsig2.4 样本标记为 C 级证据，设备类别和历史服务端架构标记为 A 级公开证据。</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="1160" height="710" fill="#020617"/>
+        <rect width="1160" height="710" fill="url(#grid)"/>
+
+        <!-- Connections are drawn before components so boxes mask the lines. -->
+        <line x1="230" y1="165" x2="263" y2="165" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+        <line x1="455" y1="165" x2="513" y2="165" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+        <path d="M 755 165 C 795 165, 790 278, 833 292" fill="none" stroke="#34d399" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+
+        <line x1="230" y1="355" x2="263" y2="355" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#arrow-cyan)"/>
+        <line x1="455" y1="355" x2="513" y2="355" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#arrow-violet)"/>
+        <path d="M 755 355 C 788 355, 802 329, 833 325" fill="none" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#arrow-violet)"/>
+
+        <line x1="455" y1="532" x2="513" y2="532" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+        <path d="M 755 532 C 790 532, 792 365, 833 351" fill="none" stroke="#34d399" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+
+        <line x1="970" y1="370" x2="970" y2="433" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <line x1="970" y1="515" x2="970" y2="543" stroke="#fb923c" stroke-width="1.6" marker-end="url(#arrow-rose)"/>
+        <path d="M 860 558 C 795 604, 684 601, 640 413" fill="none" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,5" marker-end="url(#arrow-rose)"/>
+
+        <!-- Responsibility boundaries -->
+        <rect x="30" y="80" width="440" height="510" rx="12" fill="rgba(8, 51, 68, 0.08)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="48" y="103" fill="#22d3ee" font-size="10" font-weight="700">CLIENT / OBSERVATION BOUNDARY</text>
+        <text x="48" y="119" fill="#64748b" font-size="8">客户端可提供证据，不能自行授予业务信任</text>
+
+        <rect x="490" y="80" width="290" height="510" rx="12" fill="rgba(6, 78, 59, 0.07)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="508" y="103" fill="#34d399" font-size="10" font-weight="700">SERVER / EVIDENCE BOUNDARY</text>
+        <text x="508" y="119" fill="#64748b" font-size="8">验证协议、归并画像、补充服务端观察</text>
+
+        <rect x="810" y="80" width="320" height="510" rx="12" fill="rgba(136, 19, 55, 0.07)" stroke="#fb7185" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="828" y="103" fill="#fb7185" font-size="10" font-weight="700">BUSINESS / DECISION BOUNDARY</text>
+        <text x="828" y="119" fill="#64748b" font-size="8">最终裁决只发生在业务上下文中</text>
+
+        <!-- Row labels -->
+        <text x="45" y="151" fill="#475569" font-size="8" transform="rotate(-90 45 151)">REQUEST</text>
+        <text x="45" y="350" fill="#475569" font-size="8" transform="rotate(-90 45 350)">DEVICE</text>
+        <text x="45" y="538" fill="#475569" font-size="8" transform="rotate(-90 45 538)">BUSINESS</text>
+
+        <!-- Request path -->
+        <rect x="60" y="130" width="170" height="70" rx="7" fill="#0f172a"/>
+        <rect x="60" y="130" width="170" height="70" rx="7" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="145" y="154" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">业务请求上下文</text>
+        <text x="145" y="173" fill="#94a3b8" font-size="8.5" text-anchor="middle">method · path · payload · session</text>
+        <text x="145" y="188" fill="#64748b" font-size="7.5" text-anchor="middle">事实：客户端产生待验证请求</text>
+
+        <rect x="265" y="130" width="190" height="70" rx="7" fill="#0f172a"/>
+        <rect x="265" y="130" width="190" height="70" rx="7" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="360" y="153" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">历史 mtgsig2.4 样本</text>
+        <text x="360" y="172" fill="#fbbf24" font-size="8.5" text-anchor="middle">C 级 · 2024 社区版本观察</text>
+        <text x="360" y="188" fill="#94a3b8" font-size="7.5" text-anchor="middle">不代表 2026 线上算法或字段</text>
+
+        <rect x="515" y="130" width="240" height="70" rx="7" fill="#0f172a"/>
+        <rect x="515" y="130" width="240" height="70" rx="7" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="635" y="153" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">请求完整性 / 新鲜度验证</text>
+        <text x="635" y="172" fill="#94a3b8" font-size="8.5" text-anchor="middle">结构 · 上下文 · 时效 · 使用范围</text>
+        <text x="635" y="188" fill="#34d399" font-size="7.5" text-anchor="middle">输出：协议门槛结果，不是风险结论</text>
+
+        <!-- Device path -->
+        <rect x="60" y="300" width="170" height="110" rx="7" fill="#0f172a"/>
+        <rect x="60" y="300" width="170" height="110" rx="7" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="145" y="325" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">环境观察类别</text>
+        <text x="145" y="347" fill="#94a3b8" font-size="8.5" text-anchor="middle">标识符 · 系统 · 网络</text>
+        <text x="145" y="364" fill="#94a3b8" font-size="8.5" text-anchor="middle">传感器 · App / 进程状态</text>
+        <text x="145" y="384" fill="#22d3ee" font-size="7.5" text-anchor="middle">A：政策确认类别与用途</text>
+        <text x="145" y="399" fill="#64748b" font-size="7.2" text-anchor="middle">不等于每次全量采集</text>
+
+        <rect x="265" y="300" width="190" height="110" rx="7" fill="#0f172a"/>
+        <rect x="265" y="300" width="190" height="110" rx="7" fill="rgba(30, 41, 59, 0.55)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="360" y="325" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">证据质量上下文</text>
+        <text x="360" y="347" fill="#94a3b8" font-size="8.5" text-anchor="middle">source · scope · observed_at</text>
+        <text x="360" y="364" fill="#94a3b8" font-size="8.5" text-anchor="middle">app/os version · status</text>
+        <text x="360" y="384" fill="#94a3b8" font-size="7.5" text-anchor="middle">EMPTY ≠ ERROR ≠ UNSUPPORTED</text>
+        <text x="360" y="399" fill="#64748b" font-size="7.2" text-anchor="middle">B：通用防守模型</text>
+
+        <rect x="515" y="300" width="240" height="110" rx="7" fill="#0f172a"/>
+        <rect x="515" y="300" width="240" height="110" rx="7" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="635" y="325" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">DFP / 设备画像归并</text>
+        <text x="635" y="347" fill="#94a3b8" font-size="8.5" text-anchor="middle">规范化 → 候选召回 → 冲突处理</text>
+        <text x="635" y="364" fill="#94a3b8" font-size="8.5" text-anchor="middle">时间衰减 → 置信度</text>
+        <text x="635" y="384" fill="#a78bfa" font-size="7.5" text-anchor="middle">输出：历史候选 / 新环境 / 证据不足</text>
+        <text x="635" y="399" fill="#64748b" font-size="7.2" text-anchor="middle">B：职责映射，不是内部算法</text>
+
+        <!-- Business path -->
+        <rect x="60" y="495" width="395" height="75" rx="7" fill="#0f172a"/>
+        <rect x="60" y="495" width="395" height="75" rx="7" fill="rgba(30, 41, 59, 0.55)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="257" y="519" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">账号与业务事件</text>
+        <text x="257" y="539" fill="#94a3b8" font-size="8.5" text-anchor="middle">IP · 位置 · 门店 · 频率 · 订单 · 支付 · 配送 · 履约 · 售后</text>
+        <text x="257" y="556" fill="#64748b" font-size="7.5" text-anchor="middle">本地生活的时间、空间与关系语义</text>
+
+        <rect x="515" y="495" width="240" height="75" rx="7" fill="#0f172a"/>
+        <rect x="515" y="495" width="240" height="75" rx="7" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="635" y="519" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">服务端聚合与关系特征</text>
+        <text x="635" y="539" fill="#94a3b8" font-size="8.5" text-anchor="middle">累计事件 · 名单 · 历史 · 多实体关系</text>
+        <text x="635" y="556" fill="#34d399" font-size="7.5" text-anchor="middle">A（历史 Zeus）+ B（当前职责映射）</text>
+
+        <!-- Decision path -->
+        <rect x="835" y="260" width="270" height="110" rx="7" fill="#0f172a"/>
+        <rect x="835" y="260" width="270" height="110" rx="7" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="970" y="286" fill="#f8fafc" font-size="12" font-weight="700" text-anchor="middle">规则 / 模型 / 风险策略</text>
+        <text x="970" y="309" fill="#94a3b8" font-size="8.5" text-anchor="middle">协议证据 + 画像证据 + 业务证据</text>
+        <text x="970" y="328" fill="#94a3b8" font-size="8.5" text-anchor="middle">按场景、价值和不确定性组合</text>
+        <text x="970" y="350" fill="#fb7185" font-size="7.5" text-anchor="middle">只有这里能产生业务风险判断</text>
+
+        <rect x="835" y="435" width="270" height="80" rx="7" fill="#0f172a"/>
+        <rect x="835" y="435" width="270" height="80" rx="7" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="970" y="460" fill="#f8fafc" font-size="11" font-weight="700" text-anchor="middle">分级处置</text>
+        <text x="970" y="481" fill="#94a3b8" font-size="8.5" text-anchor="middle">观察 · 限速 · 挑战 · 限额 · 复核 · 拒绝</text>
+        <text x="970" y="499" fill="#fbbf24" font-size="7.5" text-anchor="middle">动作必须保留原因码与可申诉性</text>
+
+        <rect x="860" y="545" width="220" height="25" rx="5" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="970" y="562" fill="#fb923c" font-size="7.5" text-anchor="middle">履约 / 损失 / 申诉 → 可撤销反馈</text>
+
+        <!-- Edge labels -->
+        <text x="484" y="155" fill="#64748b" font-size="7.2" text-anchor="middle">verify</text>
+        <text x="484" y="345" fill="#64748b" font-size="7.2" text-anchor="middle">match</text>
+        <text x="484" y="522" fill="#64748b" font-size="7.2" text-anchor="middle">enrich</text>
+
+        <!-- Legend outside all boundaries -->
+        <text x="40" y="626" fill="#f8fafc" font-size="10" font-weight="700">LEGEND / EVIDENCE GRADE</text>
+        <rect x="40" y="642" width="18" height="11" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee"/>
+        <text x="66" y="651" fill="#94a3b8" font-size="8">客户端观察</text>
+
+        <rect x="176" y="642" width="18" height="11" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399"/>
+        <text x="202" y="651" fill="#94a3b8" font-size="8">服务端验证</text>
+
+        <rect x="312" y="642" width="18" height="11" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa"/>
+        <text x="338" y="651" fill="#94a3b8" font-size="8">画像 / 历史</text>
+
+        <rect x="448" y="642" width="18" height="11" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185"/>
+        <text x="474" y="651" fill="#94a3b8" font-size="8">风险决策</text>
+
+        <rect x="584" y="642" width="18" height="11" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24"/>
+        <text x="610" y="651" fill="#94a3b8" font-size="8">C 级历史样本</text>
+
+        <line x1="758" y1="648" x2="780" y2="648" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4"/>
+        <text x="790" y="651" fill="#94a3b8" font-size="8">反馈，不是等价关系</text>
+
+        <text x="40" y="683" fill="#475569" font-size="8">A = 官方公开类别/历史架构 · B = 本文职责映射 · C = 版本化社区观察 · “通过签名”不等于“设备可信”不等于“业务低风险”</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>三层回答不同问题</h3>
+        </div>
+        <ul>
+          <li>• 签名：请求是否满足协议门槛</li>
+          <li>• DFP：环境像哪个历史候选</li>
+          <li>• 风控：这次业务动作如何处置</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>历史材料不能跨期作证</h3>
+        </div>
+        <ul>
+          <li>• 2019 Web 流程：A 级历史架构</li>
+          <li>• 2020 Zeus：A 级历史规则平台</li>
+          <li>• 2024 mtgsig2.4：C 级版本观察</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>防守上限在反馈治理</h3>
+        </div>
+        <ul>
+          <li>• 缺失、冲突与不支持必须分开</li>
+          <li>• 处置结果带来源、TTL 与撤销链</li>
+          <li>• 申诉成功能回滚派生风险标签</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">Type B security review · 2026-06-18 · Conceptual diagram, not an internal Meituan topology</p>
+  </div>
+
+  <script>
+    function reportEmbeddedSize() {
+      if (window.parent === window) return;
+      requestAnimationFrame(() => {
+        const root = document.getElementById('report-container');
+        const style = getComputedStyle(document.body);
+        const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        window.parent.postMessage({ type: 'cocoon-diagram:resize', height: Math.ceil(root.getBoundingClientRect().height + padding) }, window.location.origin);
+      });
+    }
+    if (window.parent !== window) {
+      new ResizeObserver(reportEmbeddedSize).observe(document.getElementById('report-container'));
+      window.addEventListener('load', reportEmbeddedSize);
+      window.addEventListener('message', event => {
+        if (event.origin === window.location.origin && event.data && event.data.type === 'cocoon-diagram:request-size') reportEmbeddedSize();
+      });
+      if (document.fonts) document.fonts.ready.then(reportEmbeddedSize);
+    }
+
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'meituan-request-evidence-boundaries.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('meituan-request-evidence-boundaries.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
