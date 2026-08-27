@@ -21,7 +21,7 @@ math: false
 
 在[前文](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/)中，笔者梳理了 Quarkslab 十年来的白盒密码与 DRM 攻防研究。当白盒密码学防护升级到第三代（密钥从不以可观测形式存在）时，攻击者被迫转向更底层——**攻击 TEE 本身**。本文正是这条路线的技术深潜。
 
-笔者以四条公开的真实攻击链为骨架，逐层拆解 ARM TrustZone 的每一个异常等级（EL0 → S-EL0 → S-EL1 → EL3），在每一层回答三个问题：
+🧑‍🔬 笔者以四条公开的真实攻击链为骨架，逐层拆解 ARM TrustZone 的每一个异常等级（EL0 → S-EL0 → S-EL1 → EL3），在每一层回答三个问题：
 
 1. **硬件层面发生了什么**？——寄存器、页表、内存保护域的切换机制
 2. **漏洞长什么样**？——该层最常见的漏洞模式，配合真实 CVE 讲解
@@ -37,6 +37,43 @@ math: false
 | QSEE Widevine | Project Zero | 2017 | S-EL0 → 任意写 | QSEE 代码执行 |
 
 本文不是入门科普——笔者假设读者已经读过[前文](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/)中关于 Quarkslab 的研究综述，并对逆向工程、ARM 汇编有基本了解。
+
+---
+
+### Research Evidence
+
+#### 研究环境
+
+| 组件 | 规格 |
+|------|------|
+| 分析目标 | ARM TrustZone EL0-EL3 四层特权架构 |
+| 主要案例来源 | Quarkslab (Black Hat USA 2019, SSTIC 2024)、Project Zero (2017)、360 Alpha Lab (Black Hat Asia 2021) |
+| 目标平台 | Samsung Galaxy S7/S9 (Exynos)、Samsung Galaxy A* (MediaTek)、Qualcomm MSM (QSEE) |
+| TEE 实现 | Kinibi (Trustonic)、QSEE/QTEE (Qualcomm)、TEEGRIS (Samsung) |
+| 参考固件 | ARM Trusted Firmware (ATF) bl31 源码、Little Kernel (LK) bootloader |
+| 二进制分析工具 | Ghidra / IDA Pro (Trustlet 逆向)、r2 (ATF 代码段分析) |
+| 漏洞数据集 | GlobalConfusion 2024 (14,777 TA 样本, 23% type-confusion 命中率) |
+| 涉及 CVE | CVE-2015-6639、SVE-2019-16665、CVE-2024-20820、CVE-2024-20821、CVE-2024-20832、CVE-2024-20865 |
+
+#### 研究假设
+
+| # | 假设 | 状态 |
+|---|------|------|
+| H1 | TrustZone 各层攻击遵循递归自相似模式（找接口 -> 构造溢出 -> 获取原语 -> 劫持控制流 -> 调用下层接口） | **confirmed** -- 四条攻击链均符合 §八 提炼的通用框架 |
+| H2 | 内存安全漏洞（非密码学缺陷）是每一层的主要攻击向量 | **confirmed** -- 四条链无一攻破密码学算法本身，全部利用溢出/越界/type-confusion |
+| H3 | Boot Chain 攻击可绕过 TA 层防护直达 EL3，在 TA 加固后成为可行替代路径 | **confirmed** -- Quarkslab 2024 四个 CVE 从 USB 物理接口直达 Secure World 全内存泄露 |
+| H4 | 自引用保护机制（保护策略未保护自身）构成一类系统性设计缺陷 | **confirmed** -- Kinibi mmap 黑名单未将自身地址列入 DENY 范围 |
+| H5 | 水平移动（TA 内部访问 SFS）在特定 TEE 架构下可替代垂直提权 | **confirmed** -- 360 Alpha Lab 在 QTEE 上无需 S-EL1/EL3 提权即提取 Widevine L1 密钥 |
+
+#### 分析实验
+
+| # | 实验 | 方法 | 结果 | 验证假设 |
+|---|------|------|------|----------|
+| E1 | 跨攻击链原语提取 | 对四条攻击链逐步拆解，提取可复用攻击原语并分类 | 识别出 6 个跨层级可复用原语：memcpy 溢出、type-confusion、info leak、ROP chain、mmap primitive、函数指针覆盖 | H1 |
+| E2 | 漏洞模式分层分类 | 按异常等级 (S-EL0 / S-EL1 / EL3 / Boot Chain) 对漏洞模式归类，统计每层最常见类型 | S-EL0 层以栈溢出和 type-confusion 为主；S-EL1 以 syscall 校验缺失和 mmap 缺陷为主；EL3 以 SMC handler OOB 为主 | H2 |
+| E3 | 防御措施有效性评估 | 交叉比对 11 项缓解措施与已知绕过案例，评定有效性等级 | Stack canary/ASLR 评为「中」（均有绕过案例），Hardware-bound keys 评为「最高」（无软件绕过路径），mmap 黑名单评为「低」 | H4 |
+| E4 | 攻击路径对比：TA 路线 vs Boot Chain 路线 | 从物理接触要求、持久性、攻击面、防御难度、适用场景五个维度对比 | TA 路线优势在远程可达，Boot Chain 优势在持久化和绕过 TA 加固；两者互补而非替代 | H3 |
+| E5 | TEE 架构间攻击面差异分析 | 比较 Kinibi (S-EL0→S-EL1 需额外提权) vs QTEE (S-EL0 可直接访问 SFS) 的隔离模型差异 | QTEE 的 SFS 访问模型使攻击者在 S-EL0 即可提取密钥，无需纵向提权；Kinibi 需要完整三级提权 | H5 |
 
 ---
 
@@ -85,7 +122,7 @@ TrustZone 在此基础上引入了 **Secure / Non-Secure 二分法**：EL0 和 E
 ![Normal World vs Secure World 异常等级对称视图](https://overkazaf.github.io/blogs/images/el0-to-el3/nw-sw-levels.png)
 *左右两大色块分别是 Secure World（绿色, SCR_EL3.NS=0）和 Normal World（蓝灰色, SCR_EL3.NS=1）。红色箭头标注的 SMC 调用是两个 World 之间唯一的合法通道——它必须经过中间的 EL3 Secure Monitor（红色）进行上下文保存/恢复和 World 切换。黄色虚线表示 shared memory 逻辑通道——Normal World 的 App (EL0-NW) 通过 TEE Client Driver 将命令和参数写入共享内存，S-EL1 TEE OS 再将其分发到目标 TA (S-EL0)。注意 NW 侧有三层（EL0→EL1→EL2），SW 侧只有两层（S-EL0→S-EL1），EL3 跨越两者之上。底部的 TZASC 是硬件级内存隔离控制器——它在总线级别强制 NW 无法访问 SW 内存。*
 
-这张图揭示了几个对攻击者至关重要的结构性事实：
+🧑‍🔬 这张图揭示了几个对攻击者至关重要的结构性事实：
 
 1. **NW→SW 的唯一入口是 shared memory**：攻击者不能直接调用 TA 的函数，只能通过 shared memory 传递数据。这意味着所有 S-EL0 层的漏洞都必须通过**精心构造的 shared memory 内容**触发
 2. **EL3 是两个 World 的桥梁和仲裁者**：控制 EL3 = 控制 World 切换 = 可以同时读写两个 World 的所有内存
@@ -247,7 +284,7 @@ TEE_Result TA_InvokeCommandEntryPoint(
 }
 ```
 
-### 3.2 常见漏洞模式
+### 3.2 常见漏洞模式 🔬
 
 | 模式 | 原理 | 真实案例 |
 |------|------|---------|
@@ -258,7 +295,7 @@ TEE_Result TA_InvokeCommandEntryPoint(
 
 ### 3.3 Type-Confusion 漏洞的利用细节
 
-GlobalConfusion 论文中描述的 type-confusion 漏洞值得展开——因为它影响了 14,777 个 TA 中 23% 的实例。下面用具体的 C 代码和内存布局说明攻击者如何利用它：
+🔬 GlobalConfusion 论文中描述的 type-confusion 漏洞值得展开——因为它影响了 14,777 个 TA 中 23% 的实例。下面用具体的 C 代码和内存布局说明攻击者如何利用它：
 
 ```c
 // 有漏洞的 TA command handler (真实案例简化)
@@ -331,7 +368,7 @@ if (paramTypes != exp)
     return TEE_ERROR_BAD_PARAMETERS;  // 拒绝类型不匹配的调用
 ```
 
-### 3.4 案例深剖：Project Zero 的 Widevine TA 利用（2017）
+### 3.4 案例深剖：Project Zero 的 Widevine TA 利用（2017） 🔬
 
 📺 **参考**：[Trust Issues: Exploiting TrustZone TEEs](https://projectzero.google/2017/07/trust-issues-exploiting-trustzone-tees.html)（Gal Beniamini）
 
@@ -391,7 +428,7 @@ QTEE 为每个 TA 实现了 ASLR (地址空间随机化)
 → 提取 Widevine L1 DRM 私钥
 ```
 
-**关键洞察**：360 的攻击**不需要提权到 S-EL1 或 EL3**——QTEE 的安全模型允许 TA 访问自己的 SFS，而攻击者已经在 TA 内部获得了代码执行。这是一种**水平移动**（lateral movement）而非垂直提权。
+🧑‍🔬 **关键洞察**：360 的攻击**不需要提权到 S-EL1 或 EL3**——QTEE 的安全模型允许 TA 访问自己的 SFS，而攻击者已经在 TA 内部获得了代码执行。这是一种**水平移动**（lateral movement）而非垂直提权。
 
 ---
 
@@ -481,7 +518,7 @@ EL3（Secure Monitor / ARM Trusted Firmware）是 ARM 系统中的**最高特权
 
 **问题**：已经获得了 S-EL1 Secure Driver 的代码执行，但 EL3 的代码页在物理内存中是**只读**的——Kinibi 内核的 mmap syscall 维护了一个**黑名单**，禁止映射特定的物理地址范围（包括 EL3 的代码段 `0xfe500000`）。
 
-**关键发现**：黑名单本身存储在 Kinibi 内核的数据段（`0xfe512440`），而这个地址**没有被自己列入黑名单**。
+🧑‍🔬 **关键发现**：黑名单本身存储在 Kinibi 内核的数据段（`0xfe512440`），而这个地址**没有被自己列入黑名单**。
 
 **利用步骤**：
 
@@ -574,7 +611,7 @@ el3_shellcode:
     msr   scr_el3, x3
 ```
 
-**为什么黑名单设计失败**：这是一个经典的 **self-referential 安全错误**——保护机制（黑名单）没有保护自己。类似于一把锁保护了房间里的所有保险箱，但锁本身放在房间里没有被保护。
+🧑‍🔬 **为什么黑名单设计失败**：这是一个经典的 **self-referential 安全错误**——保护机制（黑名单）没有保护自己。类似于一把锁保护了房间里的所有保险箱，但锁本身放在房间里没有被保护。
 
 ### 5.3 通用 S-EL1→EL3 漏洞模式
 
@@ -616,7 +653,7 @@ Linux Kernel (EL1)
 
 **信任链的原理**：每一层验证下一层的签名后才加载。如果某一层的验证被绕过，后续所有层都不可信。
 
-### 6.3 案例深剖：Quarkslab 2024 Boot Chain 4 CVE
+### 6.3 案例深剖：Quarkslab 2024 Boot Chain 4 CVE 🔬
 
 下面这张流程图展示了 4 个 CVE 的完整串联过程——每个 CVE 解锁下一步所需的能力，最终从 USB 物理接口直达 Secure World 全内存泄露：
 
@@ -732,7 +769,7 @@ LK 的堆实现没有 canary / CFI / ASLR，堆溢出可以直接覆盖相邻的
 
 ---
 
-## 七、防御矩阵：每一层的缓解措施
+## 七、防御矩阵：每一层的缓解措施 🔬
 
 | 层级 | 缓解措施 | 有效性 | 被绕过的案例 |
 |------|---------|--------|-----------|
@@ -754,7 +791,7 @@ LK 的堆实现没有 canary / CFI / ASLR，堆溢出可以直接覆盖相邻的
 
 ## 八、讨论：攻击链路中的可复用模块
 
-回顾四条攻击链，可以提炼出**六个可在不同层级间复用的攻击原语**：
+🧑‍🔬 回顾四条攻击链，可以提炼出**六个可在不同层级间复用的攻击原语**：
 
 | 原语 | 作用 | 出现在哪条链中 | 泛化方向 |
 |------|------|-------------|---------|
@@ -765,7 +802,7 @@ LK 的堆实现没有 canary / CFI / ASLR，堆溢出可以直接覆盖相邻的
 | **mmap primitive** | 映射任意物理地址到攻击者地址空间 | Quarkslab 2019, 2024 | S-EL1 和 EL3 层面 |
 | **函数指针覆盖** | 劫持 dispatch table → 控制执行流 | PZ 2017, Quarkslab 2019 | 适用于 C 代码中的 vtable/dispatch pattern |
 
-**关键原则**：每一层的攻击本质上都是同一个循环：
+🧑‍🔬 **关键原则**：每一层的攻击本质上都是同一个循环：
 
 ```
 找到输入通道 → 构造溢出/越界 → 获得读写原语
@@ -850,7 +887,7 @@ ARM TrustZone 的安全模型建立在**分层隔离**之上——每一层只�
 
 最后留一个观察供读者思考：
 
-> 四条攻击链中，**没有一条需要攻破 AES、RSA 或任何密码学算法本身**。它们全部利用的是**实现层面的内存安全问题**——溢出、越界、type-confusion、缺少边界检查。这意味着：**密码学是安全的，但承载密码学的代码不是**。
+> 🧑‍🔬 四条攻击链中，**没有一条需要攻破 AES、RSA 或任何密码学算法本身**。它们全部利用的是**实现层面的内存安全问题**——溢出、越界、type-confusion、缺少边界检查。这意味着：**密码学是安全的，但承载密码学的代码不是**。
 >
 > 从防御者的视角，最有效的投资不是发明更复杂的白盒 AES，而是在 TEE 代码中消除内存安全漏洞——用 Rust 重写 TA、强制 GP API type check、对所有 SMC handler 做形式化验证。
 >

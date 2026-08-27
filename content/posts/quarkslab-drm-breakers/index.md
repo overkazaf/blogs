@@ -19,7 +19,7 @@ math: false
 
 ## 〇、摘要
 
-本文并非一篇逆向工程实录，而是一份**技术考古报告**。笔者系统梳理了法国安全公司 Quarkslab 在白盒密码学攻击与 DRM 安全领域的完整研究脉络，试图回答一个问题：**当我们使用 DFA/DCA 去攻击白盒 AES 时，这些武器从哪里来，经历了怎样的锻造过程？**
+本文并非一篇逆向工程实录，而是一份**技术考古报告**。🧑‍🔬 笔者系统梳理了法国安全公司 Quarkslab 在白盒密码学攻击与 DRM 安全领域的完整研究脉络，试图回答一个问题：**当我们使用 DFA/DCA 去攻击白盒 AES 时，这些武器从哪里来，经历了怎样的锻造过程？**
 
 核心发现：
 
@@ -28,7 +28,43 @@ math: false
 3. **TEE 实战突破（2019–2020）**：三人团队在 Black Hat USA 2019 公开 Samsung TrustZone 攻击链，从 S-EL0 一路打到 EL3 代码执行——这层 TEE 正是 Widevine L1 DRM 的信任根基
 4. **新一代工具（2023–2024）**：DarkPhoenix（带外部编码的 DFA）和 BlueGalaxyEnergy（首个开源 BGE 实现）将攻击能力推进到下一代白盒防护
 
-笔者在前两篇文章中对 [Widevine L3 keybox 的 DFA 提取](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) 和 [Chrome CDM 白盒 AES 的 13 次碰壁](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 做了亲身实战，本文则退后一步，把镜头对准这些武器背后的铸剑者。
+🔬 笔者在前两篇文章中对 [Widevine L3 keybox 的 DFA 提取](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) 和 [Chrome CDM 白盒 AES 的 13 次碰壁](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 做了亲身实战，本文则退后一步，把镜头对准这些武器背后的铸剑者。
+
+---
+
+### 研究证据声明
+
+> **Research Evidence Block** — 本文属于 **Type B：技术分析/综述型文章**，核心方法是文献回顾与工具验证，而非原创逆向实战。以下声明研究方法、证据分级和范围边界。
+
+#### 研究方法
+
+| 维度 | 方法 | 说明 |
+|------|------|------|
+| **文献收集** | 穷举式检索 | 遍历 Quarkslab 官方博客全部文章（2015--2024）、CHES/Black Hat/USENIX 会议论文、SideChannelMarvels 全部 GitHub 仓库 |
+| **工具验证** | 亲手复现 | 笔者在前两篇文章中实际使用 phoenixAES/aes_keyschedule 完成 Widevine L3 DFA 攻击，验证工具链可用性 |
+| **交叉印证** | 多源比对 | 同一事件（如 DCA 论文）从学术论文、博客叙述、GitHub commit 历史三个维度交叉验证时间线和技术细节 |
+| **横向对比** | 团队扫描 | 检索 Project Zero / 360 Alpha Lab / Synacktiv / HexHive / Neodyme 的公开研究，建立 Quarkslab 在全球格局中的坐标 |
+
+#### 证据来源与可信度分级
+
+| 等级 | 来源类型 | 数量 | 可信度 | 说明 |
+|------|---------|------|--------|------|
+| **A** | 同行评审论文 | 4 篇 | ★★★★★ | CHES 2016 DCA、J.Cryptol 2019 Grey-Box、USENIX Security 2024 GlobalConfusion、TCHES 2020 |
+| **A** | 顶级安全会议演讲 | 3 场 | ★★★★★ | Black Hat USA 2019/2024、REcon 2023 |
+| **B+** | Quarkslab 官方技术博客 | ~12 篇 | ★★★★☆ | 作者为原始研究员本人，技术细节可靠；但属自我报告，无外部审稿 |
+| **B** | GitHub 开源仓库 | 11 个 | ★★★★☆ | 代码可验证、commit 历史可追溯；Stars/活跃度数据为查询时快照 |
+| **B** | CVE/Samsung Security Updates | 5 个 | ★★★★☆ | 官方确认的漏洞编号，补丁日期可查 |
+| **C+** | 笔者自身实验 | 2 次 | ★★★☆☆ | Widevine L3 DFA + Chrome CDM 分析，已在前序文章中详述；单人实验，未经独立复现 |
+| **C** | 第三方报道/媒体 | 3 篇 | ★★★☆☆ | David Buchanan 事件报道、Neodyme 博客等；事实核对依赖原始来源 |
+| **D** | 商业产品文档（QShield） | 1 份 | ★★☆☆☆ | Quarkslab 官网产品页面，属营销材料；EMVCo 认证可独立验证 |
+
+#### 范围限制
+
+- **未覆盖**：本文不涉及 Quarkslab 在非 DRM 领域的安全研究（如汽车安全、工控安全、量子密码学前沿）
+- **未覆盖**：Apple FairPlay / Microsoft PlayReady 的白盒实现细节（Quarkslab 公开研究中未涉及这两个 DRM 体系）
+- **时间截止**：文献检索截至 2024 年 10 月；2025 年后 Quarkslab 可能有新的公开研究未收录
+- **利益声明**：笔者与 Quarkslab 无商业关系，未使用 QShield 产品，所有分析基于公开资料
+- **工具验证偏差**：笔者仅亲手验证了 DFA 路径（phoenixAES + aes_keyschedule）；DCA/BGE/碰撞攻击路径为文献复述，未独立复现
 
 ---
 
@@ -54,7 +90,7 @@ math: false
 | **④ 新一代工具** | 2020–2024 | QBDI 碰撞攻击 + DarkPhoenix + BGE | Paul Hernault, Nicolas Surbayrole | 破解带外部编码 + shuffled states 的白盒 |
 | **⑤ 全栈纵深** | 2023–2024 | Android FBE + Boot Chain 4 CVE | Rossi Bellom, Melotti, Neveu | 从 USB 接口到 Secure World 全内存泄露 |
 
-> 一条贯穿始终的线索：Quarkslab 的研究者总是先**发表理论**，再**开源工具**，最后在**真实系统上实战验证**。这种「论文 → 代码 → 漏洞」的三拍节奏，使他们的工作具有极强的可复现性和工程影响力。
+> 🧑‍🔬 一条贯穿始终的线索：Quarkslab 的研究者总是先**发表理论**，再**开源工具**，最后在**真实系统上实战验证**。这种「论文 → 代码 → 漏洞」的三拍节奏，使他们的工作具有极强的可复现性和工程影响力。
 
 ---
 
@@ -82,7 +118,7 @@ math: false
 
 笔者在做 Widevine L3 DFA 时，核心工具链就是 SideChannelMarvels 的 `phoenixAES`（JeanGrey 里的模块）和 `aes_keyschedule`（Stark）——它们把 DFA 从「论文里的概念」变成了「终端里的 one-liner」。当笔者碰壁于 Chrome CDM 4.10.2934 的白盒 AES 时，又是 Quarkslab 的 DCA/collision 相关论文帮助笔者理解了「为什么这个实现不可被 DFA 攻破」。
 
-换句话说，**Quarkslab 的工作是笔者前两篇文章的学术上游**。不把这条脉络理清楚，整个系列就缺了地基。
+换句话说，🧑‍🔬 **Quarkslab 的工作是笔者前两篇文章的学术上游**。不把这条脉络理清楚，整个系列就缺了地基。
 
 ### 2.3 与本博客其他文章的关系
 
@@ -103,7 +139,7 @@ math: false
 
 DRM 恰恰是白盒密码学最重要的应用场景：Widevine CDM 跑在用户的手机/浏览器里，攻击者拥有 root 权限和任意调试能力。白盒 AES 的任务是：**即使攻击者能看到每一条指令的执行，也无法提取出密钥**。
 
-截至 2026 年，学术界的共识是：**没有公开的、已被证明安全的白盒 AES 设计**。所有已知方案都已被攻破——很大程度上归功于 Quarkslab。
+🧑‍🔬 截至 2026 年，学术界的共识是：**没有公开的、已被证明安全的白盒 AES 设计**。所有已知方案都已被攻破——很大程度上归功于 Quarkslab。
 
 ### 3.2 三种核心攻击范式
 
@@ -284,7 +320,7 @@ T_i(x) = L_i · S(x ⊕ k_i) ⊕ c_i
 3. 对 trace 矩阵的每一列，计算它与 256 个密钥假设下的 S-box 输出的 Pearson 相关系数
 4. 相关系数最高的假设 = 正确的密钥字节
 
-**结果**：攻破了 CHES 2016 白盒挑战赛的所有提交方案。**获得当年 CHES 最佳论文奖**。
+**结果**：🔬 攻破了 CHES 2016 白盒挑战赛的所有提交方案。**获得当年 CHES 最佳论文奖**。
 
 **论文**：Bos J.W., Hubain C., Michiels W., Teuwen P. "Differential Computation Analysis: Hiding Your White-Box Designs is Not Enough." CHES 2016, LNCS vol. 9813, pp. 215–236. ([Springer](https://link.springer.com/chapter/10.1007/978-3-662-53140-2_11))
 
@@ -350,7 +386,7 @@ daredevil -c mem_addr1_rw1_128_2000.config
 | **Daredevil** | [SideChannelMarvels/Daredevil](https://github.com/SideChannelMarvels/Daredevil) | CPA 高阶相关功率分析 |
 | **Tracer** | [SideChannelMarvels/Tracer](https://github.com/SideChannelMarvels/Tracer) | DBI trace 收集（PIN/Valgrind/可视化） |
 
-**对 DRM 的影响**：笔者在 [Widevine L3 keybox 文章](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) 中正是使用 `phoenixAES` 从 150 次 fault 中恢复了 ROOT_KEY。DFA 的速度（秒级）远超 DCA（分钟级），是实际攻击白盒 DRM 的首选。
+**对 DRM 的影响**：🔬 笔者在 [Widevine L3 keybox 文章](https://overkazaf.github.io/blogs/posts/widevine-l3-keybox-mass-production/) 中正是使用 `phoenixAES` 从 150 次 fault 中恢复了 ROOT_KEY。DFA 的速度（秒级）远超 DCA（分钟级），是实际攻击白盒 DRM 的首选。
 
 #### 动手复现 DFA
 
@@ -420,7 +456,7 @@ for sym in lib.imported_symbols:
 lib.write("target_linux.so")
 ```
 
-**结果**：修改后的 SO 在 Linux 上用 Valgrind trace 收集 → DFA 攻击 → **10.2 秒内恢复密钥，仅 3300 次执行**。
+**结果**：🔬 修改后的 SO 在 Linux 上用 Valgrind trace 收集 → DFA 攻击 → **10.2 秒内恢复密钥，仅 3300 次执行**。
 
 **为什么这很重要**：几乎所有移动端 DRM（Widevine、PlayReady、FairPlay 的部分实现）都以 Android/iOS native 库的形式存在。LIEF 让 SideChannelMarvels 的全套攻击工具可以**直接作用于移动平台的白盒实现**，不需要在真机上跑。笔者做 Widevine DFA 时用的 Unicorn/unidbg 仿真本质上也是同一思路——把目标代码搬到可控环境执行。
 
@@ -536,7 +572,7 @@ ARM Trusted Firmware (EL3)     ← 最终: 任意代码执行
 
 **补丁时间线**：Samsung 在 2020 年 2 月至 6 月陆续推送补丁。
 
-**对 DRM 的意义**：这项研究证明了 **TEE 并非不可攻破的黑箱**。虽然 Quarkslab 没有公开针对 Widevine L1 TA 的具体攻击，但他们展示的 EL3 代码执行能力意味着：攻击者在获得 EL3 控制后，可以读取任何 TA 的内存——包括 Widevine L1 TA 中的设备私钥。这也解释了为什么 Google 后来要求 L1 设备必须通过更严格的硬件安全认证（如 StrongBox Keymaster、Android Hardware Attestation）。
+**对 DRM 的意义**：这项研究证明了 **TEE 并非不可攻破的黑箱**。虽然 Quarkslab 没有公开针对 Widevine L1 TA 的具体攻击，但他们展示的 EL3 代码执行能力意味着：🧑‍🔬 攻击者在获得 EL3 控制后，可以读取任何 TA 的内存——包括 Widevine L1 TA 中的设备私钥。这也解释了为什么 Google 后来要求 L1 设备必须通过更严格的硬件安全认证（如 StrongBox Keymaster、Android Hardware Attestation）。
 
 #### 动手复现 Samsung TrustZone 分析
 
@@ -936,7 +972,7 @@ SideChannelMarvels 团队发起攻击:
 
 > 这种「用自己的矛刺自己的盾」的模式，使 QShield 的安全基线天然高于不做攻击研究的白盒厂商（如纯学术背景的创业公司）。当然，这并不意味着 QShield 不可攻破——它意味着**已知的公开攻击方法对它无效**，但未知的零日攻击始终是悬在头上的达摩克利斯之剑。
 
-### 6.3 连接笔者的 DRM 研究
+### 6.3 连接笔者的 DRM 研究 🔬
 
 | Quarkslab 工具/理论 | 笔者的实际使用 | 效果 |
 |-------------------|--------------|------|
@@ -948,7 +984,7 @@ SideChannelMarvels 团队发起攻击:
 
 ### 6.4 白盒密码学的未来
 
-Quarkslab 的十年工作实质上证明了一个**悲观结论**：**基于查找表的白盒 AES 在理论上不安全**。无论是 DCA、DFA 还是 BGE，总有一种攻击可以恢复密钥。这正是笔者在 Chrome CDM 文章中观察到的：Google 的最新 CDM 已经**放弃了经典查找表方案**，转向了「密钥从不以可观测形式存在」的全新白盒设计。
+🧑‍🔬 Quarkslab 的十年工作实质上证明了一个**悲观结论**：**基于查找表的白盒 AES 在理论上不安全**。无论是 DCA、DFA 还是 BGE，总有一种攻击可以恢复密钥。这正是笔者在 Chrome CDM 文章中观察到的：Google 的最新 CDM 已经**放弃了经典查找表方案**，转向了「密钥从不以可观测形式存在」的全新白盒设计。
 
 这是一场攻防的代际跃迁：
 
@@ -1008,7 +1044,7 @@ Chrome CDM 4.10.2934 属于第 3 代——笔者的 [13 次碰壁](https://overk
     └── 否 → 需要先解决执行/提取问题（见范式二）
 ```
 
-**你的收获**：这棵决策树不是 Quarkslab 直接画的——它是笔者从他们十年间发布的不同工具的适用条件中**反向推导**出来的。实际操作中，笔者在 Widevine L3 研究中走的是「是 → 是 → 否 → JeanGrey」这条路径，150 个 fault 秒级出密钥。
+**你的收获**：这棵决策树不是 Quarkslab 直接画的——它是笔者从他们十年间发布的不同工具的适用条件中**反向推导**出来的。实际操作中，🔬 笔者在 Widevine L3 研究中走的是「是 → 是 → 否 → JeanGrey」这条路径，150 个 fault 秒级出密钥。
 
 #### 范式二：跨平台二进制迁移（LIEF + 仿真器）
 

@@ -31,6 +31,42 @@ math: false
 
 核心贡献不在于最终的流捕获方案（概念上并不复杂），而在于 **13 次失败尝试系统性地刻画了 CDM 4.10.2934 的白盒 AES 防护边界**——这些"不可能"的证明本身就是有价值的安全分析。
 
+### Research Evidence
+
+**实验环境**
+
+| 项目 | 规格 |
+|------|------|
+| 目标二进制 | `libwidevinecdm.so` 4.10.2934.0 (18.2 MB, x86_64) |
+| 运行平台 | Chrome Linux 144.0+, `--no-sandbox`, SwiftShader 渲染 |
+| 主机 | Ubuntu 22.04 LTS, Dual Xeon E5-2673 v4 (80 threads), 96 GB RAM |
+| 分析工具 | radare2, eBPF/bpftrace, GDB, Frida, perf, custom C hook (3461 行) |
+| 分析周期 | 2026-04-20 ~ 2026-05-04 (15 天) |
+| Hook 代码 | 3,461 行 C + ~700 行 Python (CDP + 编码器) |
+
+**核心假设**
+
+| # | 假设 | 状态 |
+|---|------|------|
+| H1 | CDM 通过 BoringSSL 执行 AES 加密 | **证伪** — 12 个 eBPF uprobe 全部 0 命中 |
+| H2 | AES 密钥以裸字节存在于堆内存中 | **证伪** — 131 MB 堆扫描 0 命中，key blinding 机制确认 |
+| H3 | 标准 AES S-box/T-table 存在于 CDM 内存空间 | **证伪** — 453 MB 全进程扫描 0 命中 |
+| H4 | AES 硬件指令 (`aesenc`) 在解密时被执行 | **证伪** — int3 trap 0 次触发，perf 确认 0 采样 |
+| H5 | 密钥可通过 key_id 空间邻近性定位 | **证伪** — 17 个 key_id 位置 ±512B 范围内无有效密钥 |
+| H6 | vtable hook 可捕获解密后 YUV 明文 | **确认** — DecryptAndDecodeFrame (slot 14) 输出完整 I420/P010 帧 |
+
+**关键实验**
+
+| 实验 | 方法 | 数据规模 | 结果 | 置信度 |
+|------|------|---------|------|--------|
+| BoringSSL 动态验证 | eBPF uprobe × 12 函数入口 | 10 分钟 Netflix 播放 | 全部 0 命中 | 确定 |
+| 堆内存密钥扫描 | 暴力扫描 `rw-p` 映射 | 131 MB | AES-128 模式 0 匹配 | 确定 |
+| AES S-box 全局搜索 | 256B 标准 S-box 模式匹配 | 453 MB (CDM + Chrome) | CDM 区域 0 命中 | 确定 |
+| CPU profiling | `perf record -g -F 9999` 30s | ~300,000 调用栈 | 97% CPU 在 OLLVM CFF 调度器 `0xd23680` | 确定 |
+| aesenc 硬件指令 trap | int3 字节注入 × 35 位置 | 全解密会话 | 0 次 SIGTRAP | 确定 |
+| vtable hook 流捕获 | LD_PRELOAD + vtable[14] patch | 4,217 帧 / 11.2 GB YUV | Netflix 720p 完整捕获 | 确定 |
+| 解密函数拆解 | radare2 反汇编 + perf annotate | 758 字节 / 228 条指令 | 两阶段循环 XOR + GF(257) 仿射白化 | 确定 |
+
 ---
 
 ## 一、路线总览
@@ -144,7 +180,7 @@ CDM utility 进程有特殊的沙箱限制：
 | 2 | Hook `aesni_ctr32_encrypt_blocks` | **从未触发 + 破坏播放** | 错误的函数 / helper 内部标签 |
 | 3 | eBPF uprobes × 12 个 BoringSSL AES 入口 | **全部 0 命中** | BoringSSL AES 是 dead code |
 
-**结论**：CDM 4.10.2934 **完全不使用 BoringSSL 的 AES 实现**。二进制中存在的 `aesni_*` 函数是链接残留物，从未被调用。
+🔬 **结论**：CDM 4.10.2934 **完全不使用 BoringSSL 的 AES 实现**。二进制中存在的 `aesni_*` 函数是链接残留物，从未被调用。
 
 ### 4.2 Phase 2：内存搜索（5 次尝试）
 
@@ -158,7 +194,7 @@ CDM utility 进程有特殊的沙箱限制：
 | 7 | 搜索 `key_id` 附近 ±512B | 17 个 key_id 位置 | **密钥与 key_id 不相邻** |
 | 8 | UpdateSession 边界堆快照 | 122 MB | **密钥收到后立即 XOR 混淆** |
 
-**结论**：CDM 使用 **key blinding**——内容密钥 K 在 license 解密后立即与 session mask M 进行 XOR，堆中存储的是 `K_blinded = K ⊕ M`，裸密钥仅在栈帧内存在且返回即清零。
+🔬 **结论**：CDM 使用 **key blinding**——内容密钥 K 在 license 解密后立即与 session mask M 进行 XOR，堆中存储的是 `K_blinded = K ⊕ M`，裸密钥仅在栈帧内存在且返回即清零。
 
 ### 4.3 Phase 3：硬件级拦截（2 次尝试）
 
@@ -169,7 +205,7 @@ CDM utility 进程有特殊的沙箱限制：
 | 9 | int3 trap on aesenc 操作码 | **0 次触发**：CDM 从不执行 aesenc |
 | 10 | `perf record` CPU profiling | 97% CPU 在 OLLVM CFF 调度器 `0xd23680` |
 
-**关键发现**：CDM 的 AES 实现完全是**软件白盒**——没有 S-box、没有 T-table、没有 aesenc 指令。97% 的 CPU 时间花在 OLLVM 平坦化的调度器上，通过 `imul; xor` 算术运算实现虚拟化的 AES。这与笔者在 Android L3 build 4464 上观察到的 T-table 实现**完全不同**。
+🔬 **关键发现**：CDM 的 AES 实现完全是**软件白盒**——没有 S-box、没有 T-table、没有 aesenc 指令。97% 的 CPU 时间花在 OLLVM 平坦化的调度器上，通过 `imul; xor` 算术运算实现虚拟化的 AES。这与笔者在 Android L3 build 4464 上观察到的 T-table 实现**完全不同**。
 
 ### 4.4 确定性结论
 
@@ -182,7 +218,7 @@ CDM utility 进程有特殊的沙箱限制：
 突破路径: Neodyme 式白盒分析 (预估 2-6 周, 需反混淆 OLLVM CFF)
 ```
 
-**但关键洞察是**：**笔者不需要密钥来获取明文**。CDM 的 `DecryptAndDecodeFrame()` 直接输出解密后的 YUV 帧——hook 这个函数就能捕获明文视频流，完全绕过密钥提取的需求。
+🧑‍🔬 **但关键洞察是**：**笔者不需要密钥来获取明文**。CDM 的 `DecryptAndDecodeFrame()` 直接输出解密后的 YUV 帧——hook 这个函数就能捕获明文视频流，完全绕过密钥提取的需求。
 
 ---
 
@@ -229,7 +265,7 @@ void* my_CreateCdmInstance(...) {
 }
 ```
 
-**为什么 vtable patch 优于 .text patch**：
+🧑‍🔬 **为什么 vtable patch 优于 .text patch**：
 - vtable 在 `.data.rel.ro` 中，CDM 不校验其完整性
 - 8 字节对齐的指针写入，无指令边界问题
 - 语义清晰的拦截点（函数调用级，而非指令级）
@@ -246,7 +282,7 @@ void* my_CreateCdmInstance(...) {
 | 9 | `Stride(plane)` | 行字节数 |
 | 11 | `Timestamp()` | PTS |
 
-**一个容易踩的坑**：Netflix 输出 `Format() = 17`（YUV420P10, 10-bit），`stride_y = 2560` 意味着 `width = 1280`（每像素 2 字节），不是 2560 像素宽。`Buffer::Size()` 返回的是 Capacity 而非实际帧大小，正确的帧范围需要从 offset + stride 计算：
+🔬 **一个容易踩的坑**：Netflix 输出 `Format() = 17`（YUV420P10, 10-bit），`stride_y = 2560` 意味着 `width = 1280`（每像素 2 字节），不是 2560 像素宽。`Buffer::Size()` 返回的是 Capacity 而非实际帧大小，正确的帧范围需要从 offset + stride 计算：
 
 ```c
 height = (off_u - off_y) / stride_y;
@@ -327,7 +363,7 @@ window.fetch = function(url, opts) {
 
 **问题**：每帧 1280×720 YUV420P10 = 2.77 MB。8x 播放速率下 hook 的 `write()` 吞吐需求约 **553 MB/s**——超过消费级 SSD 的顺序写入上限（~500 MB/s）。如果 hook 在 I/O 上阻塞，CDM 处理速度会下降，Chrome 检测到 buffer 消耗变慢就会触发 ABR 降级，分辨率从 720p 掉到 432p。
 
-**解决方案**：将 YUV 输出写入 `/dev/shm`（Linux 的 tmpfs 挂载点），这是一个完全基于 RAM 的文件系统，吞吐量 10-20 GB/s，hook 的 `write()` 调用**永远不会阻塞**。
+🧑‍🔬 **解决方案**：将 YUV 输出写入 `/dev/shm`（Linux 的 tmpfs 挂载点），这是一个完全基于 RAM 的文件系统，吞吐量 10-20 GB/s，hook 的 `write()` 调用**永远不会阻塞**。
 
 ![I/O 吞吐对比](https://overkazaf.github.io/blogs/images/cdm-dump/shm_throughput.png)
 *不同播放速率下的 I/O 吞吐需求对比。SSD 在 8x 速率下成为瓶颈（553 > 500 MB/s），导致 CDM 阻塞和 ABR 降级；/dev/shm 的 RAM 吞吐远超需求，hook 永不阻塞。*
@@ -629,7 +665,7 @@ Chrome 的 CDM 运行在一个定制沙箱中（`--service-sandbox-type=cdm`）�
 | `fprintf(stdout, ...)` | **OK** | fd 1 被 Chrome 继承，重定向到父进程的日志管道 |
 | `pthread_create(...)` | **看似 OK 但阻塞** | seccomp 允许 `clone()`，但 constructor 完成前创建线程导致死锁 |
 
-**发现 fd 1 的过程**：笔者最初使用 stderr 输出日志——一行输出都看不到，以为 hook 没有加载。切换到 `/tmp` 文件——权限拒绝。最后在绝望中尝试 `write(1, msg, len)`——日志出现在 Chrome 的 stdout 中！
+🧑‍🔬 **发现 fd 1 的过程**：笔者最初使用 stderr 输出日志——一行输出都看不到，以为 hook 没有加载。切换到 `/tmp` 文件——权限拒绝。最后在绝望中尝试 `write(1, msg, len)`——日志出现在 Chrome 的 stdout 中！
 
 原理：Chrome 的进程模型中，`fork()` + `execve()` 创建子进程时会选择性关闭文件描述符。CDM utility 进程关闭 stderr（安全考虑：防止 CDM 向用户终端输出信息），但保留 stdout（用于 IPC 日志收集）。这一行为没有文档化，笔者是通过 `/proc/self/fd/` 枚举发现的：
 
@@ -748,7 +784,7 @@ $ perf report --sort=symbol
 
 Netflix 播放期间，**0 次 SIGTRAP 触发**。aesenc 硬件指令存在于二进制中但**从未被执行**。
 
-**综合结论**：CDM 4.10.2934 包含 BoringSSL 的 AES 实现作为**链接残留物**——它与 Chrome 的 BoringSSL 共享库一起编译，但 CDM 的内容解密路径完全使用自己的白盒软件 AES 实现，通过 OLLVM 虚拟化执行。
+🔬 **综合结论**：CDM 4.10.2934 包含 BoringSSL 的 AES 实现作为**链接残留物**——它与 Chrome 的 BoringSSL 共享库一起编译，但 CDM 的内容解密路径完全使用自己的白盒软件 AES 实现，通过 OLLVM 虚拟化执行。
 
 ### 5A.5 白盒 AES key blinding 的密码学原理
 
@@ -1045,7 +1081,7 @@ for b in range(256): S_inv[S[b] & 0xff] = b
 # 逆变换: S_inv(y) = 53 * (y - 96) mod 257, 因为 97 * 53 ≡ 1 (mod 257)
 ```
 
-**这不是 AES S-box**。标准 AES S-box 基于 GF(2⁸) 上的乘法逆 + 仿射变换；CDM 的 S-box 基于 GF(257) 上的线性映射。这解释了为什么笔者在内存中搜索标准 AES S-box 时得到 0 命中——CDM 使用了一个**完全不同的代数结构**。
+🔬 **这不是 AES S-box**。标准 AES S-box 基于 GF(2⁸) 上的乘法逆 + 仿射变换；CDM 的 S-box 基于 GF(257) 上的线性映射。这解释了为什么笔者在内存中搜索标准 AES S-box 时得到 0 命中——CDM 使用了一个**完全不同的代数结构**。
 
 #### 为什么这个设计对 DFA 免疫
 
@@ -1144,7 +1180,7 @@ ptrace(PTRACE_POKEUSER, cdm_pid, offsetof(user, u_debugreg[7]),
 方案: hook DecryptAndDecodeFrame, 捕获 YUV 输出
 ```
 
-正如笔者在 Widevine L3 研究中强调的"注意力维度切换"——面对 1350 万条指令的 trace 时，不看代码看内存；面对不可提取的密钥时，不提取密钥提取明文。**解决问题的第一步，往往是重新定义问题**。
+🧑‍🔬 正如笔者在 Widevine L3 研究中强调的"注意力维度切换"——面对 1350 万条指令的 trace 时，不看代码看内存；面对不可提取的密钥时，不提取密钥提取明文。**解决问题的第一步，往往是重新定义问题**。
 
 ### 7.2 这 13 次失败的价值
 
@@ -1159,12 +1195,12 @@ ptrace(PTRACE_POKEUSER, cdm_pid, offsetof(user, u_debugreg[7]),
 
 ### 7.3 AI 辅助的能力边界
 
-**AI 帮上忙的**：
+🤖 **AI 帮上忙的**：
 - 3461 行 `hook.c` 的大量模板代码（`mprotect` + vtable 偏移计算 + YUV 帧解析）
 - 13 种攻击向量的系统性罗列和失败原因分析
 - eBPF probe 脚本和 radare2 命令的生成
 
-**AI 做不到的**：
+🧑‍🔬 **AI 做不到的**：
 - 判断"BoringSSL 函数存在但是 dead code"——需要 `perf record` 的 CPU profiling 实证
 - 发现 `VideoFrame_2::Format() = 17` 意味着 10-bit YUV（文档缺失，需要逆向 CDM 接口头文件）
 - 做出"放弃密钥提取，转向流捕获"的战略决策——这需要对 13 次失败的综合判断

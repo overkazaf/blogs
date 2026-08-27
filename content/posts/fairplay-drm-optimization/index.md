@@ -31,6 +31,53 @@ math: false
 
 ---
 
+### Research Evidence
+
+> **实验可信度声明**：本文所有性能数据均在受控环境中多轮重复测量（单首 50 轮 + 批量 13 首 × 5 轮），白盒攻击实验遵循 Quarkslab SideChannelMarvels 方法论。
+
+**实验环境**
+
+| 维度 | 配置 |
+|------|------|
+| **硬件** | AMD EPYC 7501 (2 cores / 4GB RAM) |
+| **操作系统** | Debian 12 (Linux) |
+| **目标二进制** | `libCoreFP.so` (Apple Music for Android, FairPlay Streaming) |
+| **运行时** | aria chroot 沙箱（TCP 解密服务，端口 47010 / 47020） |
+| **测试数据** | 13 首 Hi-Res ALAC (88.2–192 kHz, 24-bit)，含 Beach Boys / Jack Johnson / Beatles |
+| **总样本量** | 27,811 samples / 463.7 MB |
+| **统计方案** | 单首 50 轮 + 批量 13 首 × 5 轮 |
+| **白盒攻击工具** | DFA (fault via `/proc/PID/mem`) / S-box scan (148.8 MB) / GDB (`libcrypto.so::AES_cbc_encrypt`) |
+| **逆向工具链** | Frida / IDA Pro / unidbg / GDB / radare2 |
+
+**假设清单**
+
+| # | 假设 | 类型 | 结果 | 章节 |
+|---|------|------|------|------|
+| H1 | TCP Nagle 算法是 193s 延迟的根因 | 性能 | ✅ **确认** — TCP_NODELAY 后 193s → 3.72s (52x) | §三 |
+| H2 | 双线程管线化可进一步降低延迟 | 性能 | ✅ **确认** — 3.72s → 3.40s（localhost 收益有限，高延迟链路 10x+） | §四 |
+| H3 | 连接复用可消除每首 ~0.8s 的 key context 开销 | 性能 | ✅ **确认** — `PersistentDecryptSession` 跨曲复用 | §五 |
+| H4 | 下载与解密可完全重叠（预取管线） | 性能 | ✅ **确认** — 批量 per-track 5.06s → ~3.0s | §五 |
+| H5 | 流式 BMFF 解析可将内存降至常量级 | 内存 | ✅ **确认** — 181 MB → 11 MB (94%↓)，速度 +26% 可接受 | §六 |
+| H6 | DFA fault injection 可从 libCoreFP.so 提取 AES 密钥 | 密码学 | ❌ **否定** — 600 次注入，0 次有效 4-byte diff | §七 |
+| H7 | libCoreFP.so 中存在标准 S-box / T-table 结构 | 密码学 | ❌ **否定** — 148.8 MB 全内存扫描零命中 | §七 |
+| H8 | FairPlay 调用 libcrypto 进行 AES 运算 | 密码学 | ❌ **否定** — GDB 断点未触发 | §七 |
+
+**关键实验**
+
+| 实验 | 方法 | 量化结果 | 判定 |
+|------|------|---------|------|
+| TCP_NODELAY 消除 Nagle | `setsockopt(TCP_NODELAY, 1)` + 50 轮计时 | 193s → 3.72s / 0.3 → 16.6 MB/s | 根因确认 |
+| 双线程管线化 | writer/reader 分离 + bounded semaphore(64) | 3.72s → 3.40s / 18.1 MB/s | 收益递减 |
+| 连接复用 | `PersistentDecryptSession` 跨曲保持 TCP | 每首省 ~0.8s | 有效 |
+| 预取管线 | `ThreadPoolExecutor(2)` 后台下载 | 批量 5.06s → ~3.0s/首 | download+decrypt 完全重叠 |
+| 流式 BMFF 解析 | 逐 box header 解析 + 逐 sample 解密 | 内存 181 → 11 MB / 耗时 +26% | 速度-内存 tradeoff |
+| DFA fault injection | 600 次 single-byte fault via `/proc/PID/mem` | 0 次产生 4-byte diff | 第三代白盒不可攻破 |
+| S-box/T-table 全内存扫描 | 搜索 `63 7c 77 7b...` + `c6 63 63 a5` | libCoreFP.so 零命中 | 无标准查找表 |
+| GDB AES 断点 | `b AES_cbc_encrypt` + 触发真实解密 | 断点未触发 | FairPlay 自有密码实现 |
+| 13 首 × 5 轮批量统计 | 中位吞吐 + stdev 评估 | 16.1 MB/s / stdev < 0.3s | 稳定性达标 |
+
+---
+
 ## 一、路线总览
 
 ![优化时间线](https://overkazaf.github.io/blogs/images/fairplay-drm-optimization/optimization-timeline.png)
@@ -52,7 +99,7 @@ math: false
 
 ### 2.1 笔者的逆向经历
 
-在 [Part 1（逆向篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-frida-reversing/) 中，笔者已经通过 Frida 动态插桩 + IDA Pro 静态分析，完整还原了 Apple Music for Android 的 FairPlay DRM 解密调用链——从 Java 层 `FootHillDecryptionKey` 追踪到 Native 层的 5 个关键函数，定位了白盒 AES 入口 `NfcRKVnxuKZy04KWbdFu***`，并成功 dump 了加密/解密 buffer。在此基础上，笔者基于 unidbg 仿真框架和 rootfs chroot 技术还原了完整的解密流程。在 [aria](https://github.com/overkazaf/aria) 项目中，笔者将 Apple 自家的 Android 二进制（`/system/bin/main`，链接 `libCoreFP.so` / `libCoreLSKD.so` / `libandroidappmusic.so`）丢进 Linux 的 chroot 沙箱，通过 TCP 协议与外部编排层通信，让 Apple 自己的 FairPlay 实现完成解密——不自研密码学，只做协议还原与工程编排。
+在 [Part 1（逆向篇）](https://overkazaf.github.io/blogs/posts/fairplay-drm-frida-reversing/) 中，🧑‍🔬 笔者已经通过 Frida 动态插桩 + IDA Pro 静态分析，完整还原了 Apple Music for Android 的 FairPlay DRM 解密调用链——从 Java 层 `FootHillDecryptionKey` 追踪到 Native 层的 5 个关键函数，定位了白盒 AES 入口 `NfcRKVnxuKZy04KWbdFu***`，并成功 dump 了加密/解密 buffer。在此基础上，笔者基于 unidbg 仿真框架和 rootfs chroot 技术还原了完整的解密流程。在 [aria](https://github.com/overkazaf/aria) 项目中，笔者将 Apple 自家的 Android 二进制（`/system/bin/main`，链接 `libCoreFP.so` / `libCoreLSKD.so` / `libandroidappmusic.so`）丢进 Linux 的 chroot 沙箱，通过 TCP 协议与外部编排层通信，让 Apple 自己的 FairPlay 实现完成解密——不自研密码学，只做协议还原与工程编排。
 
 这条路线走通之后，笔者在实际使用中碰到了严重的性能瓶颈：**一首 3 分钟的 Hi-Res 歌曲（60MB）需要 193 秒才能解密完成**。考虑到批量场景下可能需要处理数百首歌，这个速度完全不可接受。
 
@@ -87,7 +134,7 @@ io.ReadFull(conn, decryptedChunk)                                // 等明文
 
 一首 Hi-Res 歌曲有 ~4346 个 sample，每个 round-trip 耗时 44ms → 总计 **193 秒**。
 
-**根因**：Go 的 `net.Dial` 默认不设置 `TCP_NODELAY`，TCP 的 Nagle 算法将每个 4 字节长度头缓冲 40ms 后才发送（等待凑满一个 MSS 或收到前一个包的 ACK）。
+🧑‍🔬 **根因**：Go 的 `net.Dial` 默认不设置 `TCP_NODELAY`，TCP 的 Nagle 算法将每个 4 字节长度头缓冲 40ms 后才发送（等待凑满一个 MSS 或收到前一个包的 ACK）。
 
 ![Nagle 卡顿 vs TCP_NODELAY 管线化的时序对比](https://overkazaf.github.io/blogs/images/fairplay-drm-optimization/nagle-vs-pipeline.png)
 *上半区（红）Phase 0：逐样本同步——每个 4B 长度头被 Nagle 扣住、对端 delayed ACK 压着不回，双方互等 ~40ms 定时器超时，单 sample ≈ 44ms，×4346 → 193s。下半区（绿）Phase 1-2：`TCP_NODELAY` 立即发包 + writer/reader 双线程全双工管线化，发送与接收重叠，整曲降至 3.4s（57x，吞吐 0.3 → 18.1 MB/s）。同样的 round-trip 模式也存在于 §十一 列出的 `zhaarey/wrapper` 等 Apple Music 工具中，这张图的优化路径可直接复用。*
@@ -103,7 +150,7 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 256 * 1024)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
 ```
 
-**效果**：193s → **3.72s**（52x），吞吐从 0.3 MB/s 提升到 16.6 MB/s。
+🔬 **效果**：193s → **3.72s**（52x），吞吐从 0.3 MB/s 提升到 16.6 MB/s。
 
 **原理**：`TCP_NODELAY` 禁用 Nagle 算法，每个 `send()` 调用立即发包，不等待凑满。对于「频繁发送小包 + 大包」的模式（4B 长度头 + 数 KB 样本数据），Nagle 是灾难性的——它把本应微秒级发出的小包延迟了 40ms。
 
@@ -113,7 +160,7 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
 
 TCP 是全双工的——发送方不需要等接收方回复就能继续发送。但原始代码是串行的：发一个 → 等一个 → 发下一个。
 
-优化方案：**两个线程**，一个专门发送、一个专门接收，用 bounded semaphore 控制 pipeline depth（防止发送方跑太远导致 aria 缓冲区溢出）：
+🧑‍🔬 优化方案：**两个线程**，一个专门发送、一个专门接收，用 bounded semaphore 控制 pipeline depth（防止发送方跑太远导致 aria 缓冲区溢出）：
 
 ```python
 def decrypt_samples_pipelined(samples, keys, track_id, ...):
@@ -134,7 +181,7 @@ def decrypt_samples_pipelined(samples, keys, track_id, ...):
     Thread(target=_reader).start()
 ```
 
-**效果**：3.72s → **3.40s**（在 localhost 上提升有限，因为 TCP_NODELAY 已经消除了主要延迟；在高延迟链路如 SSH 隧道上提升 10x+）。
+🔬 **效果**：3.72s → **3.40s**（在 localhost 上提升有限，因为 TCP_NODELAY 已经消除了主要延迟；在高延迟链路如 SSH 隧道上提升 10x+）。
 
 ---
 
@@ -167,7 +214,7 @@ decrypt_current_track(current_prepared)
 next_prepared = future.result()
 ```
 
-**效果**：批量模式下 per-track 时间从 5.06s（含下载 0.76s + m3u8 0.83s）降至 ~3.0s（download 与 decrypt 完全重叠）。
+🔬 **效果**：批量模式下 per-track 时间从 5.06s（含下载 0.76s + m3u8 0.83s）降至 ~3.0s（download 与 decrypt 完全重叠）。
 
 ---
 
@@ -181,7 +228,7 @@ next_prepared = future.result()
 
 ### 6.2 解决方案：Streaming ISO BMFF
 
-ISO BMFF（MP4）的 box 结构天然支持流式处理——每个 box 有 8 字节 header（4B size + 4B type），不需要看完整个文件就能知道每个 box 的类型和大小。
+🧑‍🔬 ISO BMFF（MP4）的 box 结构天然支持流式处理——每个 box 有 8 字节 header（4B size + 4B type），不需要看完整个文件就能知道每个 box 的类型和大小。
 
 ![流式 BMFF 时序图](https://overkazaf.github.io/blogs/images/fairplay-drm-optimization/streaming-bmff.png)
 *关键洞察：mdat box（30-60MB，占文件 95%+）的 payload 不需要完整读入内存——按 moof.traf.trun 中记录的 sample sizes 逐个读取即可。moov 和 moof box 很小（几 KB），可以安全地完整缓冲。*
@@ -222,29 +269,29 @@ with httpx.stream("GET", stream_url) as resp:
 
 ## 七、Phase 6 — FairPlay 白盒 AES 安全评估
 
-如果能提取出 AES 密钥，就可以用硬件 AES-NI（>5 GB/s）替代 FairPlay 的白盒 AES（18 MB/s），速度提升 300x。笔者尝试了三种攻击：
+🧑‍🔬 如果能提取出 AES 密钥，就可以用硬件 AES-NI（>5 GB/s）替代 FairPlay 的白盒 AES（18 MB/s），速度提升 300x。笔者尝试了三种攻击：
 
 ### 7.1 DFA Fault Injection
 
 在 `libCoreFP.so` 的 `.rodata` 和 `.data` 段注入 600 次 single-byte fault（通过 `/proc/PID/mem` 直接修改进程内存），比较正确输出和错误输出的差异。
 
-**结果**：600 次全部无效——没有一次产生 4-byte diff 模式（DFA 的成功标志）。
+🔬 **结果**：600 次全部无效——没有一次产生 4-byte diff 模式（DFA 的成功标志）。
 
 ### 7.2 全内存 S-box/T-table 扫描
 
 扫描 aria 进程的全部 148.8 MB 可读内存，搜索标准 AES S-box 特征（`63 7c 77 7b f2 6b 6f c5 30 01 67 2b fe d7 ab 76`）和 T-table 首条目（`c6 63 63 a5`）。
 
-**结果**：S-box 和 T-table 只存在于 `libcrypto.so`、`libpdfium.so`、`libcurl.so` 中——这些是**不相关的库**。**`libCoreFP.so` 中零命中**。
+🔬 **结果**：S-box 和 T-table 只存在于 `libcrypto.so`、`libpdfium.so`、`libcurl.so` 中——这些是**不相关的库**。**`libCoreFP.so` 中零命中**。
 
 ### 7.3 GDB 断点
 
 在 `libcrypto.so::AES_cbc_encrypt` 设断点，触发真实解密。
 
-**结果**：断点**未触发**——FairPlay 不调用 libcrypto，有自己的密码学实现。
+🔬 **结果**：断点**未触发**——FairPlay 不调用 libcrypto，有自己的密码学实现。
 
 ### 7.4 结论
 
-`libCoreFP.so` 是**第三代白盒 AES 实现**——没有标准查找表，密钥以非标准形式嵌入指令流。DFA/DCA/BGE 三种经典白盒攻击全部失效。**18 MB/s 是当前架构的物理上限**。
+🧑‍🔬 `libCoreFP.so` 是**第三代白盒 AES 实现**——没有标准查找表，密钥以非标准形式嵌入指令流。DFA/DCA/BGE 三种经典白盒攻击全部失效。**18 MB/s 是当前架构的物理上限**。
 
 这与笔者在 [Chrome CDM 白盒分析](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 和 [Quarkslab 研究综述](https://overkazaf.github.io/blogs/posts/quarkslab-drm-whitebox-cryptanalysis-arsenal/) 中的发现一致——业界领先的 DRM 白盒实现已经进化到第三代，传统密码分析工具链不再适用。
 

@@ -65,7 +65,45 @@ Widevine 最容易制造的错觉就在这里：**协议里能被抓到的对象
 
 ---
 
-### 一、Widevine 不是“CDM 里做一次 AES”
+### Research Evidence
+
+> **研究方法与证据声明** — 本文是一篇架构分析与安全评估综述（Type B），不是单一逆向工程案例。以下声明方法论、证据分级与分析边界。
+
+#### 方法论
+
+| 阶段 | 方法 | 产出 |
+|------|------|------|
+| 规范梳理 | 阅读 Google / AOSP / W3C / ISO 公开文档，提取架构约束与 API 契约 | 六层模型（§1.1）、端到端信任链图（§二）、API 对照表（§9.1） |
+| 开源代码分析 | Shaka Packager / Chromium / AOSP / Bento4 / GPAC 源码交叉阅读 | PSSH proto 字段语义、box 解析逻辑、CDM/HAL 边界 |
+| 自有媒体实验 | 使用固定版本 Shaka Packager v3.9.3 对自有素材做 CENC/cbcs 打包与多工具交叉验证 | box 布局、KID 对齐、IV/subsample 一致性（§十六） |
+| 公开研究综合 | 对照 6 篇同行评审论文与多个开源项目的发现，按版本/平台/攻击假设标注适用范围 | 威胁模型、协议安全目标、已知攻击面（§十五、§十七） |
+| 安全推理 | 从威胁模型、系统约束与公开失陷案例推导防御边界 | 多 DRM 最弱路径（§8.6）、License Proxy 风险（§15.5）、L1 残余攻击面（§15.4） |
+| OTT 场景映射 | 基于 Google 官方合作方列表与各服务公开帮助文档，将 Widevine 能力映射到十类业务场景 | 服务对照表（§14.2）、五种 License 模式分析（§14.3） |
+
+#### 证据来源与分级
+
+| 等级 | 来源类型 | 本文覆盖范围 | 可验证性 |
+|------|----------|--------------|----------|
+| **L1 - 公开规范** | Google / AOSP / W3C / ISO 官方文档与标准 | SystemID、PSSH proto、MediaDrm API、EME、CENC、CMAF | 任何人可直接查阅原文 |
+| **L2 - 开源实现** | Shaka Packager、Chromium、AOSP、Bento4、GPAC 源码 | box 定义、CDM ABI、HAL 接口、muxer/demuxer 逻辑 | 可编译、可调试、可交叉验证 |
+| **L3 - 工程观察** | 自有媒体打包产物、EME 消息顺序、secure decoder 查询 | box 布局与字段对齐、KID 映射一致性、key status 行为 | 可在公开测试内容或自有素材上重复 |
+| **L4 - 学术研究** | 同行评审论文（USENIX Security 2024/2025、arXiv） | 协议形式化验证、L3 逆向方法论、浏览器隐私、replay 攻击 | 受版本 / 平台 / 研究时点约束 |
+| **L5 - 安全推断** | 从威胁模型与系统约束推导 | 多 DRM 最弱路径效应、Proxy 误配风险、OEM 集成残余攻击面 | 逻辑推理，不声称为特定平台内部实现 |
+
+#### 范围限制
+
+| 维度 | 不在本文范围内 |
+|------|----------------|
+| 协议细节 | Widevine 生产 License 协议完整字段、OEMCrypto 内部接口规范 |
+| 商业实现 | 任何商业 OTT 平台的 License Proxy 源码或内部策略配置 |
+| 设备材料 | 设备 Keybox 提取、生产凭据获取、WVD 文件制作 |
+| 内容获取 | 受保护内容导出、商业服务 License 复刻、”自动取 key” 工具链 |
+| 版本覆盖 | 实验固定 Shaka Packager v3.9.3；学术论文结论受其研究时点 CDM/OEMCrypto 版本约束 |
+| 平台覆盖 | 以 Chrome desktop 与 Android (API 25+) 为主；ChromeOS、智能电视、嵌入式、iOS/FairPlay 仅作对比提及 |
+
+---
+
+### 一、Widevine 不是”CDM 里做一次 AES”
 
 从播放器看，Widevine 的入口非常窄。Web 端是一个 Key System String：
 
@@ -85,7 +123,7 @@ Android 端则通常是一个 DRM UUID 加 `MediaDrm`。播放器创建 session�
 
 #### 1.1 六层模型
 
-笔者把 Widevine 拆成六层：
+🧑‍🔬 笔者把 Widevine 拆成六层：
 
 | 层 | 关键对象 | 解决的问题 |
 |----|----------|------------|
@@ -195,7 +233,7 @@ message WidevinePsshData {
 
 #### 3.4 一个只读 metadata parser 应该检查什么
 
-在自有样本上做检查时，顺序最好固定：
+🔬 在自有样本上做检查时，顺序最好固定：
 
 1. box size 是否覆盖完整输入，是否存在整数溢出或截断；
 2. type 是否为 `pssh`，version 是否只取实现支持的值；
@@ -224,7 +262,7 @@ Google 的公开支持表明确显示，平台和系统版本对加密方案的�
 
 #### 4.2 一张图看清 Init Segment 与 Media Segment
 
-如果只按四字符名称背 box，`tenc`、`senc`、`saiz`、`saio` 很快就会混在一起。更有效的办法，是先把它们放回 ISO BMFF 的容器树，再沿引用关系找出“默认值、逐 sample 元数据和真正密文”分别位于哪里。
+🧑‍🔬 如果只按四字符名称背 box，`tenc`、`senc`、`saiz`、`saio` 很快就会混在一起。更有效的办法，是先把它们放回 ISO BMFF 的容器树，再沿引用关系找出”默认值、逐 sample 元数据和真正密文”分别位于哪里。
 
 {{< cocoon-diagram
   src="images/widevine-deep-dive/isobmff-box-map.html"
@@ -510,7 +548,7 @@ License Request/Response、设备 Provisioning 和 raw CK 都不属于 CMAF Frag
 
 #### 7.6 一个 Fragment parser 应验证什么
 
-在前文 Box 检查之外，CMAF 层还应增加这些跨对象约束：
+🔬 在前文 Box 检查之外，CMAF 层还应增加这些跨对象约束：
 
 1. Header 的 track ID、timescale、sample entry 和 `trex` 能否被每个 `tfhd` 正确引用；
 2. 同一 Track 的 `mfhd.sequence_number` 与 `tfdt` 是否按预期前进，是否出现重复、倒退或未声明 discontinuity；
@@ -616,7 +654,7 @@ encrypted sample entry encv/enca
 
 #### 8.4 Box 级一致性检查清单
 
-对自己打包的文件，推荐按以下顺序检查：
+🔬 对自己打包的文件，推荐按以下顺序检查：
 
 1. `ftyp/styp` brand 是否与目标 CMAF/DASH profile 一致；
 2. 每条 `trak` 的 `tkhd.track_ID` 是否能被对应 `tfhd.track_ID` 找到；
@@ -691,7 +729,7 @@ encrypted sample entry encv/enca
 
 #### 9.2 EME 的职责边界
 
-浏览器侧典型流程：
+🧑‍🔬 浏览器侧典型流程：
 
 ```text
 navigator.requestMediaKeySystemAccess("com.widevine.alpha", configs)
@@ -814,7 +852,7 @@ Android API 公开的不是简单三个等级，而是五种具体能力：
 
 #### 10.4 L1/L2/L3 与 Android 枚举不能机械画等号
 
-Widevine 业界常用的三层概念可以这样理解：
+🧑‍🔬 Widevine 业界常用的三层概念可以这样理解：
 
 | Widevine 级别 | 核心边界 | 典型风险位置 |
 |---------------|----------|--------------|
@@ -1018,7 +1056,7 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 #### 14.2 十类公开确认的服务与典型场景
 
-下表中的“Widevine 承载点”是根据公开架构做的边界映射，不代表服务商公开了每个内部 License 字段。具体功能会随地区、套餐、标题和设备变化。
+🧑‍🔬 下表中的”Widevine 承载点”是根据公开架构做的边界映射，不代表服务商公开了每个内部 License 字段。具体功能会随地区、套餐、标题和设备变化。
 
 | OTT App / 服务 | 典型业务场景 | Widevine 在适用平台可承载的保护 | 仍由服务自身负责的部分 |
 |----------------|--------------|--------------------------------|--------------------------|
@@ -1080,7 +1118,7 @@ Google 的 [Widevine 官方概览](https://developers.google.com/widevine/drm/ov
 
 #### 15.1 它真正做强的地方
 
-Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需要同时成立的条件：
+🧑‍🔬 Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需要同时成立的条件：
 
 1. CENC 让 CDN 与存储只处理密文；
 2. 设备 Provisioning 和 License 个性化抑制跨设备响应重放；
@@ -1135,7 +1173,7 @@ Widevine 的强项不是隐藏 MPD，而是把可规模化攻击拆成多个需�
 | revocation 数据陈旧 | 已知失陷客户端继续获权 | 自动发布、版本门槛、灰度和紧急 kill switch |
 | 多 DRM 策略不一致 | 从最弱路径得到同一 CK | 统一 entitlement graph 与 KID policy |
 
-客户端投入再多，KMS 返回接口如果能被普通应用凭据调用，或者 Proxy 能为任意 KID 附加宽松规则，整条硬件信任链都会被服务端主动绕开。
+🧑‍🔬 客户端投入再多，KMS 返回接口如果能被普通应用凭据调用，或者 Proxy 能为任意 KID 附加宽松规则，整条硬件信任链都会被服务端主动绕开。
 
 #### 15.6 公开研究给出的边界
 
@@ -1218,7 +1256,7 @@ cmake -B build-musl -G Ninja \
 
 #### 16.3 打包自己的测试媒体
 
-下面 KID/key 仅是公开文档占位值，只能用于自己生成的测试内容：
+🔬 下面 KID/key 仅是公开文档占位值，只能用于自己生成的测试内容：
 
 ```bash
 ./build/packager/packager \
@@ -1285,7 +1323,7 @@ python3 build/packager/pssh-box.py \
 6. MPD、init segment 和 media sample 的 KID 是否形成同一映射；
 7. audio/video 多 key 时，播放器是否建立了所需 session 或 multi-session。
 
-同一个 packager 同时负责写和读，可能让同一实现缺陷互相“证明正确”。用 Bento4、GPAC 和 Shaka 自带 PSSH 工具交叉验证，价值远高于换三种 Base64 网站。
+🔬 同一个 packager 同时负责写和读，可能让同一实现缺陷互相”证明正确”。用 Bento4、GPAC 和 Shaka 自带 PSSH 工具交叉验证，价值远高于换三种 Base64 网站。
 
 #### 16.6 播放侧实验
 
@@ -1345,7 +1383,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 | [Narrowbeer](https://www.usenix.org/system/files/usenixsecurity25-roudot.pdf) | 浏览器/CDM replay 研究 | 观察 host-CDM 交互完整性边界 | 需要按厂商修复状态和版本复核 |
 | [Widevine EME Privacy](https://arxiv.org/abs/2308.05416) | 浏览器隐私 | distinctive identifier 与跨站可链接性 | 关注隐私，不等同内容 key 攻击 |
 
-笔者没有把通用下载器、商业服务插件、设备材料交易库或“自动取 key”脚本列为参考实现。它们既不能证明 Widevine 协议实现正确，也会把本来清晰的架构研究拖进授权与合规风险。
+🤖 笔者没有把通用下载器、商业服务插件、设备材料交易库或”自动取 key”脚本列为参考实现。它们既不能证明 Widevine 协议实现正确，也会把本来清晰的架构研究拖进授权与合规风险。
 
 ---
 
@@ -1362,7 +1400,7 @@ FFmpeg 可以做编码、demux、probe 和 clear 内容验证，但它不是 Wid
 | 公开协议密度 | PSSH/Key API 开源，生产细节多在合作方文档 | Header、PRO、License/Policy 概念公开更完整 |
 | 共同数据面 | CENC/CMAF，可复用 KID/CK | CENC/CMAF，可复用 KID/CK |
 
-二者最明显的表面差异，是 protobuf 对 UTF-16 XML；真正的共同点，则是都不把安全性押在 Header 隐藏上。媒体信令公开，内容分片公开缓存，安全性来自设备身份、License 绑定、可信执行、策略和输出路径。
+🤖 二者最明显的表面差异，是 protobuf 对 UTF-16 XML；真正的共同点，则是都不把安全性押在 Header 隐藏上。媒体信令公开，内容分片公开缓存，安全性来自设备身份、License 绑定、可信执行、策略和输出路径。
 
 ---
 

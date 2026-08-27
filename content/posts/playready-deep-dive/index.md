@@ -52,7 +52,39 @@ math: false
 
 ---
 
-## 一、PlayReady 不是“微软版 Widevine”
+### 研究证据与方法论
+
+**研究类型**：规范分析与架构拆解（Type B — 分析/综述）
+
+| 维度 | 方法 | 覆盖范围 |
+|------|------|----------|
+| 规范解读 | 逐字段对照 Microsoft 官方文档、W3C EME/CENC 标准、DASH-IF 注册表 | PSSH/PRO/WRMHEADER 字段布局、Header 版本演进、SL 定义、OPL 取值 |
+| 架构拆解 | 从端到端信任链视角分解为六层模型，逐层标注公开/推断边界 | 媒体信令 → 加密 → 授权 → 设备身份 → 执行环境 → 输出策略 |
+| 工具验证 | Shaka Packager v3.9.3 + Bento4 + GPAC 交叉检查自有内容打包产物 | CENC/PSSH/PRO 结构、KID 字节序、box 布局 |
+| 代码阅读 | 阅读 pyplayready、playready-rs 等非官方开源实现的公开源码 | 证书结构、Challenge 构造、二进制格式参考 |
+| 威胁建模 | 按网络观察者、本地 REE 攻击者、License Server 三层分析攻击面 | 安全评估章节的结构化推导 |
+
+**证据来源与分级**
+
+| 等级 | 来源类型 | 本文引用量 | 示例 |
+|------|----------|-----------|------|
+| **A — 官方规范** | Microsoft PlayReady Docs、W3C EME/CENC、DASH-IF | 15 项 | Header Specification、Security Level 定义、OPL 取值表 |
+| **B — 可复现工程观察** | 自有内容打包 + 工具解析 + EME 浏览器行为 | 6 项 | PRO 嵌套验证、KID 字节序转换、`pssh` box dump |
+| **C — 学术研究** | 同行评审论文 | 1 项 | Rafi et al., “A First Look at DRM Systems” (arXiv 2308.00437) |
+| **D — 非官方开源代码** | GitHub 研究项目（非认证实现） | 3 项 | pyplayready、playready-rs、replayready |
+| **E — 安全推断** | 从威胁模型和系统约束推导 | 若干 | 多 DRM 共用 CK 的最弱路径、Key Seed 爆炸半径、策略误配风险 |
+
+**范围限制**
+
+- 本文**不涉及** PlayReady Server SDK 或 Device Porting Kit 的内部实现（商业授权产品）
+- 本文**不涉及**任何商业流媒体服务的 License Server 行为、设备私钥提取或生产内容解密
+- XMR License 二进制格式的完整结构**未公开记录**，本文仅描述其公开概念层
+- SL3000 TEE 内部实现因 OEM 和 SoC 而异，本文描述的是 Microsoft 公开要求而非某一具体实现
+- 所有实验仅使用自有测试内容和官方测试服务，不接入第三方商业 endpoint
+
+---
+
+## 一、PlayReady 不是”微软版 Widevine”
 
 把 PlayReady、Widevine 和 FairPlay 放到同一张表里时，人很容易只看见共同部分：都是 CENC、都有 License Server、都能在硬件里保护密钥。于是 PlayReady 被粗暴地归纳成“微软版 Widevine”。
 
@@ -70,7 +102,7 @@ PlayReady 的公开设计里，有几处很鲜明的工程取舍：
 
 ### 1.1 六层模型
 
-笔者最终把 PlayReady 拆成了六层：
+🧑‍🔬 笔者最终把 PlayReady 拆成了六层：
 
 | 层 | 关键对象 | 解决的问题 |
 |----|----------|------------|
@@ -184,7 +216,7 @@ PlayReady Object Record
 
 大多数流媒体初始化数据里看到的是一个 `0x0001` 记录，Record Value 就是 UTF-16LE 编码的 XML。
 
-下面这个解析器故意只做 metadata 检查，不生成 Challenge，不处理 License，也不接触任何设备材料：
+🔬 下面这个解析器故意只做 metadata 检查，不生成 Challenge，不处理 License，也不接触任何设备材料：
 
 ```python
 import struct
@@ -255,7 +287,7 @@ Header 版本与能力的关系：
 
 ### 3.5 最容易把人绕晕的 KID 字节序
 
-假设 MPD 中写的是：
+🔬 假设 MPD 中写的是：
 
 ```text
 00112233-4455-6677-8899-aabbccddeeff
@@ -299,7 +331,7 @@ KID 可以出现在 MPD、PSSH、PRO、`tenc` 和 License 请求里；CK 应只�
 
 老客户端的 IV 支持也不同：早期 PlayReady 主要使用 8-byte IV，PlayReady 4 之后才覆盖 16-byte IV 的现代场景。面向电视存量设备时，算法正确不代表兼容矩阵正确。
 
-Microsoft 还特别提醒：**不要用同一组 `{KID, CK}` 对同一内容同时做 CTR 和 CBC 加密。** 这不只是播放器兼容问题，也是密码工程里不应跨模式复用同一密钥材料的基本卫生。
+🧑‍🔬 Microsoft 还特别提醒：**不要用同一组 `{KID, CK}` 对同一内容同时做 CTR 和 CBC 加密。** 这不只是播放器兼容问题，也是密码工程里不应跨模式复用同一密钥材料的基本卫生。
 
 ### 4.2 一份密文，多套 DRM
 
@@ -314,7 +346,7 @@ encrypted CMAF segments
 
 服务方可以让多个 DRM 使用同一个 `{KID, CK}`，只为每种客户端生成不同格式和策略的 License。CDN 不需要存三份视频。
 
-但安全上有一个直接后果：**内容机密性的上限会受到最弱授权路径影响。** PlayReady SL3000 做得再严，如果同一个 CK 还能通过另一个低保障客户端获得，攻击者不会执着于最硬的一扇门。这是多 DRM 架构必须做分层密钥、轨道分级和设备策略的原因之一。
+但安全上有一个直接后果：🧑‍🔬 **内容机密性的上限会受到最弱授权路径影响。** PlayReady SL3000 做得再严，如果同一个 CK 还能通过另一个低保障客户端获得，攻击者不会执着于最硬的一扇门。这是多 DRM 架构必须做分层密钥、轨道分级和设备策略的原因之一。
 
 ### 4.3 一部片不一定只有一把钥匙
 
@@ -339,7 +371,7 @@ encrypted CMAF segments
 
 PlayReady 公开了一种从 `KeySeed + KID` 确定性派生 CK 的标准算法。它能让服务方只保存 seed，不必为每个 KID 存 CK。
 
-工程上很省事，安全上却要看规模：全局 seed 一旦泄露，攻击者可以为大量历史 KID 重新计算 CK。现代服务更适合把 seed 按租户、内容域或轮换周期隔离，或者直接由 KMS 保存显式的 KID/CK 映射，并对导出、审计和销毁做独立控制。
+🧑‍🔬 工程上很省事，安全上却要看规模：全局 seed 一旦泄露，攻击者可以为大量历史 KID 重新计算 CK。现代服务更适合把 seed 按租户、内容域或轮换周期隔离，或者直接由 KMS 保存显式的 KID/CK 映射，并对导出、审计和销毁做独立控制。
 
 ---
 
@@ -495,7 +527,7 @@ SL2000 并不等于“毫无保护的软件”。合规实现仍需要代码和�
 
 ### 7.2 SL3000 把什么推进 TEE
 
-SL3000 的目标不是只把 AES 函数搬进 TrustZone，而是把关键链路一起推进受保护环境：
+🧑‍🔬 SL3000 的目标不是只把 AES 函数搬进 TrustZone，而是把关键链路一起推进受保护环境：
 
 - 客户端私钥和内容密钥；
 - License 解析、校验和 bind 的安全关键部分；
@@ -603,7 +635,7 @@ PlayReady 4.5+ 引入 Key Exchange，用 PlayReady 的设备身份和 License �
 
 攻击者可以 hook JavaScript、EME 调用、IPC 和网络，甚至修改普通进程。对 SL2000，这会形成显著的逆向压力；对 SL3000，REE 被假定为不可信，安全目标是让这些控制权无法直接变成 key 或明文导出。
 
-但“进了 TEE”不是结论，只是攻击面搬家。剩余风险包括：
+🧑‍🔬 但”进了 TEE”不是结论，只是攻击面搬家。剩余风险包括：
 
 - REE/TEE 消息解析漏洞；
 - 共享内存边界和长度校验；
@@ -615,7 +647,7 @@ PlayReady 4.5+ 引入 Key Exchange，用 PlayReady 的设备身份和 License �
 
 ### 10.3 License Server 才是最容易被低估的核心
 
-客户端做得再硬，Server Policy 配错仍然可以主动把授权发给不该发的人。需要重点审计：
+🧑‍🔬 客户端做得再硬，Server Policy 配错仍然可以主动把授权发给不该发的人。需要重点审计：
 
 | 风险 | 典型后果 | 防御 |
 |------|----------|------|
@@ -628,7 +660,7 @@ PlayReady 4.5+ 引入 Key Exchange，用 PlayReady 的设备身份和 License �
 
 ### 10.4 公开研究告诉了我们什么
 
-公开 DRM 研究普遍指出三件事：
+🤖 公开 DRM 研究普遍指出三件事：
 
 1. 设计文档描述的是目标，OEM/浏览器/CDM 的实现质量决定实际下限；
 2. 软件 DRM 的攻击成本可以很高，但攻击者和秘密仍在同一通用执行环境；
@@ -673,7 +705,7 @@ cmake --build build --parallel
 
 ### 11.3 打包自己的测试视频
 
-下面的 KID/key 是文档占位值，只能用于自己制作的实验媒体：
+🔬 下面的 KID/key 是文档占位值，只能用于自己制作的实验媒体：
 
 ```bash
 ./build/packager/packager \
@@ -709,7 +741,7 @@ MP4Box -info video_cenc.mp4
 5. `0x0001` record 能否严格按 UTF-16LE 得到 WRMHEADER；
 6. WRMHEADER 的 KID 经 GUID 字节序转换后是否回到 `default_KID`。
 
-只用一个工具检查自己的输出容易形成“同一个 bug 同时负责写和读”的闭环。Shaka 打包、Bento4/GPAC 复核，可以尽早发现字节序和 box size 问题。
+🔬 只用一个工具检查自己的输出容易形成”同一个 bug 同时负责写和读”的闭环。Shaka 打包、Bento4/GPAC 复核，可以尽早发现字节序和 box size 问题。
 
 ### 11.5 播放侧
 
@@ -769,7 +801,7 @@ FFmpeg 很适合编码、demux、探测和 clear 内容验证，但它不是 Pla
 | [replayready](https://github.com/devine-dl/replayready) | SL3000 wrapping 机制的窄范围研究代码 | 理解 TEE wrapper 研究方向 | 范围很窄，不能据此推导完整 SL3000 实现 |
 | [A First Look at DRM Systems](https://arxiv.org/abs/2308.00437) | 学术对比研究 | 对比 Widevine、FairPlay、PlayReady 的移动安全模型 | 论文分析不替代最新版合规规则 |
 
-笔者刻意没有把通用下载器、商业服务模块和密钥库项目列为“PlayReady 参考实现”。它们解决的是内容获取工作流，既不能说明协议实现正确，也很容易把研究带到不必要的授权风险里。
+🤖 笔者刻意没有把通用下载器、商业服务模块和密钥库项目列为”PlayReady 参考实现”。它们解决的是内容获取工作流，既不能说明协议实现正确，也很容易把研究带到不必要的授权风险里。
 
 ---
 
