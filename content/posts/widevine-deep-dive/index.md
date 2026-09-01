@@ -5,7 +5,7 @@ date: 2026-08-22T14:00:00+08:00
 lastmod: 2026-08-24T17:18:00+08:00
 draft: false
 tags: ["Widevine", "DRM", "CENC", "CMAF", "ISOBMFF", "EME", "MediaDrm", "OEMCrypto", "L1", "PSSH", "protobuf", "security-research"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "从 Widevine SystemID、PSSH protobuf 与 CENC box 结构开始，沿 Chrome/Android 通信架构、License Proxy、设备 Provisioning、MediaDrm、OEMCrypto、L1/L2/L3 和安全输出还原完整信任链。"
 toc: true
 math: false

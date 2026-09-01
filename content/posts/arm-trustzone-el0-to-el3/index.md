@@ -5,7 +5,7 @@ date: 2026-05-09
 lastmod: 2026-05-09
 draft: false
 tags: ["TrustZone", "TEE", "ARM", "EL3", "privilege-escalation", "samsung", "exploit-chain", "CVE", "DRM", "widevine", "reverse-engineering", "QSEE", "Kinibi", "TEEGRIS", "boot-chain", "secure-monitor"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "以 Quarkslab/Project Zero/360 Alpha Lab 的四条真实攻击链为案例，从 ARM 异常等级架构出发，逐层解剖 EL0→S-EL0→S-EL1→EL3 的提权技术：共享内存机制、SMC 调用约定、Trustlet 漏洞模式、TEE 内核提权、Secure Monitor 劫持，以及 Boot Chain 替代路径"
 toc: true
 math: false

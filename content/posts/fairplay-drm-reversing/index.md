@@ -5,7 +5,7 @@ date: 2026-05-10
 lastmod: 2026-06-04
 draft: false
 tags: ["FairPlay", "DRM", "apple-music", "Frida", "reverse-engineering", "IDA-Pro", "radare2", "Android", "ALAC", "white-box-cryptography", "native-hook"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "通过 Frida 动态插桩 + IDA Pro 静态分析，逐步还原 Apple Music for Android 的 FairPlay DRM 解密调用链：从 Java 层 FootHillDecryptionKey 到 Native 层 SVFootHillSessionCtrl 的 5 个关键函数，最终定位白盒 AES 解密入口 NfcRKVnxuKZy04KWbdFu*** 并实现加密 ALAC 样本的流式 dump"
 toc: true
 math: false

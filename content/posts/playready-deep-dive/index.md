@@ -5,7 +5,7 @@ date: 2026-08-24T14:00:00+08:00
 lastmod: 2026-08-24T14:00:00+08:00
 draft: false
 tags: ["PlayReady", "DRM", "CENC", "EME", "DASH", "SL3000", "TEE", "PSSH", "WRMHEADER", "security-research"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "从 DASH 里的 PlayReady SystemID 开始，逐字节拆开 PSSH、PRO 与 WRMHEADER，再沿 License、设备证书、SL2000/SL3000、TEE 和 OPL 还原 PlayReady 的完整信任链，并给出可复现的自有内容实验与参考项目地图。"
 toc: true
 math: false

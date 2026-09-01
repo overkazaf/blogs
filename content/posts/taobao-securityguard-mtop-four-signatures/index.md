@@ -5,7 +5,7 @@ date: 2026-04-17T20:35:00+08:00
 lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Taobao", "SecurityGuard", "MTOP", "Android-Security", "Device-Fingerprinting", "Risk-Control", "Anti-Fraud"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "从一份历史调用链和淘宝官方隐私政策出发，重新判断 x-sign、x-umt、x-mini-wua、x-sgext 所在的协议层，以及客户端逆向看不到的交易风控部分。"
 toc: true
 math: false

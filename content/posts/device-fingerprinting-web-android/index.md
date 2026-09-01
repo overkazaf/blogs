@@ -5,7 +5,7 @@ date: 2026-08-25T10:30:00+08:00
 lastmod: 2026-08-25T13:53:17+08:00
 draft: false
 tags: ["Device-Fingerprinting", "Web-Security", "Android", "Risk-Control", "Anti-Fraud", "Privacy", "Device-Registration", "Play-Integrity", "ByteDance", "Douyin", "Cloudflare", "Stripe", "Sift", "Alibaba", "Ant", "Meituan"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "沿着信号采集、设备注册、可信验证、画像归并、业务图谱、风险处置和对抗反馈这一条主线，比较海内外主流 Web / Android 设备风控方案、抖音系注册流程、Play Integrity 架构及其可被规避的边界。"
 toc: true
 math: false

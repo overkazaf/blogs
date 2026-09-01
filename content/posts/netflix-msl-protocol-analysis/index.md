@@ -5,7 +5,7 @@ date: 2026-08-15
 lastmod: 2026-08-23
 draft: false
 tags: ["Netflix", "MSL", "DRM", "Widevine", "reverse-engineering", "CBOR", "Frida", "Android", "MediaDrm", "protocol-analysis", "ChinaDRM"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "围绕 Netflix Message Security Layer (MSL) 的协议逆向记录：为什么 HTTPS 之上还要再套一层加密信道、encrypt-then-MAC 到底签的是什么、CBOR integer key 编码的字节细节、MasterToken/UserIdToken 的绑定关系，以及 MSL 相对国内外流媒体与音乐加密方案（爱奇艺/腾讯视频/优酷/ChinaDRM/网易云/QQ音乐）强在哪"
 image: "https://overkazaf.github.io/blogs/images/msl-protocol-analysis/research-roadmap.png"
 toc: true

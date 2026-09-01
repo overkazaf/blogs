@@ -5,7 +5,7 @@ date: 2026-05-13
 lastmod: 2026-06-04
 draft: false
 tags: ["DRM", "FairPlay", "apple-music", "optimization", "TCP", "streaming", "ISO-BMFF", "white-box-cryptography", "reverse-engineering", "Python", "performance"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "基于 Apple Music FairPlay DRM 解密管线的完整优化记录：从 Nagle 算法导致的 193 秒逐样本同步降至 TCP 管线化的 3.4 秒（57x 提升），再到流式 ISO BMFF 解析器将内存从 181MB 压缩到 11MB（94% 下降），最后用 DFA/DCA 验证了 libCoreFP.so 的第三代白盒 AES 不可攻破"
 toc: true
 math: false

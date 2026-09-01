@@ -5,7 +5,7 @@ date: 2026-08-25T14:50:00+08:00
 lastmod: 2026-08-25T15:03:51+08:00
 draft: false
 tags: ["Android", "APK", "App-Hardening", "Packer", "VMP", "RASP", "R8", "Play-Integrity", "Anti-Tamper", "Reverse-Engineering", "Mobile-Security"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "从构建期混淆、DEX/SO 加壳、函数抽取、VMP、RASP，到 APK 签名、Play Integrity、设备注册和服务端风控，系统比较国内外主流 Android APK 加固方案、工程流程、真实安全边界与选型方法。"
 toc: true
 math: false

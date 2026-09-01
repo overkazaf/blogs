@@ -5,7 +5,7 @@ date: 2026-08-23T04:15:00+08:00
 lastmod: 2026-08-24T01:30:00+08:00
 draft: false
 tags: ["Cromite", "Bromite", "Chromium", "Chrome", "Widevine", "Netflix", "EME", "DRM", "GN", "CENC", "security-research"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "拿到 Chromium 源码、打开 proprietary codecs、改 UA、截 MSE、拼 fMP4，为什么仍然过不了 Widevine？一份从 Cromite/Bromite 编译链一路撞到 Netflix License 与安全输出边界的失败记录。"
 toc: true
 math: false

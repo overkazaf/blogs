@@ -5,7 +5,7 @@ date: 2026-08-23T03:30:00+08:00
 lastmod: 2026-08-23T03:30:00+08:00
 draft: false
 tags: ["chrome", "VMP", "VM-protection", "Widevine", "CDM", "reverse-engineering", "white-box-cryptography", "OLLVM", "anti-tamper", "sandbox", "Mojo"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "系统分析 Chrome 原生媒体模块中的 VM-based Protection：从 EME/Mojo/CDM 调用边界，到 VM 调度器、key blinding、白盒数据路径、完整性校验与可观测性压制，解释现代 VMP 保护为什么能显著提高密钥提取和静态逆向成本。"
 toc: true
 math: false

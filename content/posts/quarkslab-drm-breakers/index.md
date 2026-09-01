@@ -5,7 +5,7 @@ date: 2026-05-08
 lastmod: 2026-05-08
 draft: false
 tags: ["quarkslab", "white-box-cryptography", "DFA", "DCA", "BGE", "DRM", "widevine", "TrustZone", "TEE", "side-channel", "reverse-engineering", "QBDI", "LIEF", "SideChannelMarvels", "samsung", "boot-chain", "CVE", "emulation", "cryptography", "AES"]
-categories: ["security-research"]
+categories: ["drm-security"]
 description: "系统梳理法国安全团队 Quarkslab 在白盒密码破译与 DRM 安全研究领域的十年技术演进：从 CHES 2016 最佳论文到 SideChannelMarvels 开源武器库，从 Samsung TrustZone EL3 代码执行到 DarkPhoenix/BlueGalaxyEnergy 新一代工具链"
 toc: true
 math: false

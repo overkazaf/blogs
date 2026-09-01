@@ -5,7 +5,7 @@ date: 2026-06-18T21:40:00+08:00
 lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Meituan", "mtgsig", "Device-Fingerprinting", "Android", "Risk-Control", "Anti-Fraud", "Privacy", "Reverse-Engineering"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "把 2024 年历史 mtgsig 样本、美团公开的 Web 验证与 Zeus 文章、2026 年隐私政策重新排开，讨论请求签名、设备画像和业务风控各自能回答什么。"
 toc: true
 math: false

@@ -5,7 +5,7 @@ date: 2026-05-26T18:10:00+08:00
 lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Xiaohongshu", "Shield", "Android", "Reverse-Engineering", "Device-Fingerprinting", "Risk-Control", "API-Security", "Privacy"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "回到 2020 年 libshield.so 原始分析与 2023 年历史隐私政策，复核小红书 Shield 请求签名真正覆盖的范围，以及公开材料留空的设备画像和内容风控部分。"
 toc: true
 math: false

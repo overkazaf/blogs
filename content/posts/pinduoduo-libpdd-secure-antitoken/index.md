@@ -5,7 +5,7 @@ date: 2026-07-23T09:20:00+08:00
 lastmod: 2026-08-26T15:36:00+08:00
 draft: false
 tags: ["Android", "Pinduoduo", "libpdd_secure.so", "anti-token", "Device-Fingerprinting", "Risk-Control", "Reverse-Engineering", "Privacy"]
-categories: ["security-research"]
+categories: ["reverse-engineering"]
 description: "复核 libpdd_secure.so 7.80/7.85 与 anti-token 历史公开材料，讨论环境记录、缓存和封装能证明什么，以及客户端逆向在设备画像和交易风控前为何停下。"
 toc: true
 math: false
