@@ -1,0 +1,12 @@
+dongle : virtual dongle
+track  : demo (132300 字节, 130 块)
+level  : 3 (只返回 keystream)
+[1] INFO  : device_id=0123456789abcdef fw=sim-0.1
+[2] LOAD  : track=demo counter=1 chunks=130 allow_key=0
+[3] OPEN  : session=1 server_nonce=5583d7815c67ed70 key=WITHHELD(拒绝导出)
+[4] CHUNK : 0/129 解密 1024 字节 (keys 始终留在芯片里)
+[4] CHUNK : 1/129 解密 1024 字节 (keys 始终留在芯片里)
+[4] CHUNK : 2/129 解密 1024 字节 (keys 始终留在芯片里)
+    CHUNK : 3/129
+[4] CHUNK : 4/129 解密 1024 字节 (keys 始终留在芯片里)
+[5] 校验  : 只解密了 5 块, 跳过整体校验

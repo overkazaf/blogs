@@ -1,0 +1,12 @@
+WAV        : out/demo.wav (132300 字节 PCM)
+track_id   : demo
+device_id  : 0123456789abcdef
+level      : Level 3 (allow_key=0, 只给 keystream)
+chunks     : 130 x 1024 字节
+iv         : c8afe44212f9b830
+自检       : OK
+输出       : out/bundle_l3/{track.enc,manifest.json,license.json}
+
+播放:
+  tools/drm/player.py --bundle out/bundle_l3 --sim
+  tools/drm/player.py --bundle out/bundle_l3 --port /dev/cu.usbmodemXXXX --play

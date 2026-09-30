@@ -1,0 +1,41 @@
+== 1. 固件里的格式串 ==
+  ✔ licence 签名串      license|v=%u|device_id=%s|track_id=%s|iv=%s|chunks=%u|counte...
+  ✔ 设备密钥派生           device|%s
+  ✔ 内容密钥派生           track|%s
+  ✔ 密钥包裹上下文          wrap|%s|%s
+  ✔ keystream 块上下文   stream|%s|%016llx
+  ✔ 会话确认串            open|%s|%s|%s|%s|%u
+== 2. 同一组输入下的字符串比对 ==
+  ✔ licence 签名串     
+  ✔ 设备密钥派生          
+  ✔ 内容密钥派生          
+  ✔ 密钥包裹上下文         
+  ✔ keystream 块上下文  
+  ✔ 会话确认串           
+== 3. 固件常量与上位机常量 ==
+  ✔ K_ROOT (32 字节 ASCII)
+  ✔ CHUNK_SIZE 一致
+  ✔ nonce 长度 16 hex
+  ✔ HMAC ipad/opad
+  ✔ SHA-256 用硬件加速器
+== 4. 应答字段名 (虚拟 dongle 实测 vs 固件格式串) ==
+  ✔ allow_key=
+  ✔ chunk=
+  ✔ chunk_size=
+  ✔ chunks=
+  ✔ cmd=
+  ✔ code=
+  ✔ counter=
+  ✔ device_id=
+  ✔ field=
+  ✔ fw=
+  ✔ key=
+  ✔ ks=
+  ✔ nonce_cache=
+  ✔ resp=
+  ✔ server_nonce=
+  ✔ session=
+  ✔ size=
+  ✔ track=
+
+固件与上位机的协议拼接完全一致 ✔

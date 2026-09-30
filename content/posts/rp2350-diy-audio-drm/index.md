@@ -83,6 +83,151 @@ RP2350 是 Raspberry Pi 的第二代微控制器（Pico 2 上面那颗芯片）�
 
 关键点：这些特性在**实验阶段**可以选择性开关。先开着 debug 口方便做攻击实验，做完再 lock 掉做加固对比 —— 同一块板子走完攻防两面。
 
+### RP2350 的 TrustZone-M：$5 能买到的 TEE
+
+上面表格里提了一句「TrustZone-M」，但这个概念值得展开，因为它直接关系到 DRM 密钥保护的核心问题。
+
+手机 SoC 上的 TrustZone（Cortex-A 系列）大家可能更熟悉 —— Widevine L1 的 keybox 就存在 TEE 里，由 Trusty 或 OP-TEE 管理，普通 Android 应用根本看不到那片内存。RP2350 上的 TrustZone-M 是同一个思想在 MCU 上的简化实现：把芯片的资源（内存、外设、GPIO、DMA）分成 **Secure World** 和 **Non-Secure World**，两个世界之间有硬件强制的隔离边界。
+
+具体到 RP2350，隔离由两层机制实现：
+
+- **IDAU（Implementation Defined Attribution Unit）**：芯片出厂时就定义好的安全属性，把地址空间划成固定的安全/非安全区域
+- **SAU（Security Attribution Unit）**：软件可配置的覆盖层，最多 8 个区域，可以把 IDAU 标记为安全的区域「降级」为非安全
+
+两层叠加的效果是：Secure World 的代码可以访问所有资源，Non-Secure World 的代码只能访问被标记为非安全的那部分。跨边界调用必须通过 `NSC（Non-Secure Callable）` 入口点 —— 相当于一个硬件强制的 syscall 接口。
+
+这对 DRM 意味着什么？如果我把密钥派生逻辑（`K_dev`、`K_audio` 的 HMAC 计算）放在 Secure World 运行，把协议状态机和 USB CDC 通信放在 Non-Secure World，那么即使攻击者通过 SWD 调试口 dump 了 Non-Secure 侧的全部内存，也拿不到密钥 —— 密钥从来没有出现在 Non-Secure 的地址空间里。
+
+```
+┌─────────────────────────────────────────────────┐
+│                  RP2350 芯片                      │
+│                                                   │
+│  ┌──────────────────┐  ┌──────────────────────┐  │
+│  │  Secure World     │  │  Non-Secure World     │  │
+│  │                   │  │                       │  │
+│  │  K_ROOT (OTP)     │  │  USB CDC 协议状态机    │  │
+│  │  K_dev 派生       │  │  licence 字段解析      │  │
+│  │  K_audio 派生     │  │  keystream 输出缓冲    │  │
+│  │  HMAC-SHA256 计算  │  │                       │  │
+│  │  硬件 SHA-256 加速 │  │  ← NSC 调用 →         │  │
+│  │                   │  │  get_keystream(idx)    │  │
+│  │  glitch detector  │  │  verify_licence(blob)  │  │
+│  │  TRNG            │  │                       │  │
+│  └──────────────────┘  └──────────────────────┘  │
+│                                                   │
+│  SAU: 8 个可配置区域                               │
+│  IDAU: 地址空间固定划分                             │
+│  OTP: 8KB antifuse, 存 signing key fingerprint    │
+└─────────────────────────────────────────────────┘
+```
+
+不过，和 Cortex-A 上的完整 TEE 相比，TrustZone-M 有几个明显的差距：
+
+| | TrustZone-M (RP2350) | TEE (Trusty / OP-TEE) |
+|---|---|---|
+| 处理器 | Cortex-M33 (MCU) | Cortex-A (应用处理器) |
+| 操作系统 | 裸机或轻量 RTOS | 完整的 Trusted OS |
+| 安全应用 | 一个 Secure 固件 | 多个 Trusted Application (TA) |
+| 内存保护 | SAU + IDAU（区域级） | MMU + TZASC（页级） |
+| 密钥存储 | OTP + SRAM（无加密文件系统） | Secure Storage（加密 + 防回滚） |
+| 安全启动 | Signed/encrypted boot（OTP 存 fingerprint） | 完整信任链（bootloader → TEE → Android） |
+| 物理防护 | Glitch detector + brownout detector | 取决于 SoC 厂商 |
+| 调试锁定 | SWD disable（OTP 不可逆） | JTAG disable（eFuse） |
+
+关键区别不在隔离能力本身 —— TrustZone-M 的隔离是硬件强制的，和 Cortex-A 一样可靠 —— 而在 **生态支持**。手机上的 TEE 有完整的 Trusted OS、安全存储、密钥管理 API、Attestation 证书链；RP2350 上你得自己写所有东西。但换个角度看，这正是它做实验的价值：你能看到 TEE 底层每一个机制是怎么组装起来的。
+
+> **本实验暂时没有启用 TrustZone**。原因很简单：如果密钥被隔离保护了，攻击 #8（dump 固件拿 K_ROOT）就跑不了了，而那条攻击恰恰是最有教学价值的。加固路线图第 6 步（debug lock + secure boot）会在后续实验中启用 TrustZone，届时再来对比攻击面的变化。
+>
+> 有一个额外的细节：RP2350 在启用安全配置时会**禁用 RISC-V 核**（官方安全白皮书明确说明），以防止通过切换到 Hazard3 绕过 ARM 的安全模型。这意味着「双架构」和「安全模式」在当前的 RP2350 上是互斥的。
+
+### 启动信任链：RP2350 vs Android
+
+TrustZone 只解决运行时的隔离问题。但如果启动阶段有人篡改了固件，在安全世界里跑的就不再是你写的代码 —— 这时 TrustZone 隔离得再好也没用。所以 DRM 的安全边界不只是「有没有 TrustZone」，而是**从上电到密钥可用的整条启动链是否每一步都被验证过**。
+
+这就是为什么需要理解启动流程。下面把 RP2350 和 Android 的启动链放在一起对比 —— 你会发现它们解决的是完全相同的问题，只是复杂度不同。
+
+**RP2350 启动链：**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 上电复位                                                 │
+│   ↓                                                     │
+│ Boot ROM (mask ROM, 不可修改)                             │
+│   ├── 检查 BOOTSEL 按键 → USB/UART boot（调试用）         │
+│   ├── 读 OTP: 是否启用 signed boot?                      │
+│   │     ├── 否 → 直接从 Flash 加载用户固件                 │
+│   │     └── 是 → 用 OTP 中的 signing key fingerprint      │
+│   │            验证 Flash 中固件的签名                     │
+│   ├── 读 OTP: 是否启用 encrypted boot?                   │
+│   │     └── 是 → 用 OTP 中的 boot decryption key          │
+│   │            解密固件到 SRAM                             │
+│   ├── 配置 SAU/IDAU (TrustZone 边界)                     │
+│   ↓                                                     │
+│ 用户固件 (Secure World 入口)                              │
+│   ├── 初始化 Secure 资源 (密钥、HMAC、TRNG)               │
+│   ├── 配置 Non-Secure 入口点                              │
+│   ↓                                                     │
+│ Non-Secure 固件 (USB CDC, 协议状态机)                     │
+│   └── 通过 NSC 调用 Secure 侧的密钥操作                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Android 启动链（对照）：**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ SoC Boot ROM (不可修改, eFuse 锁定)                      │
+│   ↓ 验证签名                                            │
+│ Primary Bootloader (BL1/PBL)                             │
+│   ↓ 验证签名                                            │
+│ Secondary Bootloader (BL2/ABL/U-Boot)                    │
+│   ├── 初始化 TEE (Trusty / OP-TEE)  ← TrustZone Secure  │
+│   │     ├── 加载 Trusted Apps (Widevine TA, Keymaster)   │
+│   │     └── 初始化 Secure Storage                        │
+│   ↓ 验证签名 (Android Verified Boot / dm-verity)         │
+│ Linux Kernel                                             │
+│   ↓ dm-verity 校验 system 分区                           │
+│ Android Framework                                        │
+│   ├── MediaDrm → HAL → OEMCrypto                        │
+│   │     └── OEMCrypto 通过 AIDL/HIDL 调用 TEE 中的 TA    │
+│   └── App (Netflix / Spotify)                            │
+│         └── 通过 MediaDrm API 请求 license               │
+└─────────────────────────────────────────────────────────┘
+```
+
+两条链的核心逻辑完全一样：**每一步都验证下一步的完整性，信任从硬件不可变的根（Boot ROM + OTP/eFuse）向上传递**。区别在于 Android 的链更长（多了 bootloader、Linux、framework 好几层），RP2350 的链极短（Boot ROM 直接到用户固件）—— 层数少意味着攻击面也少，这是 MCU 安全模型的天然优势。
+
+### Root 和 DRM 的关系
+
+理解了启动链之后，「root = DRM 失效」这件事就不再是一句口号，而是有具体的因果关系：
+
+**Android root 破坏了什么？**
+
+root 本质上是在启动链的某个环节插入了未授权的代码（修改 boot.img、安装 Magisk 等），打破了 Verified Boot 的验证链。一旦链断了：
+
+1. **内核被修改** → 攻击者可以 hook 系统调用，监控 HAL 层的通信
+2. **SELinux 被关闭/降级** → 原本隔离的安全域边界松动
+3. **可以访问 /dev/ion 或 secure memory 的映射** → 有机会读到本应隔离的内存区域
+4. **Magisk 可以 hook framework 层** → 拦截 MediaDrm API 调用，截获 license response
+
+但 root **不能直接**破解 TEE。TrustZone 的隔离是硬件级别的，root 拿到的是 Normal World 的 kernel 权限，不是 Secure World 的权限。所以 Widevine L1 在 root 设备上通常会**降级到 L3**（Google 的 SafetyNet / Play Integrity 检测到 root → 拒绝发放 L1 license），而不是直接被破解。
+
+**RP2350 上的类比**：
+
+本实验中「root」的等价操作是通过 SWD 调试口连上去（相当于拿到了 Non-Secure World 的全部权限）。SWD 能 dump Non-Secure 侧的内存、修改变量、注入指令 —— 这对应 Android root 能做的事情。如果启用了 TrustZone，SWD 仍然无法读取 Secure World 的内存（硬件禁止）；但如果进一步做了 debug lock（OTP 禁用 SWD），连 Non-Secure 侧也进不去了 —— 这对应 Android 手机的 JTAG 被 eFuse 烧断。
+
+```
+Android root                    RP2350 SWD 调试
+────────────────────           ──────────────────
+修改 boot.img                   → 替换 Flash 上的固件
+hook framework (Magisk)         → 修改 Non-Secure 代码运行时行为
+读 /proc/pid/mem                → SWD 读 SRAM
+无法直接进 TEE                   → 无法读 Secure World (TrustZone-M)
+SafetyNet 检测 → L1 降级 L3     → boot ROM 验签失败 → 拒绝启动
+```
+
+> **关键区别**：Android root 之后 TEE 还在，只是 license server 不信任你了（策略降级）。RP2350 上如果 debug lock + signed boot 都没开，SWD 可以直接改固件 —— 连降级机会都没有，直接全盘沦陷。这就是攻击 #8 展示的事情。
+
 ---
 
 ## 二、整体架构
@@ -108,6 +253,115 @@ RP2350 是 Raspberry Pi 的第二代微控制器（Pico 2 上面那颗芯片）�
 
 此外有一个 **虚拟 dongle** `dongle_sim.py`，用纯 Python 模拟 RP2350 的行为。没有硬件也能把整套流程跑通。
 
+### 各模块到底做什么
+
+三个角色各自守住 DRM 的一个关键职责，逐个拆开讲。
+
+**打包工具 `pack_audio.py`** 扮演的是「内容方 + licence server」。它手里有 K_ROOT，所以能做三件事：(1) 派生 K_audio 加密音频；(2) 派生 K_dev，把 K_audio 包裹成只对目标设备有意义的 wrapped_key；(3) 派生 K_lic 给整条 licence 签名。这三步对应 DRM 的前三个问题 —— 内容加密、设备绑定、授权下发。
+
+**授权器 dongle 固件 `main.c`** 扮演的是「安全硬件」。它是唯一在运行时持有密钥的组件。收到 licence 后，它用自己的 K_dev 解开 wrapped_key 得到 K_audio，然后根据 allow_key 字段决定：Level 2 直接返回 K_audio，Level 3 只按块返回 keystream。这一步对应第四个问题 —— 密钥保护。
+
+**播放器 `player.py`** 扮演的是「不可信客户端」。它不知道任何密钥 —— 只能向 dongle 请求授权，拿到密钥或 keystream 后解密。你可以把源码全部给攻击者，它也不包含秘密。这和 Netflix APK 的设计一样：反编译随便看，密钥在 TEE 里。
+
+#### 和 Widevine L1 的角色对照
+
+理解了这三个模块之后，可以直接映射到 Widevine L1 的架构上 —— 名字不同，但每个组件解决的问题完全一样：
+
+| 本实验 | Widevine L1 | 共同职责 |
+|--------|------------|---------|
+| `pack_audio.py` | **Shaka Packager + Widevine License Server** | 加密内容、签发 licence、绑定设备 |
+| `drm_common.py` | **Widevine License Protocol (protobuf)** | 协议和密码学的规范定义 |
+| dongle 固件 (`main.c`) | **OEMCrypto (TEE 内)** | 持有设备密钥、校验 licence、解封内容密钥、不让密钥出安全边界 |
+| `player.py` | **ExoPlayer / Chrome CDM 宿主** | 不可信客户端，只负责转发授权请求和播放解密后的内容 |
+| `dongle_sim.py` | **Widevine L3 CDM (软件 CDM)** | 软件模拟，没有硬件保护，密钥在主机内存里 |
+| USB CDC 串口协议 | **AIDL HAL / Mojo IPC** | 安全边界两侧的通信通道 |
+| `parity_check.py` | **Widevine VTS (Vendor Test Suite)** | 验证安全侧和客户端侧的协议实现一致 |
+
+核心区别在于 Widevine L1 的 OEMCrypto 跑在 ARM TrustZone 的 Secure World 里，由 Trusty/OP-TEE 管理，密钥存储由 SoC 厂商的 Secure Storage 提供；而本实验的 dongle 是一整块独立的芯片，安全边界是 USB 线 —— 更粗糙，但原理完全一致。
+
+另一个重要区别：Widevine 的 licence 是 protobuf 格式，由 Google 签名（RSA），经过 License Proxy（合作方的业务鉴权中间层）下发；本实验的 licence 是 JSON 格式，HMAC 对称签名，直接打包在文件里。对称签名的问题在于：拿到 K_lic 就能伪造 licence（见攻击 #4 + #8）。Widevine 用非对称签名避免了这个问题 —— 即使设备端被 dump，拿到的只是公钥，伪造不了签名。
+
+### 协议时序
+
+光看角色分工还是比较抽象。下面两张时序图展示播放器和 dongle 之间的实际消息交换 —— Level 2 和 Level 3 的区别就在 OPEN 之后那一步。
+
+**Level 2 流程（密钥离开芯片）：**
+
+```mermaid
+sequenceDiagram
+    participant P as 打包工具<br/>pack_audio.py
+    participant L as 播放器<br/>player.py
+    participant D as Dongle<br/>Pico 2W
+
+    P->>P: 加密 WAV → track.enc
+    P->>P: 签发 licence (绑 device_id)
+    P->>L: bundle (track.enc + manifest + licence)
+
+    L->>D: LOAD licence_hex
+    D->>D: 验签 sig → 解包 wrapped_key → 得到 K_audio
+    D-->>L: OK track=demo allow_key=1
+
+    L->>D: OPEN client_nonce
+    D->>D: 生成 server_nonce, 计算 resp
+    D-->>L: OK session=1 key=K_audio_hex resp=...
+
+    L->>L: 验证 resp (确认双方持有相同的 K_audio)
+    L->>L: 用 K_audio 一次性解密 track.enc
+    L->>L: 校验 SHA-256 → 播放
+
+    Note over L,D: 密钥已进入主机内存<br/>攻击者可在此截获
+```
+
+**Level 3 流程（密钥不离开芯片）：**
+
+```mermaid
+sequenceDiagram
+    participant L as 播放器<br/>player.py
+    participant D as Dongle<br/>Pico 2W
+
+    L->>D: LOAD licence_hex
+    D-->>L: OK track=demo allow_key=0
+
+    L->>D: OPEN client_nonce
+    D-->>L: OK session=1 key=WITHHELD resp=...
+
+    loop 每块 (0 → N)
+        L->>D: CHUNK index
+        D->>D: keystream = HMAC(K_audio, "stream|iv|index")
+        D-->>L: OK ks=keystream_hex
+        L->>L: plaintext_block = ciphertext_block XOR keystream
+    end
+
+    L->>L: 校验 SHA-256 → 播放
+
+    Note over L,D: K_audio 始终在芯片内<br/>但内容仍可被逐块还原
+```
+
+### 密钥层级图
+
+下面这张图是整个系统的密钥流向。红色节点是「留在芯片里」的密钥，蓝色是「会离开芯片」或「在芯片外可见」的数据。攻击者的目标是沿着红色节点往上走 —— 够到 K_ROOT 就能通杀一切。
+
+```mermaid
+graph TD
+    ROOT["🔑 K_ROOT<br/>厂商根密钥<br/>(固件/HSM)"]
+
+    ROOT -->|"HMAC(K_ROOT, 'device｜id')"| KDEV["🔑 K_dev<br/>设备密钥<br/>(每块板不同)"]
+    ROOT -->|"HMAC(K_ROOT, 'license-signing')"| KLIC["🔑 K_lic<br/>签发密钥"]
+    ROOT -->|"HMAC(K_ROOT, 'track｜id')"| KAUDIO["🔑 K_audio<br/>内容密钥"]
+
+    KDEV -->|"HMAC(K_dev, 'wrap｜...')<br/>XOR K_audio"| WRAPPED["📦 wrapped_key<br/>(licence 内)"]
+    KLIC -->|"HMAC(K_lic, licence_fields)"| SIG["✍️ sig<br/>(licence 内)"]
+    KAUDIO -->|"HMAC(K_audio, 'stream｜iv｜i')"| KS["🔓 keystream<br/>(按块输出)"]
+
+    style ROOT fill:#c0392b,color:#fff
+    style KDEV fill:#c0392b,color:#fff
+    style KLIC fill:#c0392b,color:#fff
+    style KAUDIO fill:#c0392b,color:#fff
+    style WRAPPED fill:#2980b9,color:#fff
+    style SIG fill:#2980b9,color:#fff
+    style KS fill:#2980b9,color:#fff
+```
+
 ### 威胁模型
 
 实验假设攻击者能做到以下事情：
@@ -131,9 +385,7 @@ RP2350 是 Raspberry Pi 的第二代微控制器（Pico 2 上面那颗芯片）�
 
 然后我注意到 RP2350 自带**硬件 SHA-256 加速器**。如果把所有密码学操作都建在 HMAC-SHA256 上，核心的压缩函数走硬件，性能就不再是瓶颈。
 
-所以最终的选择是：整个系统只用到一个原语 —— **HMAC-SHA256**。没有 AES，没有 RSA，没有椭圆曲线。
-
-为什么？因为 RP2350 有硬件 SHA-256 加速器，HMAC-SHA256 的 ipad/opad 部分用软件做，核心的 SHA-256 压缩走硬件 —— 密钥派生和 keystream 生成几乎不占 CPU 时间。
+所以最终的选择是：整个系统只用到一个原语 —— **HMAC-SHA256**。没有 AES，没有 RSA，没有椭圆曲线。HMAC 的 ipad/opad 结构用软件做（`drm_crypto.c` 里手写，对照 RFC 2104），核心的 SHA-256 压缩走硬件加速器 —— 密钥派生和 keystream 生成几乎不占 CPU 时间。
 
 ### 密钥层级
 
@@ -169,6 +421,35 @@ K_ROOT（厂商根密钥，32 字节，教学版明文写在固件里）
 密文 = 明文 XOR keystream。每块 keystream 是一次 HMAC 调用，块索引递增，等价于 CTR 模式。
 
 > 这是教学用的流加密。生产环境请换 AES-GCM 或 ChaCha20-Poly1305，把完整性校验做进密文格式。本实验的完整性靠 manifest 里的 SHA-256 哈希事后校验。
+
+用图来看会更直观 —— 每一块的 keystream 都是一次独立的 HMAC 调用，块与块之间没有依赖，理论上可以并行：
+
+```mermaid
+graph LR
+    subgraph "Block 0"
+        K0["K_audio + iv + 0"] --> H0["HMAC-SHA256"] --> KS0["keystream₀"]
+        PT0["plaintext₀"] --> XOR0["⊕"]
+        KS0 --> XOR0 --> CT0["ciphertext₀"]
+    end
+
+    subgraph "Block 1"
+        K1["K_audio + iv + 1"] --> H1["HMAC-SHA256"] --> KS1["keystream₁"]
+        PT1["plaintext₁"] --> XOR1["⊕"]
+        KS1 --> XOR1 --> CT1["ciphertext₁"]
+    end
+
+    subgraph "Block N"
+        KN["K_audio + iv + N"] --> HN["HMAC-SHA256"] --> KSN["keystream_N"]
+        PTN["plaintext_N"] --> XORN["⊕"]
+        KSN --> XORN --> CTN["ciphertext_N"]
+    end
+
+    style H0 fill:#e74c3c,color:#fff
+    style H1 fill:#e74c3c,color:#fff
+    style HN fill:#e74c3c,color:#fff
+```
+
+固件里的实现（`drm_crypto.c`）值得单独说一句：HMAC 的 ipad/opad 结构是手写的，对照 RFC 2104 逐步实现，内层和外层的 SHA-256 压缩都走 `pico_sha256_start_blocking` 硬件加速器。比较操作用 `drm_const_time_eq`（常量时间比较），防止通过时序差异推断签名。
 
 ---
 
@@ -466,6 +747,31 @@ dump 固件（甚至只要 `strings rp2350_drm_dongle.elf`）就能拿到 K_ROOT
 | 7 | **速率限制 / 播放计数 / 水印** | 合法设备逐块导出（#7） | Netflix: 并发流限制; Spotify: 音频水印 |
 
 > RP2350 SDK 里有 mbedtls，步骤 2 的 Ed25519/ECDSA 可以直接用。步骤 6 涉及 OTP 烧录，有不可逆风险，必须用可消耗的实验板。
+
+从底到顶看这张路线图，每一步都在抬高攻击者的门槛。绿色的步骤在当前代码中已经具备基础（只是用了教学版实现），橙色的需要额外的硬件操作或固件改造：
+
+```mermaid
+graph TD
+    S7["⑦ 速率限制 / 播放计数 / 水印<br/>→ 对抗合法设备导出 (#7)"]
+    S6["⑥ debug lock + secure boot + TrustZone<br/>→ 阻止 SWD dump (#8 物理层)"]
+    S5["⑤ 分块认证加密 (HMAC/GCM tag)<br/>→ 检测密文篡改 (#6)"]
+    S4["④ counter 写入 flash/OTP<br/>→ 防断电回滚 (#5)"]
+    S3["③ 会话密钥替代内容密钥<br/>→ 密钥不离开芯片 (Level 2→3)"]
+    S2["②  非对称签名 (Ed25519/ECDSA)<br/>→ dump 也无法伪造 licence (#4)"]
+    S1["① 密钥不进固件 (OTP/HSM)<br/>→ 根密钥不可 dump (#8)"]
+
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+
+    style S1 fill:#27ae60,color:#fff
+    style S2 fill:#f39c12,color:#fff
+    style S3 fill:#27ae60,color:#fff
+    style S4 fill:#f39c12,color:#fff
+    style S5 fill:#f39c12,color:#fff
+    style S6 fill:#f39c12,color:#fff
+    style S7 fill:#f39c12,color:#fff
+```
+
+> 绿色 = 当前代码已有基础实现 &nbsp;｜&nbsp; 橙色 = 需要额外的固件改造或不可逆硬件操作
 
 ---
 

@@ -1,0 +1,12 @@
+WAV        : out/demo.wav (132300 字节 PCM)
+track_id   : demo
+device_id  : 0123456789abcdef
+level      : Level 2 (allow_key=1, 密钥会离开芯片)
+chunks     : 130 x 1024 字节
+iv         : 43bdc16edde93e6f
+自检       : OK
+输出       : out/bundle/{track.enc,manifest.json,license.json}
+
+播放:
+  tools/drm/player.py --bundle out/bundle --sim
+  tools/drm/player.py --bundle out/bundle --port /dev/cu.usbmodemXXXX --play

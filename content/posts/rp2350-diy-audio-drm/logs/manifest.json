@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "track_id": "demo",
+  "cipher": "hmac-sha256-ctr",
+  "chunk_size": 1024,
+  "iv": "43bdc16edde93e6f",
+  "chunks": 130,
+  "enc_file": "track.enc",
+  "format": "wav",
+  "channels": 1,
+  "sampwidth": 2,
+  "sample_rate": 22050,
+  "plaintext_bytes": 132300,
+  "plaintext_sha256": "8f11cf1810c1d132a733a68fdb52fd92ce41411e61515c96b1ee3cf68985fd70"
+}

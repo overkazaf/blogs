@@ -1,0 +1,33 @@
+目标 dongle : virtual dongle (device_id=0123456789abcdef)
+bundle      : out/bundle (device_id=0123456789abcdef)
+
+demo WAV  ->  /var/folders/y4/t8zsn2c92gn2zc25zwzzn0lm0000gn/T/tmp83r63qaw/level3-track.wav (0.3s, 8000Hz, mono, 16-bit)
+攻击                             结果
+-----------------------------------------------------------
+1. 重放 OPEN 请求(同一个 nonce)       拦住 ✔   (期望: 拒绝: code=replay)
+                               -> ERR replay
+                                  备注: nonce 缓存 + 服务器 nonce 让旧响应不可复用
+2. 把 licence 复制到另一台设备          拦住 ✔   (期望: 拒绝: code=device)
+                               -> ERR device
+                                  备注: wrapped_key 是用本机 K_dev 派生的, 换机解不出密钥
+3. 篡改 licence 字段(track_id)     拦住 ✔   (期望: 拒绝: code=sig)
+                               -> ERR sig
+                                  备注: 签名覆盖了全部授权字段
+4. 伪造签名(没有 K_lic 的攻击者)         拦住 ✔   (期望: 拒绝: code=sig)
+                               -> ERR sig
+                                  备注: K_lic 是 HMAC 对称密钥 —— 一旦固件被 dump, 这条防线就没了(见攻击 8)
+5. 回滚到旧 licence(counter 变小)    拦住 ✔   (期望: 拒绝: code=rollback)
+                               -> ERR rollback
+                                  备注: counter 水位线只存 RAM: 断电后就能回滚 -> 真要防它得写 flash/OTP
+6. 篡改加密音频(完整性)                 拦住 ✔   (期望: 解密后 SHA-256 不一致, 播放器拒绝输出)
+                               -> 检测到篡改
+                                  备注: HMAC-CTR 只提供机密性, 完整性由 manifest 里的 SHA-256 提供
+7. Level 3: 密钥不外泄, 但内容仍可被完整导出  拦住 ✔   (期望: key=WITHHELD 且 逐块取用可以还原出完整明文)
+                               -> key=WITHHELD, 明文还原=成功
+                                  备注: 结论: dongle 是物理钥匙, 谁拿着它谁就能放 —— 要靠限流/计数/水印兜底
+8. dump 固件拿到 K_ROOT 之后         拦住 ✔   (期望: 可以直接离线解出内容, 并为任意设备伪造 licence)
+                               -> 离线解密=成功, 通配伪造 licence=成功
+                                  备注: 这才是真正的攻击面: 所以量产时 K_ROOT 必须在 HSM, 设备端只放派生密钥 + debug lock
+
+小结: 8/8 条攻击按预期被挡住了。
+注意 6/7/8 属于「信息可被复制」类攻击: 它们「成功」本身就是要教的东西。

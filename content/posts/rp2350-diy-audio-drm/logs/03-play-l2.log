@@ -1,0 +1,10 @@
+dongle : virtual dongle
+track  : demo (132300 字节, 130 块)
+level  : 2 (返回内容密钥)
+[1] INFO  : device_id=0123456789abcdef fw=sim-0.1
+[2] LOAD  : track=demo counter=1 chunks=130 allow_key=1
+[3] OPEN  : session=1 server_nonce=7b8754d7cde7f2bf key=返回
+[4] 确认  : resp 校验通过 (dongle 和播放器派生出同一个 K_audio)
+            key = 6f78ae06c3eb7cb09be888594d84a9545a310f92ca09bff8e22d7333c07c112a   <-- 密钥已经离开芯片, 攻击者可在此处截获
+[5] 校验  : SHA-256 一致 8f11cf1810c1d132... ✔
+[6] 输出  : out/bundle/decrypted.wav

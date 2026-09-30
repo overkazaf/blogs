@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "device_id": "0123456789abcdef",
+  "track_id": "demo",
+  "iv": "43bdc16edde93e6f",
+  "chunks": 130,
+  "counter": 1,
+  "allow_key": 1,
+  "wrapped_key": "371f77cf2b0bba8f157d65dcbeefae179fcacaac47d8bec087698b7cb9be066e",
+  "sig": "3352e7c756e2495a0c315589cf0bc7d2ffe72eab23b29c47c69132bac7085dc4"
+}
