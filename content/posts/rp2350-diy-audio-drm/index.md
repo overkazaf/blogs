@@ -166,16 +166,7 @@ SafetyNet 检测 → L1 降级 L3     → boot ROM 验签失败 → 拒绝启动
 
 确定了「自己造一个」的思路之后，下一步是决定系统长什么样。我想让它尽可能接近商业 DRM 的核心逻辑，但去掉所有不影响安全性理解的复杂度 —— 比如不做 DRM 证书链、不做 CDN 分发、不做多租户。最终的系统只有三个角色：
 
-```
-   ┌────────────┐  ① LOAD licence   ┌─────────────────────┐
-   │  播放器     │ ────────────────▶ │  Pico 2W  (dongle)  │
-   │  player.py │  ② OPEN nonce     │  K_ROOT / K_dev     │
-   │            │ ◀──────────────── │  K_audio 永不出芯片  │
-   │            │  ③ key 或 keystream└─────────────────────┘
-   │ HMAC-CTR   │
-   │ 解密+播放   │  ④ 解密 → 校验 SHA-256 → 播放
-   └────────────┘
-```
+![RP2350 DRM 系统架构: 打包工具、授权器 Dongle 和播放器三角色的职责分工与数据流向](images/01_architecture.png)
 
 | 角色 | 实现 | 职责 |
 |------|------|------|
@@ -212,12 +203,6 @@ SafetyNet 检测 → L1 降级 L3     → boot ROM 验签失败 → 拒绝启动
 核心区别在于 Widevine L1 的 OEMCrypto 跑在 ARM TrustZone 的 Secure World 里，由 Trusty/OP-TEE 管理，密钥存储由 SoC 厂商的 Secure Storage 提供；而本实验的 dongle 是一整块独立的芯片，安全边界是 USB 线 —— 更粗糙，但原理完全一致。
 
 另一个重要区别：Widevine 的 licence 是 protobuf 格式，由 Google 签名（RSA），经过 License Proxy（合作方的业务鉴权中间层）下发；本实验的 licence 是 JSON 格式，HMAC 对称签名，直接打包在文件里。对称签名的问题在于：拿到 K_lic 就能伪造 licence（见攻击 #4 + #8）。Widevine 用非对称签名避免了这个问题 —— 即使设备端被 dump，拿到的只是公钥，伪造不了签名。
-
-### 协议时序
-
-下面这张架构图展示三个角色的职责分工、数据流向，以及和 Widevine L1 各组件的对应关系：
-
-![RP2350 DRM 系统架构: 打包工具、授权器 Dongle 和播放器三角色的职责分工与数据流向](images/01_architecture.png)
 
 ### 密钥层级图
 
