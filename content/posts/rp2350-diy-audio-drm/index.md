@@ -29,6 +29,35 @@ math: false
 
 > **研究边界**：本文的所有实验仅针对**自有音频内容**和**自有硬件设备**。不涉及任何商业 DRM 系统的绕过或密钥提取。代码中的根密钥是故意写死的教学值 —— **不要拿这套代码保护任何真实内容**。
 
+### 实验环境
+
+| 项目 | 规格 |
+|------|------|
+| **板子** | Raspberry Pi Pico 2W（RP2350A，Cortex-M33 双核 @150MHz，520KB SRAM，4MB Flash） |
+| **上位机** | MacBook Pro M1，macOS Sonoma |
+| **SDK** | pico-sdk 2.1.0 + pico-extras（cyw43 WiFi/BLE） |
+| **工具链** | arm-none-eabi-gcc 13.2.1 |
+| **Python** | 3.12 + pyserial（串口通信） |
+| **调试** | picotool 2.1.0（烧录 / info / reboot） |
+
+### 源码文件
+
+```
+labs/14_drm_dongle/
+├── CMakeLists.txt
+└── src/
+    ├── main.c            固件：USB CDC 协议状态机 + licence 校验 + 会话管理 + 分块 keystream
+    └── drm_crypto.c/h    HMAC-SHA256（手写 ipad/opad，SHA-256 走 RP2350 硬件加速器）
+
+tools/drm/
+├── drm_common.py         协议与密码学的"唯一真相"（与固件逐字对齐）
+├── pack_audio.py         内容方：加密 WAV + 生成 manifest + 签发 licence
+├── dongle_sim.py         虚拟 dongle（纯 Python，不需要板子也能跑全流程）
+├── player.py             播放器：向 dongle 要密钥 → 解密 → 校验 → 播放
+├── attack.py             8 条攻击的自动化实验台
+└── parity_check.py       固件与上位机协议一致性自检
+```
+
 ---
 
 ## 一、为什么要自己造一个 DRM
@@ -58,7 +87,7 @@ RP2350 是 Raspberry Pi 的第二代微控制器（Pico 2 上面那颗芯片）�
 
 ## 二、整体架构
 
-系统分三个角色：
+确定了「自己造一个」的思路之后，下一步是决定系统长什么样。我想让它尽可能接近商业 DRM 的核心逻辑，但去掉所有不影响安全性理解的复杂度 —— 比如不做 DRM 证书链、不做 CDN 分发、不做多租户。最终的系统只有三个角色：
 
 ```
    ┌────────────┐  ① LOAD licence   ┌─────────────────────┐
@@ -98,7 +127,11 @@ RP2350 是 Raspberry Pi 的第二代微控制器（Pico 2 上面那颗芯片）�
 
 ## 三、密码学设计：全 SHA-256 族
 
-整个系统的密码学只用到一个原语：**HMAC-SHA256**。没有 AES，没有 RSA，没有椭圆曲线。
+架构画完了，接下来最重要的决定是选什么密码学原语。我最初想用 AES —— 毕竟 Widevine 和 PlayReady 都是 AES-128-CTR（CENC 标准）。但 RP2350 没有硬件 AES 加速器，软件 AES 在 Cortex-M33 上虽然能跑，但密钥派生、流加密、签名验证加起来会吃掉不少 CPU。
+
+然后我注意到 RP2350 自带**硬件 SHA-256 加速器**。如果把所有密码学操作都建在 HMAC-SHA256 上，核心的压缩函数走硬件，性能就不再是瓶颈。
+
+所以最终的选择是：整个系统只用到一个原语 —— **HMAC-SHA256**。没有 AES，没有 RSA，没有椭圆曲线。
 
 为什么？因为 RP2350 有硬件 SHA-256 加速器，HMAC-SHA256 的 ipad/opad 部分用软件做，核心的 SHA-256 压缩走硬件 —— 密钥派生和 keystream 生成几乎不占 CPU 时间。
 
@@ -141,7 +174,7 @@ K_ROOT（厂商根密钥，32 字节，教学版明文写在固件里）
 
 ## 四、Level 2 vs Level 3：密钥是否离开芯片
 
-这是整个 DRM 最关键的分界线。本实验用同一套加密格式，通过 licence 里的一个字段 `allow_key` 控制：
+密码学设计完成后，我面临的下一个问题是：密钥到底应不应该离开 dongle？这是整个 DRM 最关键的分界线。本实验用同一套加密格式，通过 licence 里的一个字段 `allow_key` 控制：
 
 | | Level 2 | Level 3 |
 |---|---------|---------|
@@ -165,6 +198,8 @@ K_ROOT（厂商根密钥，32 字节，教学版明文写在固件里）
 
 ## 五、跑通全流程
 
+理论说得够多了，接下来是把整套系统跑起来。我会先用虚拟 dongle 跑通（不需要任何硬件），再接上真板子。
+
 ### 5.1 不需要硬件：虚拟 dongle
 
 ```sh
@@ -179,6 +214,58 @@ tools/drm/player.py --bundle out/bundle --sim
 ```
 
 三条命令走完打包 → 授权 → 解密 → 播放的全流程。虚拟 dongle 的密码学实现和固件逐字对齐（有一致性自检脚本 `parity_check.py` 保证）。
+
+**打包输出：**
+
+```
+$ tools/drm/pack_audio.py --make-demo out/demo.wav
+demo WAV  ->  out/demo.wav (3.0s, 22050Hz, mono, 16-bit)
+
+$ tools/drm/pack_audio.py --wav out/demo.wav --device-id sim --out-dir out/bundle
+WAV        : out/demo.wav (132300 字节 PCM)
+track_id   : demo
+device_id  : 0123456789abcdef
+level      : Level 2 (allow_key=1, 密钥会离开芯片)
+chunks     : 130 x 1024 字节
+iv         : 8ffce6a87be891c3
+自检       : OK
+输出       : out/bundle/{track.enc,manifest.json,license.json}
+```
+
+打包工具生成了三个文件。`manifest.json` 描述加密参数，`license.json` 绑定到特定设备：
+
+```json
+// license.json — 注意 wrapped_key 是用本机 K_dev 包裹的，换一台设备解不开
+{
+  "v": 1,
+  "device_id": "0123456789abcdef",
+  "track_id": "demo",
+  "iv": "8ffce6a87be891c3",
+  "chunks": 130,
+  "counter": 1,
+  "allow_key": 1,
+  "wrapped_key": "371f77cf2b0bba8f157d65dcbeefae179fcacaac47d8bec087698b7cb9be066e",
+  "sig": "630fe060b46bf28d85f9e3f56785341c9254a272e26b8b02f19c71d54fe8d142"
+}
+```
+
+**Level 2 播放输出（密钥离开芯片）：**
+
+```
+$ tools/drm/player.py --bundle out/bundle --sim
+dongle : virtual dongle
+track  : demo (132300 字节, 130 块)
+level  : 2 (返回内容密钥)
+[1] INFO  : device_id=0123456789abcdef fw=sim-0.1
+[2] LOAD  : track=demo counter=1 chunks=130 allow_key=1
+[3] OPEN  : session=1 server_nonce=1125a06a6469d596 key=返回
+[4] 确认  : resp 校验通过 (dongle 和播放器派生出同一个 K_audio)
+            key = 6f78ae06...c07c112a   <-- 密钥已经离开芯片
+[5] 校验  : SHA-256 一致 8f11cf1810c1d132... ✔
+[6] 输出  : out/bundle/decrypted.wav
+```
+
+注意第 [3] 步，dongle 把完整的 `key` 返回给了播放器 —— 这就是 Level 2 的代价。攻击者在这一步截获密钥，以后不需要 dongle 就能解密。
 
 ### 5.2 接真硬件
 
@@ -220,6 +307,29 @@ tools/drm/player.py --bundle out/l3 --sim
 
 两个 bundle 用的是同一套加密格式，可以直接对比「密钥是否离开芯片」这件事。
 
+**Level 3 播放输出（密钥不离开芯片）：**
+
+```
+$ tools/drm/player.py --bundle out/bundle_l3 --sim
+dongle : virtual dongle
+track  : demo (132300 字节, 130 块)
+level  : 3 (只返回 keystream)
+[1] INFO  : device_id=0123456789abcdef fw=sim-0.1
+[2] LOAD  : track=demo counter=1 chunks=130 allow_key=0
+[3] OPEN  : session=1 server_nonce=8c244f4dace48c2f key=WITHHELD(拒绝导出)
+[4] CHUNK : 0/129 解密 1024 字节 (keys 始终留在芯片里)
+[4] CHUNK : 1/129 解密 1024 字节 (keys 始终留在芯片里)
+[4] CHUNK : 2/129 解密 1024 字节 (keys 始终留在芯片里)
+    CHUNK : 3/129
+    ...
+    CHUNK : 128/129
+[4] CHUNK : 129/129 解密 204 字节 (keys 始终留在芯片里)
+[5] 校验  : SHA-256 一致 8f11cf1810c1d132... ✔
+[6] 输出  : out/bundle_l3/decrypted.wav
+```
+
+对比两个 session：Level 2 的第 [3] 步返回了完整密钥，Level 3 只返回 `WITHHELD`。Level 3 需要 130 次 CHUNK 请求才能解完，但密钥始终没离开 dongle。
+
 ### 5.4 固件自检
 
 串口敲 `KAT`，板子会用 RFC 4231 / FIPS 180-4 的标准测试向量验证 HMAC-SHA256 和硬件 SHA-256 通路：
@@ -229,16 +339,82 @@ tools/drm/player.py --bundle out/l3 --sim
 OK kat=pass vectors=rfc4231-1,rfc4231-2,sha256-abc
 ```
 
+### 5.5 协议一致性自检
+
+固件是 C 写的，上位机是 Python 写的，两边的协议字符串拼接必须完全一致，否则签名对不上。`parity_check.py` 逐条比对两边的格式串和常量：
+
+```
+$ tools/drm/parity_check.py
+== 1. 固件里的格式串 ==
+  ✔ licence 签名串      license|v=%u|device_id=%s|track_id=%s|iv=%s|chunks=%u|counte...
+  ✔ 设备密钥派生           device|%s
+  ✔ 内容密钥派生           track|%s
+  ✔ 密钥包裹上下文          wrap|%s|%s
+  ✔ keystream 块上下文   stream|%s|%016llx
+  ✔ 会话确认串            open|%s|%s|%s|%s|%u
+== 2. 同一组输入下的字符串比对 ==
+  ✔ licence 签名串       ✔ 设备密钥派生       ✔ 内容密钥派生
+  ✔ 密钥包裹上下文        ✔ keystream 块上下文  ✔ 会话确认串
+== 3. 固件常量与上位机常量 ==
+  ✔ K_ROOT (32 字节 ASCII)  ✔ CHUNK_SIZE 一致  ✔ HMAC ipad/opad
+
+固件与上位机的协议拼接完全一致 ✔
+```
+
+这一步看起来无聊，但它救过我的命 —— 早期版本里固件用 `%016llx` 格式化 block index，Python 侧用 `%016x`，在 index > 2^32 时行为不同。如果没有这个自检脚本，调试到天亮也不会发现签名为什么对不上。
+
 ---
 
 ## 六、8 条攻击实验
 
-这是整篇文章最重要的部分。一个没有攻击实验的 DRM 项目只是「加密播放 demo」。
+到这里为止，我们已经有了一个能跑通的 DRM 系统。但一个没有攻击实验的 DRM 项目只是「加密播放 demo」—— 它的安全性声明没有经过验证，和 README 里写「很安全」没有区别。
+
+下面用 `attack.py` 对着 dongle 逐条验证每一个设计选择到底有没有用。
 
 ```sh
 tools/drm/attack.py --bundle out/bundle --sim     # 虚拟 dongle
 tools/drm/attack.py --bundle out/hw --port /dev/cu.usbmodem14101  # 真硬件
 ```
+
+跑一遍的完整输出长这样：
+
+```
+$ tools/drm/attack.py --bundle out/bundle --sim
+目标 dongle : virtual dongle (device_id=0123456789abcdef)
+bundle      : out/bundle (device_id=0123456789abcdef)
+
+攻击                                              结果
+-----------------------------------------------------------
+1. 重放 OPEN 请求(同一个 nonce)                     拦住 ✔
+   -> ERR replay
+      备注: nonce 缓存 + 服务器 nonce 让旧响应不可复用
+2. 把 licence 复制到另一台设备                       拦住 ✔
+   -> ERR device
+      备注: wrapped_key 是用本机 K_dev 派生的, 换机解不出密钥
+3. 篡改 licence 字段(track_id)                     拦住 ✔
+   -> ERR sig
+      备注: 签名覆盖了全部授权字段
+4. 伪造签名(没有 K_lic 的攻击者)                     拦住 ✔
+   -> ERR sig
+      备注: K_lic 是 HMAC 对称密钥 — 固件被 dump 就没了(见 #8)
+5. 回滚到旧 licence(counter 变小)                   拦住 ✔
+   -> ERR rollback
+      备注: counter 水位线只存 RAM: 断电后就能回滚
+6. 篡改加密音频(完整性)                              拦住 ✔
+   -> 检测到篡改
+      备注: HMAC-CTR 只提供机密性, 完整性由 manifest SHA-256 提供
+7. Level 3: 密钥不外泄, 但内容仍可被完整导出           拦住 ✔
+   -> key=WITHHELD, 明文还原=成功
+      备注: dongle 是物理钥匙, 谁拿着它谁就能放
+8. dump 固件拿到 K_ROOT 之后                        拦住 ✔
+   -> 离线解密=成功, 通配伪造 licence=成功
+      备注: 真正的攻击面在密钥存放, 不在算法
+
+小结: 8/8 条攻击按预期被挡住了。
+注意 6/7/8 属于「信息可被复制」类攻击: 它们「成功」本身就是要教的东西。
+```
+
+8 条全部 pass —— 但「pass」的含义需要仔细分清：前 5 条是真正挡住了攻击者的行为，后 3 条是验证了「这个方向的攻击确实可行」。接下来逐条拆解最值得展开的两条。
 
 | # | 攻击 | 期望结果 | 结论 |
 |---|------|---------|------|
@@ -275,7 +451,9 @@ dump 固件（甚至只要 `strings rp2350_drm_dongle.elf`）就能拿到 K_ROOT
 
 ## 七、加固路线图
 
-第 #8 条攻击打开了加固的路径。以下 7 步按优先级排序，每一步都解决一个具体的攻击面：
+攻击实验跑完，最大的收获不是「我的 DRM 很安全」，而是清楚地看到了哪里不安全。第 #8 条（根密钥在固件里）是最致命的，它直接让整条信任链归零。
+
+下面这张加固路线图就是从攻击结果倒推出来的。7 步按优先级排序，每一步都解决一个具体的攻击面：
 
 | 步骤 | 加固措施 | 解决的攻击面 | 商业 DRM 中的等价物 |
 |------|---------|-------------|-------------------|
@@ -292,6 +470,8 @@ dump 固件（甚至只要 `strings rp2350_drm_dongle.elf`）就能拿到 K_ROOT
 ---
 
 ## 八、与商业 DRM 还差多远
+
+做完加固路线图，一个自然的问题是：这个 $5 的原型和 Widevine/PlayReady 之间到底还有多远？答案是：核心密码学思路一样，但工程化差距巨大。
 
 | 维度 | 本实验 | Widevine | PlayReady |
 |------|--------|----------|-----------|
