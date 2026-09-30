@@ -1,7 +1,7 @@
 ---
 title: "用 RP2350 从零搭建一个 DRM 系统"
 slug: "rp2350-diy-audio-drm-from-scratch"
-date: 2026-10-01T10:00:00+08:00
+date: 2026-09-30T10:00:00+08:00
 draft: false
 tags: ["RP2350", "Pico2", "embedded-security", "DRM", "HMAC-SHA256", "hardware-crypto", "dongle", "security-research"]
 categories: ["hardware-security"]
