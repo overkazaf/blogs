@@ -1,0 +1,138 @@
+content/posts/rp2350-diy-audio-drm/logs/02-pack-l2.log
+  59cfce3f35c53549 1-12
+content/posts/rp2350-diy-audio-drm/code/drm_common.py
+  59cfce3f35c53549 1-201
+content/posts/rp2350-diy-audio-drm/index.md
+  59cfce3f35c53549 86-230,256-364,388,425-453,751-775
+content/posts/rp2350-diy-audio-drm/code/drm_crypto.h
+  59cfce3f35c53549 1-35
+content/posts/rp2350-diy-audio-drm/logs/07-parity.log
+  59cfce3f35c53549 1-41
+content/posts/rp2350-diy-audio-drm/logs/06-attack.log
+  59cfce3f35c53549 1-33
+content/posts/rp2350-diy-audio-drm/logs/04-pack-l3.log
+  59cfce3f35c53549 1-12
+content/posts/rp2350-diy-audio-drm/logs/05-play-l3.log
+  59cfce3f35c53549 1-12
+content/posts/rp2350-diy-audio-drm/code/main.c
+  59cfce3f35c53549 1-435
+content/posts/rp2350-diy-audio-drm/code/parity_check.py
+  59cfce3f35c53549 1-220
+content/posts/rp2350-diy-audio-drm/code/drm_crypto.c
+  59cfce3f35c53549 1-171
+content/posts/rp2350-diy-audio-drm/code/attack.py
+  59cfce3f35c53549 1-274
+content/posts/rp2350-diy-audio-drm/logs/03-play-l2.log
+  59cfce3f35c53549 1-10
+content/posts/rp2350-diy-audio-drm/code/player.py
+  59cfce3f35c53549 1-260
+content/posts/rp2350-diy-audio-drm/logs/01-make-demo.log
+  59cfce3f35c53549 1
+content/posts/rp2350-diy-audio-drm/code/dongle_sim.py
+  59cfce3f35c53549 1-246
+content/posts/rp2350-diy-audio-drm/code/pack_audio.py
+  59cfce3f35c53549 1-165
+content/posts/rp2350-diy-audio-drm/logs/license.json
+  59cfce3f35c53549 1-11
+content/posts/rp2350-diy-audio-drm/logs/manifest.json
+  59cfce3f35c53549 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "e482c1e691f447c60a3332642c6d74bed0e05c02",
+  "prompts": {
+    "59cfce3f35c53549": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "14b298df-035b-43e5-b9e9-a1b942b46109",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 2463,
+      "total_deletions": 3,
+      "accepted_lines": 2463,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/rp2350-diy-audio-drm/code/attack.py": {
+          "additions": 274,
+          "accepted_lines": 274
+        },
+        "content/posts/rp2350-diy-audio-drm/code/pack_audio.py": {
+          "additions": 165,
+          "accepted_lines": 165
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/07-parity.log": {
+          "additions": 41,
+          "accepted_lines": 41
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/04-pack-l3.log": {
+          "additions": 12,
+          "accepted_lines": 12
+        },
+        "content/posts/rp2350-diy-audio-drm/code/drm_crypto.c": {
+          "additions": 171,
+          "accepted_lines": 171
+        },
+        "content/posts/rp2350-diy-audio-drm/code/player.py": {
+          "additions": 260,
+          "accepted_lines": 260
+        },
+        "content/posts/rp2350-diy-audio-drm/code/dongle_sim.py": {
+          "additions": 246,
+          "accepted_lines": 246
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/license.json": {
+          "additions": 11,
+          "accepted_lines": 11
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/06-attack.log": {
+          "additions": 33,
+          "accepted_lines": 33
+        },
+        "content/posts/rp2350-diy-audio-drm/code/drm_crypto.h": {
+          "additions": 35,
+          "accepted_lines": 35
+        },
+        "content/posts/rp2350-diy-audio-drm/code/parity_check.py": {
+          "additions": 220,
+          "accepted_lines": 220
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/manifest.json": {
+          "additions": 15,
+          "accepted_lines": 15
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/05-play-l3.log": {
+          "additions": 12,
+          "accepted_lines": 12
+        },
+        "content/posts/rp2350-diy-audio-drm/code/drm_common.py": {
+          "additions": 201,
+          "accepted_lines": 201
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/03-play-l2.log": {
+          "additions": 10,
+          "accepted_lines": 10
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/01-make-demo.log": {
+          "additions": 1,
+          "accepted_lines": 1
+        },
+        "content/posts/rp2350-diy-audio-drm/index.md": {
+          "additions": 309,
+          "deletions": 3,
+          "accepted_lines": 309
+        },
+        "content/posts/rp2350-diy-audio-drm/logs/02-pack-l2.log": {
+          "additions": 12,
+          "accepted_lines": 12
+        },
+        "content/posts/rp2350-diy-audio-drm/code/main.c": {
+          "additions": 435,
+          "accepted_lines": 435
+        }
+      }
+    }
+  }
+}
