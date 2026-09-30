@@ -1,0 +1,30 @@
+content/posts/rp2350-diy-audio-drm/index.md
+  59cfce3f35c53549 32-60,90,130-134,177,201-202,218-269,310-332,342-365,370-372,379-418,454-456,474-475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "572df7a150915197d6ae08ac0010e142d366e2e2",
+  "prompts": {
+    "59cfce3f35c53549": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "14b298df-035b-43e5-b9e9-a1b942b46109",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 185,
+      "total_deletions": 5,
+      "accepted_lines": 185,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/rp2350-diy-audio-drm/index.md": {
+          "additions": 185,
+          "deletions": 5,
+          "accepted_lines": 185
+        }
+      }
+    }
+  }
+}
