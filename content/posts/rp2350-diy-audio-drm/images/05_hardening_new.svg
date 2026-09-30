@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 1120" width="1200" height="1120"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-flow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .step-num { font-family: 'SF Mono', 'Menlo', monospace; font-size: 22px; font-weight: 800; fill: #0F172A; text-anchor: middle; dominant-baseline: central; }
+    .step-title { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .step-desc { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .pill-txt { font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .footer-text { font-size: 12px; fill: #CBD5E1; dominant-baseline: central; }
+    .footer-em { font-weight: 600; }
+    .note-text { font-size: 14px; fill: #FDE68A; text-anchor: middle; dominant-baseline: central; font-weight: 600; }
+    .note-sub { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="1120" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="42" class="title-main">加固路线图<tspan class="title-accent"> · </tspan>从教学原型到生产级 DRM</text>
+  <text x="600" y="70" class="subtitle">7 步加固, 每步解决一个具体攻击面 | 按优先级从高到低排列</text>
+
+  <!-- Step 1: Emerald -->
+  <g transform="translate(60, 100)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#34D399"/>
+    <circle cx="46" cy="55" r="24" fill="#34D399" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">1</text>
+    <text x="86" y="38" class="step-title">密钥不进固件</text>
+    <text x="86" y="62" class="step-desc">K_dev 存 OTP 派生, K_ROOT 放 HSM / licence server</text>
+    <!-- attack pill -->
+    <rect x="540" y="26" width="140" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="610" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; #8 固件 dump</text>
+    <!-- widevine equivalent -->
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#34D399">Widevine:</tspan> Keybox 在 TEE, 设备端无根密钥</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="600" y1="210" x2="600" y2="232" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-flow)"/>
+
+  <!-- Step 2: Emerald -->
+  <g transform="translate(60, 236)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#34D399"/>
+    <circle cx="46" cy="55" r="24" fill="#34D399" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">2</text>
+    <text x="86" y="38" class="step-title">非对称签名</text>
+    <text x="86" y="62" class="step-desc">Licence 用 Ed25519/ECDSA 签名, 设备端只放公钥</text>
+    <rect x="540" y="26" width="180" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="630" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; #4 伪造签名(升级)</text>
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#34D399">Widevine:</tspan> licence 由 Google RSA 签名, dump 拿不到私钥</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="600" y1="346" x2="600" y2="368" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-flow)"/>
+
+  <!-- Step 3: Cyan -->
+  <g transform="translate(60, 372)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#38BDF8"/>
+    <circle cx="46" cy="55" r="24" fill="#38BDF8" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">3</text>
+    <text x="86" y="38" class="step-title">会话密钥替代</text>
+    <text x="86" y="62" class="step-desc">OPEN 返回 K_audio 的派生值 + 两层加密, 密钥不离开芯片</text>
+    <rect x="540" y="26" width="200" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="640" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; L2 密钥离开芯片</text>
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#38BDF8">Widevine:</tspan> L1 内容密钥在 TEE 内解封, 明文不出安全边界</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="600" y1="482" x2="600" y2="504" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-flow)"/>
+
+  <!-- Step 4: Cyan -->
+  <g transform="translate(60, 508)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#38BDF8"/>
+    <circle cx="46" cy="55" r="24" fill="#38BDF8" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">4</text>
+    <text x="86" y="38" class="step-title">Counter 写 Flash/OTP</text>
+    <text x="86" y="62" class="step-desc">回滚保护水位线持久化, 断电不丢失</text>
+    <rect x="540" y="26" width="140" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="610" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; #5 断电回滚</text>
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#38BDF8">Widevine:</tspan> Secure Stop / 服务端计数</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="600" y1="618" x2="600" y2="640" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-flow)"/>
+
+  <!-- Step 5: Amber -->
+  <g transform="translate(60, 644)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#FBBF24"/>
+    <circle cx="46" cy="55" r="24" fill="#FBBF24" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">5</text>
+    <text x="86" y="38" class="step-title">分块认证加密</text>
+    <text x="86" y="62" class="step-desc">每块带 HMAC/GCM tag, 支持随机访问 + 完整性验证</text>
+    <rect x="540" y="26" width="140" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="610" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; #6 密文翻转</text>
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#FBBF24">Widevine:</tspan> CENC 每个 sample 独立加密, CMAF 分片级完整性</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="600" y1="754" x2="600" y2="776" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-flow)"/>
+
+  <!-- Step 6: Rose -->
+  <g transform="translate(60, 780)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#FB7185"/>
+    <circle cx="46" cy="55" r="24" fill="#FB7185" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">6</text>
+    <text x="86" y="38" class="step-title">Debug Lock + Secure Boot</text>
+    <text x="86" y="62" class="step-desc">OTP 禁用 SWD + 签名启动链, 固件不可被替换或调试</text>
+    <rect x="540" y="26" width="160" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="620" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; SWD dump 内存</text>
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#FB7185">Widevine:</tspan> JTAG disable (eFuse) + Android Verified Boot</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="600" y1="890" x2="600" y2="912" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-flow)"/>
+
+  <!-- Step 7: Violet -->
+  <g transform="translate(60, 916)">
+    <rect x="0" y="0" width="1080" height="110" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#A78BFA"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#A78BFA"/>
+    <circle cx="46" cy="55" r="24" fill="#A78BFA" filter="url(#softShadow)"/>
+    <text x="46" y="55" class="step-num">7</text>
+    <text x="86" y="38" class="step-title">速率限制 / 播放计数 / 水印</text>
+    <text x="86" y="62" class="step-desc">对抗合法设备批量导出, 事后追溯泄露源</text>
+    <rect x="540" y="26" width="150" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="615" y="38" class="pill-txt" fill="#FECDD3">&#x26A0; #7 逐块导出</text>
+    <text x="86" y="90" class="footer-text"><tspan class="footer-em" fill="#A78BFA">Widevine:</tspan> 并发流限制 + 音频水印 + HDCP 输出保护</text>
+  </g>
+
+  <!-- Bottom note -->
+  <text x="600" y="1068" class="note-text">&#x26A0; 步骤 1-2 是最关键的基础</text>
+  <text x="600" y="1092" class="note-sub">没有它们, 后面所有加固都建在沙子上</text>
+</svg>

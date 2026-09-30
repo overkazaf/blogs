@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 780" width="1200" height="780"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#38BDF8"/></marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FBBF24"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#34D399"/></marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .root-title { font-size: 18px; fill: #F8FAFC; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .root-desc { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .dim-num { font-family: 'SF Mono', 'Menlo', monospace; font-size: 14px; font-weight: 700; fill: #0F172A; text-anchor: middle; dominant-baseline: central; }
+    .dim-title { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .dim-q { font-size: 13px; dominant-baseline: central; font-style: italic; }
+    .section-label { font-size: 12px; fill: #94A3B8; dominant-baseline: central; font-weight: 600; letter-spacing: 0.5px; }
+    .source-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .item-text { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #E2E8F0; dominant-baseline: central; }
+    .badge-txt { font-size: 12px; font-weight: 700; dominant-baseline: central; text-anchor: middle; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .footer-em { fill: #38BDF8; font-weight: 600; }
+    .arrow-label { font-size: 12px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; font-weight: 600; }
+  </style>
+  <rect width="1200" height="780" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="42" class="title-main">RP2350 DRM <tspan class="title-accent">&#183;</tspan> 系统架构</text>
+  <text x="600" y="70" class="subtitle">三个角色各自守住 DRM 的一个关键职责</text>
+
+  <!-- Root node -->
+  <g transform="translate(350, 96)">
+    <rect x="0" y="0" width="500" height="60" rx="10" fill="#0F1E2E" stroke="#38BDF8" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="4" height="60" rx="2" fill="#38BDF8"/>
+    <text x="250" y="22" class="root-title">DRM 的四个核心问题</text>
+    <text x="250" y="44" class="root-desc">内容加密 / 设备绑定 / 授权下发 / 密钥保护</text>
+  </g>
+
+  <!-- Fork lines from root to 3 cards -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="600" y1="156" x2="600" y2="180"/>
+    <line x1="200" y1="180" x2="1000" y2="180"/>
+    <line x1="200" y1="180" x2="200" y2="210" marker-end="url(#arrow-down)"/>
+    <line x1="600" y1="180" x2="600" y2="210" marker-end="url(#arrow-down)"/>
+    <line x1="1000" y1="180" x2="1000" y2="210" marker-end="url(#arrow-down)"/>
+  </g>
+  <circle cx="600" cy="156" r="3" fill="#64748B"/>
+
+  <!-- ========== Card 1: Pack Tool (Cyan) ========== -->
+  <g transform="translate(28, 218)">
+    <rect x="0" y="0" width="348" height="440" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="348" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="348" height="4" fill="#38BDF8"/>
+
+    <circle cx="36" cy="40" r="16" fill="#38BDF8"/>
+    <text x="36" y="40" class="dim-num">01</text>
+    <text x="64" y="40" class="dim-title">打包工具</text>
+    <text x="20" y="72" class="dim-q" fill="#7DD3FC">pack_audio.py (Python)</text>
+
+    <line x1="20" y1="90" x2="328" y2="90" stroke="#1E293B" stroke-width="1"/>
+
+    <text x="20" y="112" class="section-label">职责</text>
+    <text x="20" y="132" class="source-text">加密音频 / 签发 licence / 绑定设备</text>
+    <text x="20" y="152" class="source-text">扮演「内容方 + licence server」</text>
+
+    <text x="20" y="182" class="section-label">持有密钥</text>
+    <rect x="20" y="196" width="308" height="28" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="34" y="210" class="item-text" fill="#A5F3FC">K_ROOT</text>
+    <text x="110" y="210" class="source-text" style="font-size:11px;fill:#94A3B8">全部密钥的根</text>
+
+    <text x="20" y="246" class="section-label">产出</text>
+    <rect x="20" y="260" width="308" height="28" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="34" y="274" class="item-text" fill="#7DD3FC">track.enc + manifest.json + license.json</text>
+
+    <text x="20" y="310" class="section-label">解决的问题</text>
+    <rect x="20" y="324" width="100" height="24" rx="12" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="70" y="337" class="badge-txt" fill="#7DD3FC">内容加密</text>
+    <rect x="128" y="324" width="100" height="24" rx="12" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="178" y="337" class="badge-txt" fill="#7DD3FC">设备绑定</text>
+    <rect x="236" y="324" width="90" height="24" rx="12" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="281" y="337" class="badge-txt" fill="#7DD3FC">授权下发</text>
+
+    <line x1="20" y1="366" x2="328" y2="366" stroke="#1E293B" stroke-width="1"/>
+    <text x="20" y="386" class="section-label">Widevine 等价物</text>
+    <text x="20" y="408" class="source-text">Shaka Packager + License Server</text>
+
+    <rect x="20" y="420" width="308" height="4" rx="2" fill="#38BDF8" opacity="0.15"/>
+  </g>
+
+  <!-- ========== Card 2: Dongle (Amber) ========== -->
+  <g transform="translate(420, 218)">
+    <rect x="0" y="0" width="348" height="440" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="348" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="348" height="4" fill="#FBBF24"/>
+
+    <circle cx="36" cy="40" r="16" fill="#FBBF24"/>
+    <text x="36" y="40" class="dim-num">02</text>
+    <text x="64" y="40" class="dim-title">授权器 Dongle</text>
+    <text x="20" y="72" class="dim-q" fill="#FDE68A">RP2350 Pico 2W (C firmware)</text>
+
+    <line x1="20" y1="90" x2="328" y2="90" stroke="#3D2E0A" stroke-width="1"/>
+
+    <text x="20" y="112" class="section-label">职责</text>
+    <text x="20" y="132" class="source-text">校验 licence / 解封密钥 / 派生 keystream</text>
+    <text x="20" y="152" class="source-text">扮演「安全硬件」- 密钥不出芯片</text>
+
+    <text x="20" y="182" class="section-label">持有密钥</text>
+    <rect x="20" y="196" width="148" height="28" rx="6" fill="#020617" stroke="#3D2E0A" stroke-width="1"/>
+    <text x="34" y="210" class="item-text" fill="#FDE68A">K_ROOT</text>
+    <rect x="176" y="196" width="152" height="28" rx="6" fill="#020617" stroke="#3D2E0A" stroke-width="1"/>
+    <text x="190" y="210" class="item-text" fill="#FDE68A">K_dev</text>
+    <text x="240" y="210" class="source-text" style="font-size:11px;fill:#94A3B8">按板隔离</text>
+
+    <text x="20" y="246" class="section-label">安全边界</text>
+    <rect x="20" y="260" width="308" height="28" rx="6" fill="#020617" stroke="#3D2E0A" stroke-width="1"/>
+    <text x="34" y="274" class="item-text" fill="#FDE68A">USB CDC 串口协议</text>
+    <text x="210" y="274" class="source-text" style="font-size:11px;fill:#94A3B8">LOAD/OPEN/CHUNK</text>
+
+    <text x="20" y="310" class="section-label">解决的问题</text>
+    <rect x="20" y="324" width="120" height="24" rx="12" fill="#713F12" stroke="#FBBF24" stroke-width="1"/>
+    <text x="80" y="337" class="badge-txt" fill="#FDE68A">密钥保护</text>
+    <rect x="150" y="324" width="178" height="24" rx="12" fill="#450A0A" stroke="#F87171" stroke-width="1"/>
+    <text x="239" y="337" class="badge-txt" fill="#FECDD3">&#9888; 最关键的组件</text>
+
+    <line x1="20" y1="366" x2="328" y2="366" stroke="#3D2E0A" stroke-width="1"/>
+    <text x="20" y="386" class="section-label">Widevine 等价物</text>
+    <text x="20" y="408" class="source-text">OEMCrypto (TEE 内)</text>
+
+    <rect x="20" y="420" width="308" height="4" rx="2" fill="#FBBF24" opacity="0.15"/>
+  </g>
+
+  <!-- ========== Card 3: Player (Emerald) ========== -->
+  <g transform="translate(812, 218)">
+    <rect x="0" y="0" width="348" height="440" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="348" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="348" height="4" fill="#34D399"/>
+
+    <circle cx="36" cy="40" r="16" fill="#34D399"/>
+    <text x="36" y="40" class="dim-num">03</text>
+    <text x="64" y="40" class="dim-title">播放器</text>
+    <text x="20" y="72" class="dim-q" fill="#6EE7B7">player.py (Python)</text>
+
+    <line x1="20" y1="90" x2="328" y2="90" stroke="#0F2A1F" stroke-width="1"/>
+
+    <text x="20" y="112" class="section-label">职责</text>
+    <text x="20" y="132" class="source-text">请求授权 / 解密音频 / 校验 SHA-256 / 播放</text>
+    <text x="20" y="152" class="source-text">扮演「不可信客户端」</text>
+
+    <text x="20" y="182" class="section-label">持有密钥</text>
+    <rect x="20" y="196" width="308" height="28" rx="6" fill="#020617" stroke="#052E1A" stroke-width="1"/>
+    <text x="34" y="210" class="item-text" fill="#6EE7B7">无密钥 - 不可信</text>
+
+    <text x="20" y="246" class="section-label">协议命令</text>
+    <rect x="20" y="260" width="96" height="28" rx="6" fill="#020617" stroke="#052E1A" stroke-width="1"/>
+    <text x="34" y="274" class="item-text" fill="#6EE7B7">LOAD</text>
+    <rect x="124" y="260" width="96" height="28" rx="6" fill="#020617" stroke="#052E1A" stroke-width="1"/>
+    <text x="138" y="274" class="item-text" fill="#6EE7B7">OPEN</text>
+    <rect x="228" y="260" width="100" height="28" rx="6" fill="#020617" stroke="#052E1A" stroke-width="1"/>
+    <text x="242" y="274" class="item-text" fill="#6EE7B7">CHUNK</text>
+
+    <text x="20" y="310" class="section-label">设计原则</text>
+    <rect x="20" y="324" width="308" height="24" rx="12" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="174" y="337" class="badge-txt" fill="#34D399">源码全给攻击者也没关系</text>
+
+    <line x1="20" y1="366" x2="328" y2="366" stroke="#0F2A1F" stroke-width="1"/>
+    <text x="20" y="386" class="section-label">Widevine 等价物</text>
+    <text x="20" y="408" class="source-text">ExoPlayer / Chrome CDM</text>
+
+    <rect x="20" y="420" width="308" height="4" rx="2" fill="#34D399" opacity="0.15"/>
+  </g>
+
+  <!-- ========== Flow arrows between cards ========== -->
+  <!-- Pack Tool --> Player: bundle (bottom of cards, curving below) -->
+  <path d="M 376 620 C 420 680, 770 680, 812 620" stroke="#38BDF8" stroke-width="1.6" fill="none" opacity="0.7" marker-end="url(#arrow-cyan)"/>
+  <rect x="540" y="666" width="80" height="22" rx="11" fill="#0F172A" stroke="#38BDF8" stroke-width="0.8"/>
+  <text x="580" y="677" class="arrow-label" fill="#7DD3FC">bundle</text>
+
+  <!-- Player <--> Dongle: USB CDC (between card 2 and card 3, vertically centered) -->
+  <path d="M 812 460 C 795 480, 790 480, 768 460" stroke="#FBBF24" stroke-width="1.6" fill="none" opacity="0.7" marker-end="url(#arrow-amber)"/>
+  <path d="M 768 430 C 790 410, 795 410, 812 430" stroke="#34D399" stroke-width="1.6" fill="none" opacity="0.7" marker-end="url(#arrow-green)"/>
+  <rect x="770" y="438" width="80" height="22" rx="11" fill="#0F172A" stroke="#FBBF24" stroke-width="0.8"/>
+  <text x="810" y="449" class="arrow-label" fill="#FDE68A">USB CDC</text>
+
+  <!-- Bottom takeaway -->
+  <g transform="translate(200, 700)">
+    <rect x="0" y="0" width="800" height="44" rx="10" fill="#0F1E2E" stroke="#334155" stroke-width="1" stroke-dasharray="6,4"/>
+    <text x="400" y="22" class="footer-text"><tspan style="fill:#38BDF8;font-weight:700">核心原则</tspan>&#12288;&#183;&#12288;密钥只在 Dongle 和打包工具之间流动, 播放器从不持有密钥</text>
+  </g>
+</svg>

@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 760" width="1200" height="760"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-right-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#38BDF8"/></marker>
+    <marker id="arrow-left-rose" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#FB7185"/></marker>
+    <marker id="arrow-right-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FBBF24"/></marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .zone-title { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .item-label { font-size: 14px; fill: #E2E8F0; dominant-baseline: central; }
+    .item-desc { font-size: 12px; fill: #CBD5E1; dominant-baseline: central; }
+    .item-code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #E2E8F0; dominant-baseline: central; }
+    .badge-txt { font-size: 11px; font-weight: 700; dominant-baseline: central; text-anchor: middle; }
+    .nsc-label { font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px; fill: #FBBF24; dominant-baseline: central; text-anchor: middle; font-weight: 700; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; dominant-baseline: central; font-weight: 600; letter-spacing: 0.5px; }
+  </style>
+  <rect width="1200" height="760" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="38" class="title-main">TrustZone-M 内存隔离 <tspan class="title-accent">&#183;</tspan> RP2350</text>
+  <text x="600" y="64" class="subtitle">Secure World 持有密钥, Non-Secure World 通过 NSC 调用接口访问</text>
+
+  <!-- Chip outline -->
+  <rect x="40" y="90" width="1120" height="560" rx="16" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="600" y="112" style="font-size:13px;fill:#64748B;text-anchor:middle;dominant-baseline:central;letter-spacing:1px">RP2350 CHIP</text>
+
+  <!-- ========== Secure World (left, rose accent) ========== -->
+  <g transform="translate(60, 128)">
+    <rect x="0" y="0" width="460" height="460" rx="12" fill="#2E1421" stroke="#FB7185" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="460" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="460" height="4" fill="#FB7185"/>
+
+    <!-- Zone title -->
+    <text x="24" y="40" class="zone-title" style="fill:#FECDD3">Secure World</text>
+    <rect x="200" y="26" width="160" height="24" rx="12" fill="#7F1D1D" stroke="#FB7185" stroke-width="1"/>
+    <text x="280" y="38" class="badge-txt" fill="#FECDD3">密钥永不离开此区域</text>
+
+    <!-- Items -->
+    <text x="24" y="80" class="section-label">密钥存储</text>
+
+    <rect x="24" y="96" width="412" height="36" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <circle cx="44" cy="114" r="6" fill="#FB7185"/>
+    <text x="60" y="114" class="item-label">K_ROOT</text>
+    <text x="160" y="114" class="item-desc">OTP 或固件内嵌 (32 字节)</text>
+
+    <rect x="24" y="140" width="412" height="36" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <circle cx="44" cy="158" r="6" fill="#FB7185"/>
+    <text x="60" y="158" class="item-label">K_dev 派生</text>
+    <text x="160" y="158" class="item-desc">HMAC(K_ROOT, "device|id")</text>
+
+    <rect x="24" y="184" width="412" height="36" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <circle cx="44" cy="202" r="6" fill="#FB7185"/>
+    <text x="60" y="202" class="item-label">K_audio 派生</text>
+    <text x="172" y="202" class="item-desc">HMAC(K_ROOT, "track|id")</text>
+
+    <line x1="24" y1="236" x2="436" y2="236" stroke="#3D1420" stroke-width="1"/>
+    <text x="24" y="256" class="section-label">硬件安全模块</text>
+
+    <rect x="24" y="272" width="412" height="36" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <circle cx="44" cy="290" r="6" fill="#FBBF24"/>
+    <text x="60" y="290" class="item-label">硬件 SHA-256 加速器</text>
+    <text x="260" y="290" class="item-code">pico_sha256_start_blocking()</text>
+
+    <rect x="24" y="316" width="412" height="36" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <circle cx="44" cy="334" r="6" fill="#FBBF24"/>
+    <text x="60" y="334" class="item-label">TRNG 真随机数</text>
+    <text x="220" y="334" class="item-desc">nonce / session_id 生成</text>
+
+    <rect x="24" y="360" width="412" height="36" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <circle cx="44" cy="378" r="6" fill="#FBBF24"/>
+    <text x="60" y="378" class="item-label">Glitch Detector</text>
+    <text x="210" y="378" class="item-desc">物理故障注入防护</text>
+
+    <!-- Bottom note -->
+    <rect x="24" y="414" width="412" height="28" rx="6" fill="#7F1D1D" opacity="0.3"/>
+    <text x="230" y="428" style="font-size:12px;fill:#FECDD3;text-anchor:middle;dominant-baseline:central">
+      SWD 调试无法访问此区域 (硬件强制隔离)
+    </text>
+  </g>
+
+  <!-- ========== Non-Secure World (right, cyan accent) ========== -->
+  <g transform="translate(680, 128)">
+    <rect x="0" y="0" width="460" height="460" rx="12" fill="#0F1E2E" stroke="#38BDF8" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="460" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="460" height="4" fill="#38BDF8"/>
+
+    <!-- Zone title -->
+    <text x="24" y="40" class="zone-title" style="fill:#7DD3FC">Non-Secure World</text>
+    <rect x="240" y="26" width="190" height="24" rx="12" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="335" y="38" class="badge-txt" fill="#7DD3FC">SWD 调试只能看到这里</text>
+
+    <!-- Items -->
+    <text x="24" y="80" class="section-label">协议与 I/O</text>
+
+    <rect x="24" y="96" width="412" height="36" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <circle cx="44" cy="114" r="6" fill="#38BDF8"/>
+    <text x="60" y="114" class="item-label">USB CDC 协议状态机</text>
+    <text x="270" y="114" class="item-desc">LOAD / OPEN / CHUNK</text>
+
+    <rect x="24" y="140" width="412" height="36" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <circle cx="44" cy="158" r="6" fill="#38BDF8"/>
+    <text x="60" y="158" class="item-label">licence JSON 解析</text>
+    <text x="240" y="158" class="item-desc">字段提取, 不含密钥</text>
+
+    <rect x="24" y="184" width="412" height="36" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <circle cx="44" cy="202" r="6" fill="#38BDF8"/>
+    <text x="60" y="202" class="item-label">keystream 输出缓冲</text>
+    <text x="268" y="202" class="item-desc">密钥的派生值, 非密钥本身</text>
+
+    <rect x="24" y="228" width="412" height="36" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <circle cx="44" cy="246" r="6" fill="#38BDF8"/>
+    <text x="60" y="246" class="item-label">串口 I/O</text>
+    <text x="150" y="246" class="item-desc">明文 USB 通信</text>
+
+    <!-- SWD annotation -->
+    <line x1="24" y1="290" x2="436" y2="290" stroke="#1E293B" stroke-width="1"/>
+    <text x="24" y="310" class="section-label">攻击者通过 SWD 可获得</text>
+
+    <rect x="24" y="326" width="412" height="36" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="40" y="344" class="item-code" style="fill:#FB7185">g_lic.track_id</text>
+    <text x="200" y="344" class="item-desc">licence 字段 (非密钥)</text>
+
+    <rect x="24" y="370" width="412" height="36" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="40" y="388" class="item-code" style="fill:#FB7185">g_ks_hex[]</text>
+    <text x="164" y="388" class="item-desc">当前块的 keystream (一次性)</text>
+
+    <rect x="24" y="414" width="412" height="28" rx="6" fill="#0C4A6E" opacity="0.3"/>
+    <text x="230" y="428" style="font-size:12px;fill:#7DD3FC;text-anchor:middle;dominant-baseline:central">
+      拿不到 K_ROOT / K_dev / K_audio
+    </text>
+  </g>
+
+  <!-- ========== NSC Interface (center) ========== -->
+  <!-- NSC vertical bar -->
+  <rect x="540" y="200" width="120" height="320" rx="8" fill="#2A1F08" stroke="#FBBF24" stroke-width="1.5" opacity="0.9"/>
+  <text x="600" y="228" class="nsc-label">NSC</text>
+  <text x="600" y="248" style="font-size:10px;fill:#FDE68A;text-anchor:middle;dominant-baseline:central">Non-Secure</text>
+  <text x="600" y="262" style="font-size:10px;fill:#FDE68A;text-anchor:middle;dominant-baseline:central">Callable</text>
+
+  <!-- NSC function entries -->
+  <rect x="552" y="290" width="96" height="28" rx="6" fill="#020617" stroke="#FBBF24" stroke-width="0.8"/>
+  <text x="600" y="304" style="font-family:'SF Mono','Menlo',monospace;font-size:10px;fill:#FDE68A;text-anchor:middle;dominant-baseline:central">verify_licence</text>
+
+  <rect x="552" y="330" width="96" height="28" rx="6" fill="#020617" stroke="#FBBF24" stroke-width="0.8"/>
+  <text x="600" y="344" style="font-family:'SF Mono','Menlo',monospace;font-size:10px;fill:#FDE68A;text-anchor:middle;dominant-baseline:central">get_keystream</text>
+
+  <rect x="552" y="370" width="96" height="28" rx="6" fill="#020617" stroke="#FBBF24" stroke-width="0.8"/>
+  <text x="600" y="384" style="font-family:'SF Mono','Menlo',monospace;font-size:10px;fill:#FDE68A;text-anchor:middle;dominant-baseline:central">unwrap_key</text>
+
+  <!-- Arrows: NS -> Secure (requests) -->
+  <path d="M 680 304 C 668 304, 656 304, 648 304" stroke="#38BDF8" stroke-width="1.4" fill="none" opacity="0.7"/>
+  <path d="M 552 304 C 540 304, 530 304, 520 304" stroke="#38BDF8" stroke-width="1.4" fill="none" opacity="0.7" marker-end="url(#arrow-right-cyan)" transform="rotate(180, 536, 304)"/>
+
+  <path d="M 680 344 C 668 344, 656 344, 648 344" stroke="#38BDF8" stroke-width="1.4" fill="none" opacity="0.7"/>
+  <path d="M 552 344 C 540 344, 530 344, 520 344" stroke="#38BDF8" stroke-width="1.4" fill="none" opacity="0.7" marker-end="url(#arrow-right-cyan)" transform="rotate(180, 536, 344)"/>
+
+  <!-- Arrows: Secure -> NS (responses) -->
+  <path d="M 520 420 C 530 440, 640 440, 648 420" stroke="#FB7185" stroke-width="1.2" fill="none" opacity="0.5" stroke-dasharray="4,3"/>
+  <text x="600" y="455" style="font-size:11px;fill:#94A3B8;text-anchor:middle;dominant-baseline:central;font-style:italic">OK / ERR + keystream</text>
+
+  <!-- ========== Bottom: SAU + IDAU ========== -->
+  <g transform="translate(40, 610)">
+    <rect x="0" y="0" width="1120" height="60" rx="10" fill="#0F1E2E" stroke="#334155" stroke-width="1"/>
+    <rect x="0" y="0" width="1120" height="4" rx="10" fill="#FBBF24"/>
+
+    <!-- SAU regions -->
+    <text x="20" y="22" style="font-size:13px;fill:#FDE68A;font-weight:700;dominant-baseline:central">SAU</text>
+    <text x="60" y="22" style="font-size:12px;fill:#CBD5E1;dominant-baseline:central">8 个可配置安全区域</text>
+
+    <!-- SAU region blocks -->
+    <rect x="20" y="34" width="120" height="16" rx="4" fill="#7F1D1D" opacity="0.6"/>
+    <text x="80" y="42" style="font-size:10px;fill:#FECDD3;text-anchor:middle;dominant-baseline:central">Region 0: SRAM</text>
+    <rect x="150" y="34" width="120" height="16" rx="4" fill="#7F1D1D" opacity="0.6"/>
+    <text x="210" y="42" style="font-size:10px;fill:#FECDD3;text-anchor:middle;dominant-baseline:central">Region 1: OTP</text>
+    <rect x="280" y="34" width="120" height="16" rx="4" fill="#7F1D1D" opacity="0.6"/>
+    <text x="340" y="42" style="font-size:10px;fill:#FECDD3;text-anchor:middle;dominant-baseline:central">Region 2: SHA HW</text>
+    <rect x="410" y="34" width="120" height="16" rx="4" fill="#0C4A6E" opacity="0.6"/>
+    <text x="470" y="42" style="font-size:10px;fill:#7DD3FC;text-anchor:middle;dominant-baseline:central">Region 3: USB</text>
+    <rect x="540" y="34" width="120" height="16" rx="4" fill="#0C4A6E" opacity="0.6"/>
+    <text x="600" y="42" style="font-size:10px;fill:#7DD3FC;text-anchor:middle;dominant-baseline:central">Region 4: GPIO</text>
+
+    <!-- IDAU label -->
+    <text x="720" y="22" style="font-size:13px;fill:#FDE68A;font-weight:700;dominant-baseline:central">IDAU</text>
+    <text x="766" y="22" style="font-size:12px;fill:#CBD5E1;dominant-baseline:central">地址空间固定划分 (出厂定义)</text>
+
+    <rect x="720" y="34" width="376" height="16" rx="4" fill="#1E293B"/>
+    <text x="908" y="42" style="font-size:10px;fill:#94A3B8;text-anchor:middle;dominant-baseline:central">0x0000_0000 - 0x0FFF_FFFF: Secure  |  0x1000_0000+: Non-Secure</text>
+  </g>
+
+  <!-- Bottom note -->
+  <g transform="translate(100, 698)">
+    <rect x="0" y="0" width="1000" height="44" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1"/>
+    <rect x="0" y="0" width="1000" height="4" rx="12" fill="#34D399"/>
+    <text x="500" y="28" class="footer-text">
+      <tspan style="fill:#34D399;font-weight:700">启用 TrustZone 后:</tspan>
+      即使 SWD dump 全部 Non-Secure 内存, 也拿不到密钥 - 攻击 #8 的加固解
+    </text>
+  </g>
+</svg>

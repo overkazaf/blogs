@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 820" width="1200" height="820"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#38BDF8"/></marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A78BFA"/></marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FBBF24"/></marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FB7185"/></marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .node-title { font-size: 17px; fill: #F8FAFC; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .node-desc { font-size: 12px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .node-formula { font-family: 'SF Mono', 'Menlo', monospace; font-size: 11px; fill: #E2E8F0; text-anchor: middle; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; dominant-baseline: central; font-weight: 600; letter-spacing: 0.5px; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .footer-em { fill: #FB7185; font-weight: 600; }
+    .legend-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="820" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="38" class="title-main">密钥层级 <tspan class="title-accent">&#183;</tspan> HMAC-SHA256 派生链</text>
+  <text x="600" y="64" class="subtitle">红色 = 留在芯片内 / 蓝色 = 会离开安全边界</text>
+
+  <!-- Legend -->
+  <g transform="translate(880, 32)">
+    <rect x="0" y="0" width="16" height="16" rx="4" fill="#2E1421" stroke="#FB7185" stroke-width="1.2"/>
+    <text x="22" y="8" class="legend-text" style="font-size:12px">芯片内密钥</text>
+    <rect x="120" y="0" width="16" height="16" rx="4" fill="#0F1E2E" stroke="#38BDF8" stroke-width="1.2"/>
+    <text x="142" y="8" class="legend-text" style="font-size:12px">离开芯片</text>
+  </g>
+
+  <!-- ========== K_ROOT (Rose - top) ========== -->
+  <g transform="translate(350, 96)">
+    <rect x="0" y="0" width="500" height="74" rx="12" fill="#2E1421" stroke="#FB7185" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="500" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="500" height="4" fill="#FB7185"/>
+    <text x="250" y="30" class="node-title">K_ROOT</text>
+    <text x="250" y="50" class="node-desc">厂商根密钥 (32 bytes)</text>
+    <text x="250" y="66" class="node-formula" style="fill:#FECDD3">"RP2350-DRM-LAB-ROOT-KEY-v1-00000"</text>
+  </g>
+
+  <!-- Fork lines from K_ROOT to 3 children -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="600" y1="170" x2="600" y2="200"/>
+    <line x1="200" y1="200" x2="1000" y2="200"/>
+    <line x1="200" y1="200" x2="200" y2="228" marker-end="url(#arrow-down)"/>
+    <line x1="600" y1="200" x2="600" y2="228" marker-end="url(#arrow-down)"/>
+    <line x1="1000" y1="200" x2="1000" y2="228" marker-end="url(#arrow-down)"/>
+  </g>
+  <circle cx="600" cy="170" r="3" fill="#64748B"/>
+
+  <!-- ========== K_dev (Cyan - left) ========== -->
+  <g transform="translate(70, 236)">
+    <rect x="0" y="0" width="260" height="110" rx="12" fill="#2E1421" stroke="#FB7185" stroke-width="1.2" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="260" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="260" height="4" fill="#38BDF8"/>
+    <text x="130" y="32" class="node-title">K_dev</text>
+    <text x="130" y="54" class="node-desc">设备密钥, 每块板不同</text>
+    <text x="130" y="76" class="node-formula">HMAC(K_ROOT, "device|&lt;id&gt;")</text>
+    <text x="130" y="96" class="node-desc" style="fill:#7DD3FC">OTP unique_id 派生</text>
+  </g>
+
+  <!-- ========== K_lic (Violet - center) ========== -->
+  <g transform="translate(470, 236)">
+    <rect x="0" y="0" width="260" height="110" rx="12" fill="#2E1421" stroke="#FB7185" stroke-width="1.2" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="260" height="5" rx="12" fill="#A78BFA"/>
+    <rect x="0" y="3" width="260" height="4" fill="#A78BFA"/>
+    <text x="130" y="32" class="node-title">K_lic</text>
+    <text x="130" y="54" class="node-desc">签发密钥</text>
+    <text x="130" y="76" class="node-formula">HMAC(K_ROOT, "license-signing")</text>
+    <text x="130" y="96" class="node-desc" style="fill:#C4B5FD">对称签名 (弱于 RSA)</text>
+  </g>
+
+  <!-- ========== K_audio (Amber - right) ========== -->
+  <g transform="translate(870, 236)">
+    <rect x="0" y="0" width="260" height="110" rx="12" fill="#2E1421" stroke="#FB7185" stroke-width="1.2" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="260" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="260" height="4" fill="#FBBF24"/>
+    <text x="130" y="32" class="node-title">K_audio</text>
+    <text x="130" y="54" class="node-desc">内容密钥, 每首曲目不同</text>
+    <text x="130" y="76" class="node-formula">HMAC(K_ROOT, "track|&lt;id&gt;")</text>
+    <text x="130" y="96" class="node-desc" style="fill:#FDE68A">用于加密 + keystream</text>
+  </g>
+
+  <!-- Fork lines from children to outputs -->
+  <!-- K_dev -> wrapped_key -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="200" y1="346" x2="200" y2="400" marker-end="url(#arrow-down)"/>
+  </g>
+  <!-- K_lic -> sig -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="600" y1="346" x2="600" y2="400" marker-end="url(#arrow-down)"/>
+  </g>
+  <!-- K_audio -> keystream -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="1000" y1="346" x2="1000" y2="400" marker-end="url(#arrow-down)"/>
+  </g>
+
+  <!-- ========== Output: wrapped_key (Cyan/Blue - leaves chip) ========== -->
+  <g transform="translate(50, 408)">
+    <rect x="0" y="0" width="300" height="120" rx="12" fill="#0F1E2E" stroke="#38BDF8" stroke-width="1.2" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="300" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="300" height="4" fill="#38BDF8"/>
+    <text x="150" y="30" class="node-title" style="fill:#7DD3FC">wrapped_key</text>
+    <text x="150" y="52" class="node-desc">licence 内, 绑定设备</text>
+    <rect x="16" y="66" width="268" height="26" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="150" y="80" class="node-formula" style="fill:#A5F3FC">K_audio XOR HMAC(K_dev, "wrap|...")</text>
+    <text x="150" y="108" class="node-desc" style="fill:#94A3B8">换设备 = 解不出 K_audio</text>
+  </g>
+
+  <!-- ========== Output: sig (Violet/Blue - leaves chip) ========== -->
+  <g transform="translate(450, 408)">
+    <rect x="0" y="0" width="300" height="120" rx="12" fill="#0F1E2E" stroke="#A78BFA" stroke-width="1.2" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="300" height="5" rx="12" fill="#A78BFA"/>
+    <rect x="0" y="3" width="300" height="4" fill="#A78BFA"/>
+    <text x="150" y="30" class="node-title" style="fill:#C4B5FD">sig</text>
+    <text x="150" y="52" class="node-desc">licence 签名, 防篡改</text>
+    <rect x="16" y="66" width="268" height="26" rx="6" fill="#020617" stroke="#3B1D7A" stroke-width="1"/>
+    <text x="150" y="80" class="node-formula" style="fill:#C4B5FD">HMAC(K_lic, licence_fields)</text>
+    <text x="150" y="108" class="node-desc" style="fill:#94A3B8">改任何字段 = 签名失败</text>
+  </g>
+
+  <!-- ========== Output: keystream (Amber/Blue - leaves chip) ========== -->
+  <g transform="translate(850, 408)">
+    <rect x="0" y="0" width="300" height="120" rx="12" fill="#0F1E2E" stroke="#FBBF24" stroke-width="1.2" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="300" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="300" height="4" fill="#FBBF24"/>
+    <text x="150" y="30" class="node-title" style="fill:#FDE68A">keystream</text>
+    <text x="150" y="52" class="node-desc">按块输出 (Level 3)</text>
+    <rect x="16" y="66" width="268" height="26" rx="6" fill="#020617" stroke="#3D2E0A" stroke-width="1"/>
+    <text x="150" y="80" class="node-formula" style="fill:#FDE68A">HMAC(K_audio, "stream|iv|i")</text>
+    <text x="150" y="108" class="node-desc" style="fill:#94A3B8">XOR plaintext = ciphertext</text>
+  </g>
+
+  <!-- ========== Divider line ========== -->
+  <line x1="40" y1="570" x2="1160" y2="570" stroke="#334155" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="600" y="592" class="section-label" style="text-anchor:middle;fill:#64748B">&#8593; 正常运行时的密钥流向　/　&#8595; 攻击 #8 的影响</text>
+
+  <!-- ========== Attack #8 impact zone ========== -->
+  <g transform="translate(150, 618)">
+    <rect x="0" y="0" width="900" height="140" rx="12" fill="#2E1421" stroke="#FB7185" stroke-width="1.5" stroke-dasharray="8,4" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="900" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="900" height="4" fill="#FB7185"/>
+
+    <text x="450" y="34" class="node-title" style="fill:#FECDD3">攻击 #8: dump 固件拿到 K_ROOT</text>
+
+    <text x="40" y="64" class="legend-text" style="fill:#E2E8F0">K_ROOT 泄露后，攻击者可以:</text>
+
+    <rect x="40" y="80" width="250" height="28" rx="6" fill="#450A0A" stroke="#7F1D1D" stroke-width="1"/>
+    <text x="165" y="94" class="node-formula" style="fill:#FECDD3;text-anchor:middle">派生任意 K_dev = 解全部设备</text>
+
+    <rect x="320" y="80" width="250" height="28" rx="6" fill="#450A0A" stroke="#7F1D1D" stroke-width="1"/>
+    <text x="445" y="94" class="node-formula" style="fill:#FECDD3;text-anchor:middle">派生 K_lic = 伪造 licence</text>
+
+    <rect x="600" y="80" width="260" height="28" rx="6" fill="#450A0A" stroke="#7F1D1D" stroke-width="1"/>
+    <text x="730" y="94" class="node-formula" style="fill:#FECDD3;text-anchor:middle">派生 K_audio = 离线解密内容</text>
+
+    <text x="450" y="128" class="footer-text" style="fill:#FECDD3"><tspan style="fill:#FB7185;font-weight:700">结论:</tspan> 密钥存放是真正的攻击面, 不是算法 - 整棵树归零</text>
+  </g>
+
+  <!-- Bottom label -->
+  <g transform="translate(250, 782)">
+    <rect x="0" y="0" width="700" height="28" rx="10" fill="#0F1E2E" stroke="#334155" stroke-width="1" stroke-dasharray="6,4"/>
+    <text x="350" y="14" class="footer-text"><tspan style="fill:#38BDF8;font-weight:700">对策:</tspan>&#12288;K_ROOT 放 HSM / license server, 设备端只存 K_dev (OTP), debug lock + signed boot</text>
+  </g>
+</svg>

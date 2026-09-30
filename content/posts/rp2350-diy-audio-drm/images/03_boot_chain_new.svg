@@ -1,0 +1,251 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 960" width="1200" height="960"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#38BDF8"/></marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A78BFA"/></marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .col-title { font-size: 18px; fill: #F8FAFC; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .step-title { font-size: 14px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .step-desc { font-size: 12px; fill: #CBD5E1; dominant-baseline: central; }
+    .dim-num { font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px; font-weight: 700; fill: #0F172A; text-anchor: middle; dominant-baseline: central; }
+    .badge-txt { font-size: 11px; font-weight: 700; dominant-baseline: central; text-anchor: middle; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .footer-em { font-weight: 600; }
+    .match-label { font-size: 11px; fill: #94A3B8; text-anchor: middle; dominant-baseline: central; font-style: italic; }
+  </style>
+  <rect width="1200" height="960" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="40" class="title-main">启动信任链 <tspan class="title-accent">&#183;</tspan> RP2350 vs Android</text>
+  <text x="600" y="68" class="subtitle">每一步验证下一步, 信任从硬件不可变的根向上传递</text>
+
+  <!-- Column headers -->
+  <!-- RP2350 column header -->
+  <g transform="translate(100, 96)">
+    <rect x="0" y="0" width="440" height="44" rx="10" fill="#0F1E2E" stroke="#38BDF8" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="4" height="44" rx="2" fill="#38BDF8"/>
+    <text x="220" y="22" class="col-title" style="fill:#7DD3FC">RP2350 启动链</text>
+  </g>
+  <!-- Android column header -->
+  <g transform="translate(660, 96)">
+    <rect x="0" y="0" width="440" height="44" rx="10" fill="#2D1B3D" stroke="#A78BFA" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="4" height="44" rx="2" fill="#A78BFA"/>
+    <text x="220" y="22" class="col-title" style="fill:#C4B5FD">Android 启动链</text>
+  </g>
+
+  <!-- RP2350 Steps (left column, cyan) -->
+  <!-- Step 1: Boot ROM -->
+  <g transform="translate(100, 160)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#38BDF8"/>
+    <circle cx="32" cy="40" r="16" fill="#38BDF8"/>
+    <text x="32" y="40" class="dim-num">1</text>
+    <text x="58" y="32" class="step-title">Boot ROM</text>
+    <text x="58" y="52" class="step-desc">mask ROM, 不可修改, 硬件信任根</text>
+    <rect x="310" y="26" width="110" height="22" rx="11" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="365" y="37" class="badge-txt" fill="#34D399">硬件信任根</text>
+  </g>
+
+  <!-- Arrow 1->2 -->
+  <line x1="320" y1="232" x2="320" y2="250" stroke="#38BDF8" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Step 2: OTP -->
+  <g transform="translate(100, 258)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#38BDF8"/>
+    <circle cx="32" cy="40" r="16" fill="#38BDF8"/>
+    <text x="32" y="40" class="dim-num">2</text>
+    <text x="58" y="32" class="step-title">OTP 检查</text>
+    <text x="58" y="52" class="step-desc">signed boot? encrypted boot? key fingerprint</text>
+  </g>
+
+  <line x1="320" y1="330" x2="320" y2="348" stroke="#38BDF8" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Step 3: Flash -->
+  <g transform="translate(100, 356)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#38BDF8"/>
+    <circle cx="32" cy="40" r="16" fill="#38BDF8"/>
+    <text x="32" y="40" class="dim-num">3</text>
+    <text x="58" y="32" class="step-title">Flash 固件验签 / 解密</text>
+    <text x="58" y="52" class="step-desc">签名验证 + 可选 AES 解密到 SRAM</text>
+  </g>
+
+  <line x1="320" y1="428" x2="320" y2="446" stroke="#38BDF8" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Step 4: SAU/IDAU -->
+  <g transform="translate(100, 454)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#38BDF8"/>
+    <circle cx="32" cy="40" r="16" fill="#38BDF8"/>
+    <text x="32" y="40" class="dim-num">4</text>
+    <text x="58" y="32" class="step-title">SAU / IDAU 配置</text>
+    <text x="58" y="52" class="step-desc">TrustZone 边界划分, Secure / Non-Secure 隔离</text>
+  </g>
+
+  <line x1="320" y1="526" x2="320" y2="544" stroke="#38BDF8" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Step 5: Secure World -->
+  <g transform="translate(100, 552)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#38BDF8"/>
+    <circle cx="32" cy="40" r="16" fill="#38BDF8"/>
+    <text x="32" y="40" class="dim-num">5</text>
+    <text x="58" y="32" class="step-title">Secure World 固件</text>
+    <text x="58" y="52" class="step-desc">密钥初始化, HMAC-SHA256 引擎, TRNG</text>
+  </g>
+
+  <line x1="320" y1="624" x2="320" y2="642" stroke="#38BDF8" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- Step 6: Non-Secure -->
+  <g transform="translate(100, 650)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#38BDF8"/>
+    <circle cx="32" cy="40" r="16" fill="#38BDF8"/>
+    <text x="32" y="40" class="dim-num">6</text>
+    <text x="58" y="32" class="step-title">Non-Secure World</text>
+    <text x="58" y="52" class="step-desc">USB CDC 协议, licence 解析, keystream 输出</text>
+  </g>
+
+  <!-- Android Steps (right column, violet) -->
+  <!-- Step 1: SoC Boot ROM -->
+  <g transform="translate(660, 160)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#A78BFA"/>
+    <circle cx="32" cy="40" r="16" fill="#A78BFA"/>
+    <text x="32" y="40" class="dim-num">1</text>
+    <text x="58" y="32" class="step-title">SoC Boot ROM</text>
+    <text x="58" y="52" class="step-desc">eFuse 锁定, 不可修改</text>
+    <rect x="310" y="26" width="110" height="22" rx="11" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="365" y="37" class="badge-txt" fill="#34D399">硬件信任根</text>
+  </g>
+
+  <line x1="880" y1="232" x2="880" y2="250" stroke="#A78BFA" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+  <!-- Step 2: BL1 -->
+  <g transform="translate(660, 258)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#A78BFA"/>
+    <circle cx="32" cy="40" r="16" fill="#A78BFA"/>
+    <text x="32" y="40" class="dim-num">2</text>
+    <text x="58" y="32" class="step-title">BL1 / PBL (Primary Bootloader)</text>
+    <text x="58" y="52" class="step-desc">验证 BL2 签名</text>
+  </g>
+
+  <line x1="880" y1="330" x2="880" y2="348" stroke="#A78BFA" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+  <!-- Step 3: BL2 -->
+  <g transform="translate(660, 356)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#A78BFA"/>
+    <circle cx="32" cy="40" r="16" fill="#A78BFA"/>
+    <text x="32" y="40" class="dim-num">3</text>
+    <text x="58" y="32" class="step-title">BL2 / ABL (Secondary Bootloader)</text>
+    <text x="58" y="52" class="step-desc">初始化硬件, 加载 TEE + Kernel</text>
+  </g>
+
+  <line x1="880" y1="428" x2="880" y2="446" stroke="#A78BFA" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+  <!-- Step 4: TEE -->
+  <g transform="translate(660, 454)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#A78BFA"/>
+    <circle cx="32" cy="40" r="16" fill="#A78BFA"/>
+    <text x="32" y="40" class="dim-num">4</text>
+    <text x="58" y="32" class="step-title">TEE (Trusty / OP-TEE)</text>
+    <text x="58" y="52" class="step-desc">Widevine TA + Keymaster + Secure Storage</text>
+  </g>
+
+  <line x1="880" y1="526" x2="880" y2="544" stroke="#A78BFA" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+  <!-- Step 5: Kernel -->
+  <g transform="translate(660, 552)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#A78BFA"/>
+    <circle cx="32" cy="40" r="16" fill="#A78BFA"/>
+    <text x="32" y="40" class="dim-num">5</text>
+    <text x="58" y="32" class="step-title">Linux Kernel</text>
+    <text x="58" y="52" class="step-desc">dm-verity 校验 system 分区完整性</text>
+  </g>
+
+  <line x1="880" y1="624" x2="880" y2="642" stroke="#A78BFA" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+  <!-- Step 6: Framework -->
+  <g transform="translate(660, 650)">
+    <rect x="0" y="0" width="440" height="72" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="440" height="4" rx="12" fill="#A78BFA"/>
+    <circle cx="32" cy="40" r="16" fill="#A78BFA"/>
+    <text x="32" y="40" class="dim-num">6</text>
+    <text x="58" y="32" class="step-title">Android Framework</text>
+    <text x="58" y="52" class="step-desc">MediaDrm / AIDL HAL / OEMCrypto</text>
+  </g>
+
+  <!-- Horizontal dashed matching lines -->
+  <!-- Boot ROM match -->
+  <line x1="540" y1="196" x2="660" y2="196" stroke="#94A3B8" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.7"/>
+  <rect x="567" y="186" width="66" height="20" rx="10" fill="#0F172A" stroke="#94A3B8" stroke-width="0.8"/>
+  <text x="600" y="196" class="match-label">同源</text>
+
+  <!-- SAU/IDAU <-> TEE match -->
+  <line x1="540" y1="490" x2="660" y2="490" stroke="#94A3B8" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.7"/>
+  <rect x="557" y="480" width="86" height="20" rx="10" fill="#0F172A" stroke="#94A3B8" stroke-width="0.8"/>
+  <text x="600" y="490" class="match-label">安全隔离</text>
+
+  <!-- Non-Secure <-> Framework match -->
+  <line x1="540" y1="686" x2="660" y2="686" stroke="#94A3B8" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.7"/>
+  <rect x="557" y="676" width="86" height="20" rx="10" fill="#0F172A" stroke="#94A3B8" stroke-width="0.8"/>
+  <text x="600" y="686" class="match-label">应用层</text>
+
+  <!-- RP2350 chain length indicator -->
+  <g transform="translate(56, 168)">
+    <line x1="0" y1="0" x2="0" y2="546" stroke="#38BDF8" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+    <text x="0" y="273" style="font-size:12px;fill:#7DD3FC;text-anchor:middle;dominant-baseline:central;letter-spacing:2px" transform="rotate(-90, 0, 273)">6 步</text>
+  </g>
+
+  <!-- Android chain length indicator -->
+  <g transform="translate(1144, 168)">
+    <line x1="0" y1="0" x2="0" y2="546" stroke="#A78BFA" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+    <text x="0" y="273" style="font-size:12px;fill:#C4B5FD;text-anchor:middle;dominant-baseline:central" transform="rotate(90, 0, 273)">6+ 步</text>
+  </g>
+
+  <!-- root break annotation -->
+  <g transform="translate(660, 756)">
+    <rect x="0" y="0" width="440" height="40" rx="8" fill="#450A0A" stroke="#F87171" stroke-width="1" stroke-dasharray="6,4" opacity="0.8"/>
+    <text x="220" y="20" style="font-size:12px;fill:#FECDD3;text-anchor:middle;dominant-baseline:central;font-weight:600">Root / Magisk 在此处断链 (BL2 或 Kernel 被修改)</text>
+  </g>
+
+  <!-- Bottom takeaway -->
+  <g transform="translate(100, 830)">
+    <rect x="0" y="0" width="1000" height="54" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1"/>
+    <rect x="0" y="0" width="1000" height="4" rx="12" fill="#34D399"/>
+    <text x="500" y="32" class="footer-text">
+      <tspan style="fill:#34D399;font-weight:700">核心相同:</tspan> 每步验证下一步, 信任从 Boot ROM 向上传递
+      <tspan dx="20" style="fill:#38BDF8;font-weight:600">RP2350</tspan> 链短(攻击面少)
+      <tspan dx="20" style="fill:#A78BFA;font-weight:600">Android</tspan> 链长(生态完整)
+    </text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(100, 900)">
+    <line x1="0" y1="10" x2="30" y2="10" stroke="#94A3B8" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.7"/>
+    <text x="38" y="10" style="font-size:11px;fill:#94A3B8;dominant-baseline:central">等价功能对照</text>
+    <rect x="160" y="2" width="60" height="16" rx="8" fill="#450A0A" stroke="#F87171" stroke-width="0.8"/>
+    <text x="190" y="10" style="font-size:10px;fill:#FECDD3;text-anchor:middle;dominant-baseline:central">Root 断点</text>
+  </g>
+</svg>
