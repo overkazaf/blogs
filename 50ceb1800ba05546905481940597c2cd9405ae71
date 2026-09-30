@@ -1,0 +1,42 @@
+content/categories/hardware-security/_index.md
+  59cfce3f35c53549 1-4
+hugo.toml
+  59cfce3f35c53549 11,28
+content/posts/rp2350-diy-audio-drm/index.md
+  59cfce3f35c53549 1-349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "50ceb1800ba05546905481940597c2cd9405ae71",
+  "prompts": {
+    "59cfce3f35c53549": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "14b298df-035b-43e5-b9e9-a1b942b46109",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 355,
+      "total_deletions": 2,
+      "accepted_lines": 355,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/rp2350-diy-audio-drm/index.md": {
+          "additions": 349,
+          "accepted_lines": 349
+        },
+        "content/categories/hardware-security/_index.md": {
+          "additions": 4,
+          "accepted_lines": 4
+        },
+        "hugo.toml": {
+          "additions": 2,
+          "deletions": 2,
+          "accepted_lines": 2
+        }
+      }
+    }
+  }
+}
