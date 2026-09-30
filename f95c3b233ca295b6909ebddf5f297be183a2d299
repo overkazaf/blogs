@@ -1,0 +1,62 @@
+content/posts/rp2350-diy-audio-drm/images/01_architecture_new.svg
+  59cfce3f35c53549 1-201
+content/posts/rp2350-diy-audio-drm/images/03_boot_chain_new.svg
+  59cfce3f35c53549 1-251
+content/posts/rp2350-diy-audio-drm/images/02_key_hierarchy_new.svg
+  59cfce3f35c53549 1-181
+content/posts/rp2350-diy-audio-drm/images/04_trustzone_new.svg
+  59cfce3f35c53549 1-214
+content/posts/rp2350-diy-audio-drm/index.md
+  59cfce3f35c53549 101,128,218,220,224,226,288-294,596,598
+content/posts/rp2350-diy-audio-drm/images/05_hardening_new.svg
+  59cfce3f35c53549 1-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "f95c3b233ca295b6909ebddf5f297be183a2d299",
+  "prompts": {
+    "59cfce3f35c53549": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "14b298df-035b-43e5-b9e9-a1b942b46109",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 1032,
+      "total_deletions": 201,
+      "accepted_lines": 1022,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/rp2350-diy-audio-drm/images/01_architecture_new.svg": {
+          "additions": 210,
+          "deletions": 9,
+          "accepted_lines": 201
+        },
+        "content/posts/rp2350-diy-audio-drm/images/04_trustzone_new.svg": {
+          "additions": 214,
+          "accepted_lines": 214
+        },
+        "content/posts/rp2350-diy-audio-drm/images/02_key_hierarchy_new.svg": {
+          "additions": 181,
+          "accepted_lines": 181
+        },
+        "content/posts/rp2350-diy-audio-drm/index.md": {
+          "additions": 15,
+          "deletions": 191,
+          "accepted_lines": 15
+        },
+        "content/posts/rp2350-diy-audio-drm/images/05_hardening_new.svg": {
+          "additions": 160,
+          "accepted_lines": 160
+        },
+        "content/posts/rp2350-diy-audio-drm/images/03_boot_chain_new.svg": {
+          "additions": 252,
+          "deletions": 1,
+          "accepted_lines": 251
+        }
+      }
+    }
+  }
+}
