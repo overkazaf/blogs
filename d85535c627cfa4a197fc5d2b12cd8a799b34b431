@@ -1,0 +1,62 @@
+content/posts/ponce4ghidra-symbolic-execution-crackme/index.md
+  2de860b72f337f56 356-360,562-563,602-603,638-639,725-726
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/constraint_solve_new.svg
+  2de860b72f337f56 1-210
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/endian_bug_new.svg
+  2de860b72f337f56 1-194
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/macho_hook_new.svg
+  2de860b72f337f56 1-169
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/symbolize_methods_new.svg
+  2de860b72f337f56 1-182
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/path_explosion_new.svg
+  2de860b72f337f56 1-227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "d85535c627cfa4a197fc5d2b12cd8a799b34b431",
+  "prompts": {
+    "2de860b72f337f56": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e9d33f14-1e56-4b56-b67f-c540bd5f2c02",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 1004,
+      "total_deletions": 10,
+      "accepted_lines": 995,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/constraint_solve_new.svg": {
+          "additions": 210,
+          "accepted_lines": 210
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/index.md": {
+          "additions": 13,
+          "deletions": 1,
+          "accepted_lines": 13
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/endian_bug_new.svg": {
+          "additions": 194,
+          "accepted_lines": 194
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/macho_hook_new.svg": {
+          "additions": 170,
+          "deletions": 1,
+          "accepted_lines": 169
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/path_explosion_new.svg": {
+          "additions": 235,
+          "deletions": 8,
+          "accepted_lines": 227
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/symbolize_methods_new.svg": {
+          "additions": 182,
+          "accepted_lines": 182
+        }
+      }
+    }
+  }
+}
