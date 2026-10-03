@@ -1,0 +1,30 @@
+content/posts/ponce4ghidra-symbolic-execution-crackme/index.md
+  2de860b72f337f56 670-749,861,864
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "13101260c42f4a823bc1c2c01c6cf5a0027e4d02",
+  "prompts": {
+    "2de860b72f337f56": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e9d33f14-1e56-4b56-b67f-c540bd5f2c02",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 82,
+      "total_deletions": 2,
+      "accepted_lines": 82,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/index.md": {
+          "additions": 82,
+          "deletions": 2,
+          "accepted_lines": 82
+        }
+      }
+    }
+  }
+}
