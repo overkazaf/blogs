@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 720" width="1200" height="720"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .card-title { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .card-sub { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; font-weight: 600; letter-spacing: 0.5px; dominant-baseline: central; }
+    .body-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #E2E8F0; dominant-baseline: central; }
+    .code-keyword { fill: #F472B6; }
+    .code-type { fill: #A5F3FC; }
+    .code-string { fill: #FCD34D; }
+    .code-number { fill: #FDBA74; }
+    .code-out { fill: #86EFAC; }
+    .pill-txt { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .footer-note { font-size: 12px; fill: #CBD5E1; dominant-baseline: central; }
+    .speed-label { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; dominant-baseline: central; font-weight: 700; }
+  </style>
+  <rect width="1200" height="720" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="38" class="title-main">四种符号化方式<tspan class="title-accent"> · </tspan>选对方法事半功倍</text>
+  <text x="600" y="64" class="subtitle">按速度和精度递减排列 -- Function Argument 是默认首选</text>
+
+  <!-- =================== Row 1 =================== -->
+
+  <!-- Card 1: Function Argument (Emerald) - top left -->
+  <g transform="translate(36, 96)">
+    <rect x="0" y="0" width="564" height="280" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="564" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="564" height="4" fill="#34D399"/>
+
+    <!-- title + pill -->
+    <text x="20" y="36" class="card-title">Function Argument</text>
+    <rect x="230" y="22" width="88" height="24" rx="12" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="274" y="35" class="pill-txt" fill="#6EE7B7">推荐首选</text>
+
+    <!-- section: START -->
+    <text x="20" y="68" class="section-label">START POINT</text>
+    <text x="20" y="88" class="body-text">从目标函数入口开始 (e.g. check_password at 0x100000470)</text>
+
+    <!-- code block -->
+    <rect x="20" y="104" width="524" height="56" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="32" y="124" class="code"><tspan class="code-type">state</tspan> = project.factory.<tspan class="code-keyword">call_state</tspan>(func_addr)</text>
+    <text x="32" y="146" class="code"><tspan class="code-keyword">setattr</tspan>(state.regs, <tspan class="code-string">"rdi"</tspan>, buf_addr)  <tspan class="code-out">--> symbolic buffer</tspan></text>
+
+    <!-- speed -->
+    <text x="20" y="182" class="section-label">SPEED</text>
+    <rect x="80" y="170" width="80" height="22" rx="11" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="120" y="182" class="speed-label" style="text-anchor:middle" fill="#6EE7B7">0.17s</text>
+    <text x="170" y="182" class="card-sub">crackme 4 bytes</text>
+
+    <!-- use when -->
+    <text x="20" y="210" class="section-label">USE WHEN</text>
+    <text x="20" y="230" class="body-text">已知校验函数位置, 二进制较大/复杂, 分析 .so 库</text>
+
+    <!-- footer -->
+    <text x="20" y="260" class="footer-note"><tspan fill="#34D399" font-weight="600">适用:</tspan> crackme, license key, Android .so, DRM 函数</text>
+  </g>
+
+  <!-- Card 2: argv[N] (Cyan) - top right -->
+  <g transform="translate(612, 96)">
+    <rect x="0" y="0" width="552" height="280" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="552" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="552" height="4" fill="#38BDF8"/>
+
+    <!-- title -->
+    <text x="20" y="36" class="card-title">argv[N]</text>
+    <rect x="110" y="22" width="108" height="24" rx="12" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="164" y="35" class="pill-txt" fill="#7DD3FC">完整上下文</text>
+
+    <!-- section: START -->
+    <text x="20" y="68" class="section-label">START POINT</text>
+    <text x="20" y="88" class="body-text">从程序入口点开始, 完整走 main() 逻辑</text>
+
+    <!-- code block -->
+    <rect x="20" y="104" width="512" height="56" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="32" y="124" class="code"><tspan class="code-type">state</tspan> = project.factory.<tspan class="code-keyword">entry_state</tspan>(args=[...])</text>
+    <text x="32" y="146" class="code">argv[<tspan class="code-number">1</tspan>] <tspan class="code-out">--> symbolic buffer (size bytes)</tspan></text>
+
+    <!-- speed -->
+    <text x="20" y="182" class="section-label">SPEED</text>
+    <rect x="80" y="170" width="80" height="22" rx="11" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="120" y="182" class="speed-label" style="text-anchor:middle" fill="#7DD3FC">0.8s</text>
+    <text x="170" y="182" class="card-sub">crackme 4 bytes (4.7x slower)</text>
+
+    <!-- use when -->
+    <text x="20" y="210" class="section-label">USE WHEN</text>
+    <text x="20" y="230" class="body-text">程序从命令行读输入, 二进制较小, 需要完整执行上下文</text>
+
+    <!-- footer -->
+    <text x="20" y="260" class="footer-note"><tspan fill="#38BDF8" font-weight="600">适用:</tspan> 简单 CTF 题, 命令行工具, 小型 crackme</text>
+  </g>
+
+  <!-- =================== Row 2 =================== -->
+
+  <!-- Card 3: Register (Violet) - bottom left -->
+  <g transform="translate(36, 396)">
+    <rect x="0" y="0" width="564" height="280" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="564" height="5" rx="12" fill="#A78BFA"/>
+    <rect x="0" y="3" width="564" height="4" fill="#A78BFA"/>
+
+    <!-- title -->
+    <text x="20" y="36" class="card-title">Register</text>
+    <rect x="120" y="22" width="88" height="24" rx="12" fill="#3B1D7A" stroke="#A78BFA" stroke-width="1"/>
+    <text x="164" y="35" class="pill-txt" fill="#C4B5FD">标量未知量</text>
+
+    <!-- section: START -->
+    <text x="20" y="68" class="section-label">START POINT</text>
+    <text x="20" y="88" class="body-text">从指定地址开始, 将某个寄存器设为符号值</text>
+
+    <!-- code block -->
+    <rect x="20" y="104" width="524" height="56" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="32" y="124" class="code">sym_var = claripy.<tspan class="code-keyword">BVS</tspan>(<tspan class="code-string">"sym_rax"</tspan>, <tspan class="code-number">64</tspan>)</text>
+    <text x="32" y="146" class="code"><tspan class="code-keyword">setattr</tspan>(state.regs, <tspan class="code-string">"rax"</tspan>, sym_var)  <tspan class="code-out">--> symbolic scalar</tspan></text>
+
+    <!-- speed -->
+    <text x="20" y="182" class="section-label">SPEED</text>
+    <rect x="80" y="170" width="80" height="22" rx="11" fill="#3B1D7A" stroke="#A78BFA" stroke-width="1"/>
+    <text x="120" y="182" class="speed-label" style="text-anchor:middle" fill="#C4B5FD">fast</text>
+    <text x="170" y="182" class="card-sub">single scalar, no buffer allocation</text>
+
+    <!-- use when -->
+    <text x="20" y="210" class="section-label">USE WHEN</text>
+    <text x="20" y="230" class="body-text">未知量是标量 (int/long), 不是缓冲区指针</text>
+
+    <!-- footer -->
+    <text x="20" y="260" class="footer-note"><tspan fill="#A78BFA" font-weight="600">适用:</tspan> 算法分析, 寄存器级别校验, 返回值约束</text>
+  </g>
+
+  <!-- Card 4: Memory (Amber) - bottom right -->
+  <g transform="translate(612, 396)">
+    <rect x="0" y="0" width="552" height="280" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="552" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="552" height="4" fill="#FBBF24"/>
+
+    <!-- title -->
+    <text x="20" y="36" class="card-title">Memory</text>
+    <rect x="120" y="22" width="108" height="24" rx="12" fill="#713F12" stroke="#FBBF24" stroke-width="1"/>
+    <text x="174" y="35" class="pill-txt" fill="#FDE68A">固定地址未知量</text>
+
+    <!-- section: START -->
+    <text x="20" y="68" class="section-label">START POINT</text>
+    <text x="20" y="88" class="body-text">从指定地址开始, 将某段内存设为符号值</text>
+
+    <!-- code block -->
+    <rect x="20" y="104" width="512" height="56" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="32" y="124" class="code">sym_var = claripy.<tspan class="code-keyword">BVS</tspan>(<tspan class="code-string">"mem_0x4000"</tspan>, <tspan class="code-number">64</tspan>)</text>
+    <text x="32" y="146" class="code">state.memory.<tspan class="code-keyword">store</tspan>(<tspan class="code-number">0x4000</tspan>, sym_var)  <tspan class="code-out">--> symbolic region</tspan></text>
+
+    <!-- speed -->
+    <text x="20" y="182" class="section-label">SPEED</text>
+    <rect x="80" y="170" width="80" height="22" rx="11" fill="#713F12" stroke="#FBBF24" stroke-width="1"/>
+    <text x="120" y="182" class="speed-label" style="text-anchor:middle" fill="#FDE68A">fast</text>
+    <text x="170" y="182" class="card-sub">direct memory, no register indirection</text>
+
+    <!-- use when -->
+    <text x="20" y="210" class="section-label">USE WHEN</text>
+    <text x="20" y="230" class="body-text">未知量位于已知的固定内存地址 (全局变量等)</text>
+
+    <!-- footer -->
+    <text x="20" y="260" class="footer-note"><tspan fill="#FBBF24" font-weight="600">适用:</tspan> 全局变量校验, 嵌入式固件, 固定地址配置</text>
+  </g>
+
+  <!-- Bottom takeaway -->
+  <text x="600" y="704" class="subtitle"><tspan fill="#34D399" font-weight="600">经验法则:</tspan> 优先用 Function Argument (更快更精准) -- 只有需要完整程序上下文时才用 argv</text>
+</svg>

@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 650" width="1200" height="650"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FB7185"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#34D399"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #FB7185; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .card-title { font-size: 20px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; dominant-baseline: central; font-weight: 600; letter-spacing: 0.5px; }
+    .body-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code-keyword { fill: #F472B6; }
+    .code-string { fill: #FCD34D; }
+    .code-type { fill: #A5F3FC; }
+    .code-out { fill: #86EFAC; }
+    .code-comment { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #64748B; dominant-baseline: central; font-style: italic; }
+    .node-text { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #E2E8F0; text-anchor: middle; dominant-baseline: central; }
+    .node-label { font-size: 12px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .pill-txt { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="650" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="36" class="title-main">Mach-O 导入 Hook<tspan class="title-accent"> · </tspan>为什么 angr 在 strlen 处死亡</text>
+  <text x="600" y="62" class="subtitle">angr 没有 Mach-O SimOS, 导入函数未被 Hook, 路径走进 extern object 后死亡</text>
+
+  <!-- ============ ROW 1: BEFORE FIX (Rose) ============ -->
+  <g transform="translate(30, 90)">
+    <rect x="0" y="0" width="1140" height="230" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1140" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="1140" height="4" fill="#FB7185"/>
+
+    <!-- title + pill -->
+    <text x="20" y="36" class="card-title">Bug: 所有路径在 _strlen 调用处死亡</text>
+    <rect x="380" y="22" width="120" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="440" y="35" class="pill-txt" fill="#F87171">found_count: 0</text>
+
+    <!-- call chain flow -->
+    <text x="20" y="68" class="section-label">CALL CHAIN</text>
+
+    <!-- Node 1: check_password -->
+    <rect x="20" y="82" width="140" height="36" rx="6" fill="#020617" stroke="#FB7185" stroke-width="1"/>
+    <text x="90" y="100" class="node-text">check_password()</text>
+
+    <!-- arrow -->
+    <line x1="160" y1="100" x2="185" y2="100" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <!-- Node 2: call _strlen -->
+    <rect x="190" y="82" width="110" height="36" rx="6" fill="#020617" stroke="#FB7185" stroke-width="1"/>
+    <text x="245" y="100" class="node-text">call _strlen</text>
+
+    <!-- arrow -->
+    <line x1="300" y1="100" x2="325" y2="100" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <!-- Node 3: __stubs -->
+    <rect x="330" y="82" width="90" height="36" rx="6" fill="#020617" stroke="#475569" stroke-width="1"/>
+    <text x="375" y="100" class="node-text">__stubs</text>
+
+    <!-- arrow -->
+    <line x1="420" y1="100" x2="445" y2="100" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <!-- Node 4: __got -->
+    <rect x="450" y="82" width="80" height="36" rx="6" fill="#020617" stroke="#475569" stroke-width="1"/>
+    <text x="490" y="100" class="node-text">__got</text>
+
+    <!-- arrow -->
+    <line x1="530" y1="100" x2="555" y2="100" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <!-- Node 5: extern object (problem zone) -->
+    <rect x="560" y="78" width="280" height="44" rx="6" fill="#450A0A" stroke="#FB7185" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="700" y="94" class="node-text" fill="#FECDD3">extern object</text>
+    <text x="700" y="112" style="font-size:11px; fill:#FB7185; text-anchor:middle; dominant-baseline:central; font-family:'SF Mono',monospace">_printf(0x100100000) only!</text>
+
+    <!-- arrow to error -->
+    <line x1="840" y1="100" x2="870" y2="100" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <!-- Node 6: ERROR -->
+    <rect x="875" y="78" width="240" height="44" rx="6" fill="#7F1D1D" stroke="#FB7185" stroke-width="2"/>
+    <text x="995" y="94" style="font-size:13px; fill:#FCA5A5; text-anchor:middle; dominant-baseline:central; font-weight:700; font-family:'SF Mono',monospace">IR decoding error</text>
+    <text x="995" y="112" style="font-size:11px; fill:#FB7185; text-anchor:middle; dominant-baseline:central; font-family:'SF Mono',monospace">at 0x100100008</text>
+
+    <!-- Explanation -->
+    <text x="20" y="148" class="section-label">ROOT CAUSE</text>
+    <rect x="20" y="160" width="1100" height="52" rx="6" fill="#020617" stroke="#1E293B" stroke-width="1"/>
+    <text x="34" y="178" class="code"><tspan class="code-comment">// extern object memory layout:</tspan></text>
+    <text x="34" y="198" class="code"><tspan class="code-type">_printf</tspan> @ 0x100100000 <tspan fill="#475569">|</tspan> <tspan class="code-type">_strlen</tspan> @ 0x100100008  <tspan class="code-comment">// mapped region ends at 0x100100007 - strlen is OUT OF BOUNDS</tspan></text>
+  </g>
+
+  <!-- Transition arrow -->
+  <line x1="600" y1="325" x2="600" y2="355" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  <rect x="542" y="328" width="116" height="22" rx="11" fill="#0F172A" stroke="#34D399" stroke-width="1"/>
+  <text x="600" y="340" style="font-size:12px; fill:#6EE7B7; text-anchor:middle; dominant-baseline:central; font-weight:700">Ponce4Ghidra Fix</text>
+
+  <!-- ============ ROW 2: AFTER FIX (Emerald) ============ -->
+  <g transform="translate(30, 360)">
+    <rect x="0" y="0" width="1140" height="250" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1140" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="1140" height="4" fill="#34D399"/>
+
+    <!-- title + pill -->
+    <text x="20" y="36" class="card-title">Fix: Hook 所有 Mach-O 导入到 SimProcedure</text>
+    <rect x="420" y="22" width="120" height="24" rx="12" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="480" y="35" class="pill-txt" fill="#6EE7B7">found_count: 1</text>
+
+    <!-- call chain flow -->
+    <text x="20" y="68" class="section-label">CALL CHAIN (FIXED)</text>
+
+    <!-- Node 1: check_password -->
+    <rect x="20" y="82" width="140" height="36" rx="6" fill="#020617" stroke="#34D399" stroke-width="1"/>
+    <text x="90" y="100" class="node-text">check_password()</text>
+
+    <!-- arrow -->
+    <line x1="160" y1="100" x2="185" y2="100" stroke="#34D399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <!-- Node 2: call _strlen -->
+    <rect x="190" y="82" width="110" height="36" rx="6" fill="#020617" stroke="#34D399" stroke-width="1"/>
+    <text x="245" y="100" class="node-text">call _strlen</text>
+
+    <!-- arrow -->
+    <line x1="300" y1="100" x2="325" y2="100" stroke="#34D399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <!-- Node 3: Ponce4Ghidra Hook (highlight) -->
+    <rect x="330" y="78" width="170" height="44" rx="6" fill="#052E1A" stroke="#34D399" stroke-width="2"/>
+    <text x="415" y="94" style="font-size:13px; fill:#6EE7B7; text-anchor:middle; dominant-baseline:central; font-weight:700">Ponce4Ghidra Hook</text>
+    <text x="415" y="112" style="font-size:11px; fill:#34D399; text-anchor:middle; dominant-baseline:central; font-family:'SF Mono',monospace">.lstrip("_") lookup</text>
+
+    <!-- arrow -->
+    <line x1="500" y1="100" x2="525" y2="100" stroke="#34D399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <!-- Node 4: SimProcedure -->
+    <rect x="530" y="78" width="200" height="44" rx="6" fill="#020617" stroke="#34D399" stroke-width="1"/>
+    <text x="630" y="94" class="node-text" fill="#A5F3FC">SimProcedure: strlen</text>
+    <text x="630" y="112" style="font-size:11px; fill:#86EFAC; text-anchor:middle; dominant-baseline:central; font-family:'SF Mono',monospace">returns symbolic length</text>
+
+    <!-- arrow -->
+    <line x1="730" y1="100" x2="755" y2="100" stroke="#34D399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <!-- Node 5: Success -->
+    <rect x="760" y="78" width="180" height="44" rx="6" fill="#052E1A" stroke="#34D399" stroke-width="2"/>
+    <text x="850" y="94" style="font-size:13px; fill:#6EE7B7; text-anchor:middle; dominant-baseline:central; font-weight:700">Exploration OK</text>
+    <text x="850" y="112" style="font-size:11px; fill:#86EFAC; text-anchor:middle; dominant-baseline:central; font-family:'SF Mono',monospace">found_count: 1</text>
+
+    <!-- Code block -->
+    <text x="20" y="148" class="section-label">HOOK CODE</text>
+    <rect x="20" y="160" width="1100" height="72" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="34" y="180" class="code"><tspan class="code-keyword">for</tspan> reloc <tspan class="code-keyword">in</tspan> main.relocs:                              <tspan class="code-comment">// iterate Mach-O relocation table</tspan></text>
+    <text x="50" y="200" class="code">proc = libc.get(symbol.name.<tspan class="code-keyword">lstrip</tspan>(<tspan class="code-string">"_"</tspan>), fallback)  <tspan class="code-comment">// _strlen -> strlen -> SimProcedure</tspan></text>
+    <text x="50" y="220" class="code">project.<tspan class="code-keyword">hook</tspan>(addr, proc())                          <tspan class="code-comment">// hook at resolved address</tspan></text>
+  </g>
+
+  <!-- Footer -->
+  <text x="600" y="632" class="footer-text"><tspan fill="#FB7185" font-weight="600">ELF</tspan> SimLinux auto-hooks libc   <tspan fill="#475569">|</tspan>   <tspan fill="#34D399" font-weight="600">Mach-O</tspan> no SimOS - Ponce4Ghidra fills gap</text>
+</svg>

@@ -353,7 +353,11 @@ Ponce4Ghidra Symbolic Engine — CrackMe Demo
 
 注意 `hooked_imports: ['_printf', '_strlen']`——angr 没有 Mach-O SimOS，所以 Ponce4Ghidra 主动 Hook 了 Mach-O 的导入函数，将 `_printf` 和 `_strlen` 映射到 angr 内置的 libc SimProcedure。没有这步，所有路径都会死在 `__stubs` → `__got` → CLE extern object 的边界上，表现为 `IR decoding error at 0x100100008`。
 
-### 2.4 约束推导——Z3 是怎么算出密码的
+### 3.4 约束推导——Z3 是怎么算出密码的
+
+下图展示了 Z3 如何从源码中的 4 个 `if` 条件逐字节推导出密码 `P4Rg`：
+
+![Z3 约束求解过程 - 从分支条件到具体密码](images/constraint_solve.png)
 
 探索结束后，Ponce4Ghidra 自动拉取 found state 的所有约束。以下是真实的 Z3 约束输出（共 9 条）：
 
@@ -555,6 +559,8 @@ Ponce4Ghidra 默认请求最多 5 个解（`solve_all(max_solutions=5)`）。Res
 
 ### 5.1 Bug #1: Mach-O Import Hooking——为什么所有路径都在 strlen 处死亡
 
+![Mach-O 导入 Hook - 修复前后的调用链对比](images/macho_hook.png)
+
 🧑‍🔬 笔者在 macOS 上第一次测试 crackme 时，angr 返回 `found_count: 0`——一条路径都没有到达 Find 目标。日志显示所有路径都在 `errored` stash 里，错误信息是 `IR decoding error at 0x100100008`。
 
 **笔者做了什么**：
@@ -593,6 +599,8 @@ def _hook_macho_imports(self) -> list[str]:
 
 ### 5.2 Bug #2: 内存存储的字节序陷阱——为什么密码变成了四个零字节
 
+![字节序陷阱 - 指针反转导致约束落在未映射内存](images/endian_bug.png)
+
 🧑‍🔬 笔者在实现 `symbolize_argv` 时遇到了一个诡异的 bug：angr 报告 `found_count: 1`（探索成功），但求解出的密码是 `b'\x00\x00\x00\x00'`——四个零字节。笔者反复检查了 Find/Avoid 地址、符号变量的大小，一切正确。
 
 **笔者做了什么**：
@@ -626,6 +634,8 @@ state.memory.store(addr, claripy.BVV(value, state.arch.bits),
 但对**单字节值**（如 NUL 终止符），big-endian 和 little-endian 没有区别，所以不需要指定。笔者把这个区分写成了两个 helper 方法：`_store_word()`（多字节，指定字节序）和 `_store_bytes()`（逐字节存储，字节序无关）。
 
 ### 5.3 深入：Veritesting——对抗路径爆炸
+
+![路径爆炸 vs Veritesting - 524,288 条路径压缩为 54 条](images/path_explosion.png)
 
 🧑‍🔬 笔者在 license key 样本上第一次遇到了**路径爆炸**（path explosion）——符号执行的头号敌人。
 
@@ -711,6 +721,8 @@ EngineProtocol.Response resp = engineManager.sendCommand(
 ---
 
 ## 六、实战建议：何时使用哪种符号化方式
+
+![四种符号化方式对比 - 选对方法事半功倍](images/symbolize_methods.png)
 
 | 方式 | 适用场景 | 典型用例 |
 |------|----------|----------|

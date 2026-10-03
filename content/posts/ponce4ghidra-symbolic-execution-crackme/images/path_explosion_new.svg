@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 750" width="1200" height="750"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="5" refY="10" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,0 L5,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="5" refY="10" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,0 L5,10 z" fill="#FB7185"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="5" refY="10" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,0 L5,10 z" fill="#34D399"/>
+    </marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .card-title { font-size: 20px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .card-sub { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; font-weight: 600; letter-spacing: 0.5px; dominant-baseline: central; }
+    .body-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code { font-family: 'SF Mono','Menlo',monospace; font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code-keyword { fill: #F472B6; }
+    .code-string { fill: #FCD34D; }
+    .code-type { fill: #A5F3FC; }
+    .code-number { fill: #FDBA74; }
+    .code-out { fill: #86EFAC; }
+    .pill-txt { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .footer-em { fill: #38BDF8; font-weight: 600; }
+    .table-h { font-size: 13px; fill: #F1F5F9; font-weight: 700; dominant-baseline: central; }
+    .table-c { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .table-title { font-size: 15px; fill: #38BDF8; font-weight: 700; dominant-baseline: central; text-anchor: middle; letter-spacing: 1px; }
+    .num-big { font-family: 'SF Mono','Menlo',monospace; font-size: 22px; font-weight: 800; dominant-baseline: central; text-anchor: middle; }
+  </style>
+  <rect width="1200" height="750" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="36" class="title-main">路径爆炸 vs Veritesting<tspan class="title-accent"> · </tspan>为什么 license key 需要路径合并</text>
+  <text x="600" y="62" class="subtitle">check_checksum 的 for 循环在每次迭代中产生分支，指数级膨胀</text>
+
+  <!-- Root node: the loop -->
+  <g transform="translate(360, 82)">
+    <rect x="0" y="0" width="480" height="50" rx="10" fill="#0F1E2E" stroke="#38BDF8" stroke-width="1.5" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="4" height="50" rx="2" fill="#38BDF8"/>
+    <text x="240" y="18" style="font-size:16px; fill:#F8FAFC; font-weight:700; text-anchor:middle; dominant-baseline:central">for (i = 0; i &lt; 19; i++)</text>
+    <text x="240" y="38" class="subtitle">if (key[i] != '-') sum += key[i];</text>
+  </g>
+
+  <!-- Fork lines -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="600" y1="132" x2="600" y2="148"/>
+    <line x1="296" y1="148" x2="904" y2="148"/>
+    <line x1="296" y1="148" x2="296" y2="168"/>
+    <line x1="904" y1="148" x2="904" y2="168"/>
+  </g>
+  <circle cx="600" cy="132" r="3" fill="#64748B"/>
+
+  <!-- ============ LEFT CARD: Without Veritesting (Rose) ============ -->
+  <g transform="translate(36, 172)">
+    <rect x="0" y="0" width="520" height="380" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="520" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="520" height="4" fill="#FB7185"/>
+
+    <text x="24" y="38" class="card-title">Without Veritesting</text>
+    <rect x="280" y="24" width="100" height="24" rx="12" fill="#7F1D1D" stroke="#FB7185" stroke-width="1"/>
+    <text x="330" y="37" class="pill-txt" fill="#FECDD3">path explosion</text>
+
+    <!-- Binary tree visualization -->
+    <text x="24" y="72" class="section-label">BRANCHING TREE</text>
+
+    <!-- Level 0: root -->
+    <circle cx="260" cy="100" r="8" fill="#FB7185"/>
+    <!-- Level 1 -->
+    <line x1="260" y1="108" x2="170" y2="130" stroke="#FB7185" stroke-width="1.2" opacity="0.7"/>
+    <line x1="260" y1="108" x2="350" y2="130" stroke="#FB7185" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="170" cy="134" r="6" fill="#FB7185" opacity="0.8"/>
+    <circle cx="350" cy="134" r="6" fill="#FB7185" opacity="0.8"/>
+    <!-- Level 2 -->
+    <line x1="170" y1="140" x2="120" y2="162" stroke="#FB7185" stroke-width="1" opacity="0.5"/>
+    <line x1="170" y1="140" x2="220" y2="162" stroke="#FB7185" stroke-width="1" opacity="0.5"/>
+    <line x1="350" y1="140" x2="300" y2="162" stroke="#FB7185" stroke-width="1" opacity="0.5"/>
+    <line x1="350" y1="140" x2="400" y2="162" stroke="#FB7185" stroke-width="1" opacity="0.5"/>
+    <circle cx="120" cy="166" r="5" fill="#FB7185" opacity="0.6"/>
+    <circle cx="220" cy="166" r="5" fill="#FB7185" opacity="0.6"/>
+    <circle cx="300" cy="166" r="5" fill="#FB7185" opacity="0.6"/>
+    <circle cx="400" cy="166" r="5" fill="#FB7185" opacity="0.6"/>
+    <!-- Level 3 (smaller) -->
+    <line x1="120" y1="171" x2="95" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="120" y1="171" x2="145" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="220" y1="171" x2="195" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="220" y1="171" x2="245" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="300" y1="171" x2="275" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="300" y1="171" x2="325" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="400" y1="171" x2="375" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <line x1="400" y1="171" x2="425" y2="190" stroke="#FB7185" stroke-width="0.8" opacity="0.35"/>
+    <circle cx="95" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="145" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="195" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="245" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="275" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="325" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="375" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <circle cx="425" cy="193" r="3.5" fill="#FB7185" opacity="0.4"/>
+    <!-- dots indicating more -->
+    <text x="260" y="220" style="font-size:18px; fill:#FB7185; text-anchor:middle; dominant-baseline:central; letter-spacing:6px">. . . . . . . . .</text>
+
+    <!-- Growth annotation -->
+    <line x1="24" y1="110" x2="24" y2="216" stroke="#FB7185" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+    <text x="14" y="100" style="font-size:11px; fill:#FECDD3; dominant-baseline:central; writing-mode:lr" transform="rotate(-90, 14, 160)">depth</text>
+
+    <!-- Numbers -->
+    <text x="24" y="252" class="section-label">EXPONENTIAL GROWTH</text>
+
+    <rect x="24" y="268" width="476" height="36" rx="6" fill="#020617" stroke="#1E293B" stroke-width="1"/>
+    <text x="38" y="286" class="code">iter <tspan class="code-number">1</tspan>: <tspan class="code-number">2</tspan>   iter <tspan class="code-number">2</tspan>: <tspan class="code-number">4</tspan>   iter <tspan class="code-number">3</tspan>: <tspan class="code-number">8</tspan>   ...  iter <tspan class="code-number">19</tspan>: <tspan style="fill:#FB7185; font-weight:700">524,288</tspan></text>
+
+    <!-- Result -->
+    <text x="24" y="328" class="section-label">RESULT</text>
+    <text x="200" y="356" class="num-big" fill="#FB7185">524,288 paths</text>
+
+    <!-- Timeout pill -->
+    <rect x="350" y="342" width="146" height="28" rx="14" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="423" y="357" class="pill-txt" fill="#F87171">Timeout &gt; 60s</text>
+  </g>
+
+  <!-- ============ RIGHT CARD: With Veritesting (Emerald) ============ -->
+  <g transform="translate(644, 172)">
+    <rect x="0" y="0" width="520" height="380" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="520" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="520" height="4" fill="#34D399"/>
+
+    <text x="24" y="38" class="card-title">With Veritesting</text>
+    <rect x="250" y="24" width="110" height="24" rx="12" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="305" y="37" class="pill-txt" fill="#6EE7B7">path merging</text>
+
+    <!-- Merged flow visualization -->
+    <text x="24" y="72" class="section-label">MERGED FLOW</text>
+
+    <!-- Single path with merge nodes -->
+    <circle cx="260" cy="100" r="8" fill="#34D399"/>
+    <!-- Fork -->
+    <line x1="260" y1="108" x2="180" y2="130" stroke="#34D399" stroke-width="1.2" opacity="0.7"/>
+    <line x1="260" y1="108" x2="340" y2="130" stroke="#34D399" stroke-width="1.2" opacity="0.7"/>
+    <circle cx="180" cy="134" r="6" fill="#34D399" opacity="0.8"/>
+    <circle cx="340" cy="134" r="6" fill="#34D399" opacity="0.8"/>
+
+    <!-- Merge point (diamond) -->
+    <line x1="180" y1="140" x2="260" y2="164" stroke="#34D399" stroke-width="1.2" opacity="0.7"/>
+    <line x1="340" y1="140" x2="260" y2="164" stroke="#34D399" stroke-width="1.2" opacity="0.7"/>
+    <rect x="252" y="156" width="16" height="16" rx="2" fill="#34D399" transform="rotate(45, 260, 164)"/>
+
+    <!-- Continue single path -->
+    <line x1="260" y1="172" x2="260" y2="192" stroke="#34D399" stroke-width="1.2" opacity="0.7"/>
+    <!-- ITE label -->
+    <rect x="290" y="150" width="200" height="22" rx="6" fill="#020617" stroke="#34D399" stroke-width="0.8" opacity="0.8"/>
+    <text x="300" y="162" style="font-family:'SF Mono','Menlo',monospace; font-size:11px; fill:#6EE7B7; dominant-baseline:central">ITE(key[i]!='-', +k, +0)</text>
+
+    <!-- Repeat merge (iteration 2) -->
+    <circle cx="260" cy="198" r="5" fill="#34D399" opacity="0.6"/>
+    <line x1="260" y1="203" x2="200" y2="218" stroke="#34D399" stroke-width="1" opacity="0.5"/>
+    <line x1="260" y1="203" x2="320" y2="218" stroke="#34D399" stroke-width="1" opacity="0.5"/>
+    <circle cx="200" cy="221" r="4" fill="#34D399" opacity="0.5"/>
+    <circle cx="320" cy="221" r="4" fill="#34D399" opacity="0.5"/>
+    <line x1="200" y1="225" x2="260" y2="240" stroke="#34D399" stroke-width="1" opacity="0.5"/>
+    <line x1="320" y1="225" x2="260" y2="240" stroke="#34D399" stroke-width="1" opacity="0.5"/>
+    <rect x="252" y="232" width="16" height="16" rx="2" fill="#34D399" opacity="0.7" transform="rotate(45, 260, 240)"/>
+
+    <!-- Numbers -->
+    <text x="24" y="270" class="section-label">ITE MERGE FORMULA</text>
+
+    <rect x="24" y="284" width="476" height="36" rx="6" fill="#020617" stroke="#1E293B" stroke-width="1"/>
+    <text x="38" y="302" class="code"><tspan class="code-keyword">sum</tspan> = <tspan class="code-type">ITE</tspan>(key[i] != <tspan class="code-string">'-'</tspan>, sum + key[i], sum)  <tspan style="fill:#64748B; font-style:italic">x19</tspan></text>
+
+    <!-- Result -->
+    <text x="24" y="340" class="section-label">RESULT</text>
+    <text x="160" y="358" class="num-big" fill="#34D399">54 paths</text>
+
+    <!-- Success pill -->
+    <rect x="300" y="344" width="160" height="28" rx="14" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="380" y="359" class="pill-txt" fill="#6EE7B7">6.02s - solved</text>
+  </g>
+
+  <!-- ============ Bottom comparison table ============ -->
+  <g transform="translate(100, 574)">
+    <rect x="0" y="0" width="1000" height="150" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1"/>
+    <!-- Header -->
+    <rect x="0" y="0" width="1000" height="36" rx="12" fill="#1E293B"/>
+    <rect x="0" y="24" width="1000" height="12" fill="#1E293B"/>
+    <text x="500" y="18" class="table-title">BENCHMARK COMPARISON</text>
+
+    <!-- Column headers -->
+    <text x="120" y="56" class="table-h">Metric</text>
+    <text x="420" y="56" class="table-h" style="fill:#FB7185">Without Veritesting</text>
+    <text x="760" y="56" class="table-h" style="fill:#34D399">With Veritesting</text>
+    <line x1="20" y1="68" x2="980" y2="68" stroke="#334155" stroke-width="1"/>
+
+    <!-- Row 1: Paths -->
+    <circle cx="44" cy="90" r="4" fill="#38BDF8"/>
+    <text x="60" y="90" class="body-text">Explored Paths</text>
+    <text x="420" y="90" class="body-text" style="fill:#FECDD3">524,288</text>
+    <text x="760" y="90" class="body-text" style="fill:#6EE7B7">54</text>
+    <text x="890" y="90" style="font-size:12px; fill:#34D399; dominant-baseline:central; font-weight:700">9,709x fewer</text>
+
+    <!-- Row 2: Time -->
+    <line x1="20" y1="106" x2="980" y2="106" stroke="#1E293B" stroke-width="1"/>
+    <circle cx="44" cy="124" r="4" fill="#A78BFA"/>
+    <text x="60" y="124" class="body-text">Solve Time</text>
+    <text x="420" y="124" class="body-text" style="fill:#FECDD3">Timeout (&gt; 60s)</text>
+    <text x="760" y="124" class="body-text" style="fill:#6EE7B7">6.02s</text>
+    <text x="890" y="124" style="font-size:12px; fill:#34D399; dominant-baseline:central; font-weight:700">Solved</text>
+  </g>
+
+  <!-- Bottom note -->
+  <text x="600" y="740" class="footer-text"><tspan class="footer-em">Core insight:</tspan> Veritesting merges paths at loop boundaries using ITE expressions, preventing exponential blowup</text>
+</svg>

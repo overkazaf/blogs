@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 650" width="1200" height="650"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FB7185"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#34D399"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #FB7185; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .card-title { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .card-sub { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; font-weight: 600; letter-spacing: 0.5px; dominant-baseline: central; }
+    .code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code-keyword { fill: #F472B6; }
+    .code-type { fill: #A5F3FC; }
+    .code-string { fill: #FCD34D; }
+    .code-number { fill: #FDBA74; }
+    .code-out { fill: #86EFAC; }
+    .code-comment { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #64748B; dominant-baseline: central; font-style: italic; }
+    .byte-hex { font-family: 'SF Mono', 'Menlo', monospace; font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .body-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .pill-txt { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="650" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="36" class="title-main">字节序陷阱<tspan class="title-accent"> · </tspan>为什么密码变成了四个零字节</text>
+  <text x="600" y="62" class="subtitle">state.memory.store() 的默认字节序与 VEX Load/Store 不一致</text>
+
+  <!-- ======== TOP ROW: Bug (Rose) ======== -->
+  <g transform="translate(36, 90)">
+    <rect x="0" y="0" width="1128" height="240" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1128" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="1128" height="4" fill="#FB7185"/>
+
+    <!-- Title + pill -->
+    <text x="20" y="36" class="card-title">Bug: store() default = Big Endian</text>
+    <rect x="380" y="22" width="180" height="26" rx="13" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="470" y="36" class="pill-txt" fill="#FECDD3">password = \x00\x00\x00\x00</text>
+
+    <!-- Python code line -->
+    <text x="20" y="68" class="section-label">PYTHON API</text>
+    <rect x="120" y="54" width="620" height="28" rx="6" fill="#020617" stroke="#1E293B" stroke-width="1"/>
+    <text x="132" y="68" class="code">state.memory.<tspan class="code-keyword">store</tspan>(addr, BVV(<tspan class="code-number">0x7FFFFFFFFFEF000</tspan>, 64))</text>
+    <text x="750" y="68" class="code-comment">// no endness param</text>
+
+    <!-- WRITE row: Big Endian byte order -->
+    <text x="20" y="104" class="section-label">WRITE (BE)</text>
+    <text x="120" y="104" class="body-text">addr+0</text>
+    <!-- 8 byte cells - big endian order: MSB first -->
+    <rect x="180" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="206" y="104" class="byte-hex" fill="#FECDD3">00</text>
+    <rect x="240" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="266" y="104" class="byte-hex" fill="#FECDD3">07</text>
+    <rect x="300" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="326" y="104" class="byte-hex" fill="#FECDD3">FF</text>
+    <rect x="360" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="386" y="104" class="byte-hex" fill="#FECDD3">FF</text>
+    <rect x="420" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="446" y="104" class="byte-hex" fill="#FECDD3">FF</text>
+    <rect x="480" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="506" y="104" class="byte-hex" fill="#FECDD3">FE</text>
+    <rect x="540" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="566" y="104" class="byte-hex" fill="#FECDD3">F0</text>
+    <rect x="600" y="88" width="52" height="32" rx="4" fill="#7F1D1D" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="626" y="104" class="byte-hex" fill="#FECDD3">00</text>
+    <text x="670" y="104" class="body-text">addr+7</text>
+    <text x="740" y="104" class="code-comment">// MSB at lowest addr</text>
+
+    <!-- READ row: x86 reads as little endian -->
+    <text x="20" y="148" class="section-label">READ (LE)</text>
+    <text x="120" y="148" class="body-text" style="fill:#FB7185; font-weight:700">VEX reverses byte order</text>
+
+    <!-- Arrow from write to read -->
+    <path d="M 410 122 C 410 130, 490 130, 490 136" stroke="#FB7185" stroke-width="1.4" fill="none" marker-end="url(#arrow-rose)" opacity="0.7"/>
+
+    <rect x="500" y="134" width="400" height="28" rx="6" fill="#020617" stroke="#7F1D1D" stroke-width="1"/>
+    <text x="512" y="148" class="code">rdi = <tspan class="code-number">0xF0FEFFFFFFFF0700</tspan> <tspan class="code-comment">// reversed!</tspan></text>
+
+    <!-- Result chain -->
+    <text x="20" y="192" class="section-label">RESULT</text>
+    <rect x="120" y="178" width="180" height="28" rx="6" fill="#450A0A" stroke="#7F1D1D" stroke-width="1"/>
+    <text x="210" y="192" class="body-text" style="text-anchor:middle; fill:#FECDD3">unmapped memory</text>
+
+    <line x1="304" y1="192" x2="340" y2="192" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <rect x="346" y="178" width="220" height="28" rx="6" fill="#450A0A" stroke="#7F1D1D" stroke-width="1"/>
+    <text x="456" y="192" class="body-text" style="text-anchor:middle; fill:#FECDD3">unconstrained comparisons</text>
+
+    <line x1="570" y1="192" x2="606" y2="192" stroke="#FB7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+    <rect x="612" y="178" width="250" height="28" rx="6" fill="#450A0A" stroke="#FB7185" stroke-width="1.5"/>
+    <text x="737" y="192" class="byte-hex" style="font-size:15px" fill="#FECDD3">Z3 output: 0x00000000</text>
+
+    <!-- Explanation -->
+    <text x="20" y="224" class="footer-text" style="fill:#FB7185">angr reports found_count=1 but the answer is wrong: pointer reversed, constraints landed on unconstrained memory</text>
+  </g>
+
+  <!-- Divider arrow -->
+  <line x1="600" y1="336" x2="600" y2="370" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+  <rect x="555" y="340" width="90" height="22" rx="11" fill="#0F172A" stroke="#64748B" stroke-width="1"/>
+  <text x="600" y="352" class="pill-txt" fill="#CBD5E1">FIX</text>
+
+  <!-- ======== BOTTOM ROW: Fix (Emerald) ======== -->
+  <g transform="translate(36, 380)">
+    <rect x="0" y="0" width="1128" height="240" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1128" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="1128" height="4" fill="#34D399"/>
+
+    <!-- Title + pill -->
+    <text x="20" y="36" class="card-title">Fix: endness = state.arch.memory_endness</text>
+    <rect x="440" y="22" width="160" height="26" rx="13" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="520" y="36" class="pill-txt" fill="#6EE7B7">password = P4Rg</text>
+
+    <!-- Python code line -->
+    <text x="20" y="68" class="section-label">PYTHON API</text>
+    <rect x="120" y="54" width="800" height="28" rx="6" fill="#020617" stroke="#1E293B" stroke-width="1"/>
+    <text x="132" y="68" class="code">state.memory.<tspan class="code-keyword">store</tspan>(addr, BVV(<tspan class="code-number">0x7FFFFFFFFFEF000</tspan>, 64), <tspan class="code-type">endness</tspan>=arch.<tspan class="code-type">memory_endness</tspan>)</text>
+
+    <!-- WRITE row: Little Endian byte order -->
+    <text x="20" y="104" class="section-label">WRITE (LE)</text>
+    <text x="120" y="104" class="body-text">addr+0</text>
+    <!-- 8 byte cells - little endian order: LSB first -->
+    <rect x="180" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="206" y="104" class="byte-hex" fill="#6EE7B7">00</text>
+    <rect x="240" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="266" y="104" class="byte-hex" fill="#6EE7B7">F0</text>
+    <rect x="300" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="326" y="104" class="byte-hex" fill="#6EE7B7">FE</text>
+    <rect x="360" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="386" y="104" class="byte-hex" fill="#6EE7B7">FF</text>
+    <rect x="420" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="446" y="104" class="byte-hex" fill="#6EE7B7">FF</text>
+    <rect x="480" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="506" y="104" class="byte-hex" fill="#6EE7B7">FF</text>
+    <rect x="540" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="566" y="104" class="byte-hex" fill="#6EE7B7">07</text>
+    <rect x="600" y="88" width="52" height="32" rx="4" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="626" y="104" class="byte-hex" fill="#6EE7B7">00</text>
+    <text x="670" y="104" class="body-text">addr+7</text>
+    <text x="740" y="104" class="code-comment">// LSB at lowest addr</text>
+
+    <!-- READ row -->
+    <text x="20" y="148" class="section-label">READ (LE)</text>
+    <text x="120" y="148" class="body-text" style="fill:#34D399; font-weight:700">VEX reads correct value</text>
+
+    <path d="M 410 122 C 410 130, 490 130, 490 136" stroke="#34D399" stroke-width="1.4" fill="none" marker-end="url(#arrow-green)" opacity="0.7"/>
+
+    <rect x="500" y="134" width="400" height="28" rx="6" fill="#020617" stroke="#052E1A" stroke-width="1"/>
+    <text x="512" y="148" class="code">rdi = <tspan class="code-number">0x7FFFFFFFFFEF000</tspan> <tspan class="code-out">// correct!</tspan></text>
+
+    <!-- Result chain -->
+    <text x="20" y="192" class="section-label">RESULT</text>
+    <rect x="120" y="178" width="180" height="28" rx="6" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="210" y="192" class="body-text" style="text-anchor:middle; fill:#6EE7B7">symbolic buffer</text>
+
+    <line x1="304" y1="192" x2="340" y2="192" stroke="#34D399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <rect x="346" y="178" width="220" height="28" rx="6" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="456" y="192" class="body-text" style="text-anchor:middle; fill:#6EE7B7">constraints applied correctly</text>
+
+    <line x1="570" y1="192" x2="606" y2="192" stroke="#34D399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <rect x="612" y="178" width="250" height="28" rx="6" fill="#052E1A" stroke="#34D399" stroke-width="1.5"/>
+    <text x="737" y="192" class="byte-hex" style="font-size:15px" fill="#6EE7B7">Z3 output: 0x50345267</text>
+
+    <!-- Password bytes -->
+    <rect x="880" y="178" width="120" height="28" rx="6" fill="#34D399" filter="url(#softShadow)"/>
+    <text x="940" y="192" class="byte-hex" style="font-size:15px" fill="#0F172A">= "P4Rg"</text>
+
+    <!-- Explanation -->
+    <text x="20" y="224" class="footer-text" style="fill:#34D399">One-line fix: always pass endness=state.arch.memory_endness for multi-byte values</text>
+  </g>
+</svg>
