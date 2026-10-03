@@ -1,0 +1,241 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 650" width="1200" height="650"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#38BDF8"/></marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A78BFA"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#34D399"/></marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FBBF24"/></marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+  </defs>
+  <style>
+    .title-main { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .card-title { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .card-sub { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .section-label { font-size: 12px; fill: #94A3B8; font-weight: 600; letter-spacing: 0.5px; dominant-baseline: central; }
+    .body-text { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .code { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #E2E8F0; dominant-baseline: central; }
+    .code-keyword { fill: #F472B6; }
+    .code-string { fill: #FCD34D; }
+    .code-type { fill: #A5F3FC; }
+    .code-number { fill: #FDBA74; }
+    .code-out { fill: #86EFAC; }
+    .code-comment { font-family: 'SF Mono', 'Menlo', monospace; font-size: 12px; fill: #64748B; font-style: italic; dominant-baseline: central; }
+    .pill-txt { font-size: 11px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .proto-label { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; font-weight: 600; }
+    .proto-cmd { font-family: 'SF Mono', 'Menlo', monospace; font-size: 11px; fill: #94A3B8; text-anchor: middle; dominant-baseline: central; }
+    .footer-text { font-size: 13px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .footer-em { fill: #38BDF8; font-weight: 600; }
+  </style>
+  <rect width="1200" height="650" fill="url(#canvasBg)"/>
+
+  <!-- Title -->
+  <text x="600" y="36" class="title-main">Ponce4Ghidra 系统架构<tspan class="title-accent"> · </tspan>从右键点击到密码求解</text>
+  <text x="600" y="62" class="subtitle">Ghidra Plugin (Java) + angr Engine (Python) + Z3 SMT Solver</text>
+
+  <!-- ============ Card 1: Ghidra Plugin (Cyan) ============ -->
+  <g transform="translate(24, 90)">
+    <rect x="0" y="0" width="290" height="480" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="290" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="290" height="4" fill="#38BDF8"/>
+
+    <!-- title -->
+    <text x="20" y="36" class="card-title">Ghidra Plugin</text>
+    <text x="208" y="38" class="card-sub">(Java)</text>
+
+    <!-- pill: UI -->
+    <rect x="20" y="56" width="76" height="22" rx="11" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="58" y="68" class="pill-txt" fill="#7DD3FC">UI + Action</text>
+
+    <!-- divider -->
+    <line x1="20" y1="90" x2="270" y2="90" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- section: 4 Tabs -->
+    <text x="20" y="110" class="section-label">PANEL (4 TABS)</text>
+    <circle cx="32" cy="132" r="4" fill="#38BDF8"/>
+    <text x="44" y="132" class="body-text">Variables - 符号变量表</text>
+    <circle cx="32" cy="154" r="4" fill="#38BDF8"/>
+    <text x="44" y="154" class="body-text">Find/Avoid - 目标地址</text>
+    <circle cx="32" cy="176" r="4" fill="#38BDF8"/>
+    <text x="44" y="176" class="body-text">Results - 求解结果</text>
+    <circle cx="32" cy="198" r="4" fill="#38BDF8"/>
+    <text x="44" y="198" class="body-text">Constraints - 约束树</text>
+
+    <line x1="20" y1="218" x2="270" y2="218" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- section: 8 Actions -->
+    <text x="20" y="238" class="section-label">8 MENU ACTIONS</text>
+    <circle cx="32" cy="260" r="4" fill="#7DD3FC"/>
+    <text x="44" y="260" class="body-text">Set Find / Set Avoid</text>
+    <circle cx="32" cy="282" r="4" fill="#7DD3FC"/>
+    <text x="44" y="282" class="body-text">Symbolize Function Arg</text>
+    <circle cx="32" cy="304" r="4" fill="#7DD3FC"/>
+    <text x="44" y="304" class="body-text">Symbolize argv / Reg / Mem</text>
+    <circle cx="32" cy="326" r="4" fill="#7DD3FC"/>
+    <text x="44" y="326" class="body-text">Solve Constraints</text>
+
+    <line x1="20" y1="346" x2="270" y2="346" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- section: Extras -->
+    <text x="20" y="366" class="section-label">SESSION</text>
+    <circle cx="32" cy="388" r="4" fill="#94A3B8"/>
+    <text x="44" y="388" class="body-text">Save / Restore (replay log)</text>
+    <circle cx="32" cy="410" r="4" fill="#94A3B8"/>
+    <text x="44" y="410" class="body-text">Stale engine detection</text>
+    <circle cx="32" cy="432" r="4" fill="#94A3B8"/>
+    <text x="44" y="432" class="body-text">Pre-solve validation</text>
+
+    <!-- status bar -->
+    <rect x="14" y="450" width="262" height="22" rx="4" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="24" y="462" class="code"><tspan class="code-out">Solved:</tspan> arg_rdi = P4Rg</text>
+  </g>
+
+  <!-- ============ Protocol arrows (Cyan -> Violet) ============ -->
+  <!-- top arrow: commands -->
+  <path d="M 314 260 C 340 260, 360 230, 390 230" stroke="#38BDF8" stroke-width="1.6" fill="none" marker-end="url(#arrow-cyan)"/>
+  <!-- bottom arrow: responses -->
+  <path d="M 390 340 C 360 340, 340 370, 314 370" stroke="#A78BFA" stroke-width="1.6" fill="none" marker-end="url(#arrow-violet)" stroke-dasharray="6,3" opacity="0.7"/>
+
+  <!-- Protocol label box -->
+  <g transform="translate(320, 270)">
+    <rect x="0" y="0" width="76" height="56" rx="8" fill="#0F172A" stroke="#334155" stroke-width="1"/>
+    <text x="38" y="16" class="proto-label">JSON/TCP</text>
+    <text x="38" y="36" class="proto-cmd">port 13370</text>
+    <text x="38" y="52" class="proto-cmd">9 commands</text>
+  </g>
+
+  <!-- ============ Card 2: angr Engine (Violet) ============ -->
+  <g transform="translate(400, 90)">
+    <rect x="0" y="0" width="290" height="480" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="290" height="5" rx="12" fill="#A78BFA"/>
+    <rect x="0" y="3" width="290" height="4" fill="#A78BFA"/>
+
+    <!-- title -->
+    <text x="20" y="36" class="card-title">angr Engine</text>
+    <text x="188" y="38" class="card-sub">(Python)</text>
+
+    <!-- pill -->
+    <rect x="20" y="56" width="120" height="22" rx="11" fill="#3B1D7A" stroke="#A78BFA" stroke-width="1"/>
+    <text x="80" y="68" class="pill-txt" fill="#C4B5FD">Symbolic Execution</text>
+
+    <line x1="20" y1="90" x2="270" y2="90" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- Core components -->
+    <text x="20" y="110" class="section-label">CORE COMPONENTS</text>
+
+    <!-- angr.Project -->
+    <rect x="16" y="124" width="258" height="34" rx="6" fill="#020617" stroke="#3B1D7A" stroke-width="1"/>
+    <text x="28" y="142" class="code"><tspan class="code-type">angr.Project</tspan>(binary, <tspan class="code-keyword">auto_load_libs</tspan>=<tspan class="code-number">False</tspan>)</text>
+
+    <!-- SimState -->
+    <rect x="16" y="166" width="258" height="34" rx="6" fill="#020617" stroke="#3B1D7A" stroke-width="1"/>
+    <text x="28" y="184" class="code"><tspan class="code-type">SimState</tspan> + <tspan class="code-type">claripy.BVS</tspan>(<tspan class="code-string">"input"</tspan>, <tspan class="code-number">32</tspan>)</text>
+
+    <!-- SimulationManager -->
+    <rect x="16" y="208" width="258" height="34" rx="6" fill="#020617" stroke="#3B1D7A" stroke-width="1"/>
+    <text x="28" y="226" class="code"><tspan class="code-type">SimulationManager</tspan>.explore(find, avoid)</text>
+
+    <line x1="20" y1="256" x2="270" y2="256" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- Features -->
+    <text x="20" y="276" class="section-label">FEATURES</text>
+    <circle cx="32" cy="298" r="4" fill="#C4B5FD"/>
+    <text x="44" y="298" class="body-text">Mach-O import hooking</text>
+    <circle cx="32" cy="320" r="4" fill="#C4B5FD"/>
+    <text x="44" y="320" class="body-text">Veritesting (path merge)</text>
+    <circle cx="32" cy="342" r="4" fill="#C4B5FD"/>
+    <text x="44" y="342" class="body-text">Unicorn fast execution</text>
+    <circle cx="32" cy="364" r="4" fill="#C4B5FD"/>
+    <text x="44" y="364" class="body-text">Timeout protection</text>
+
+    <line x1="20" y1="384" x2="270" y2="384" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- Platforms -->
+    <text x="20" y="404" class="section-label">PLATFORMS</text>
+    <circle cx="32" cy="426" r="4" fill="#94A3B8"/>
+    <text x="44" y="426" class="body-text">Mach-O x86_64</text>
+    <circle cx="32" cy="448" r="4" fill="#94A3B8"/>
+    <text x="44" y="448" class="body-text">ELF x86_64 / ARM64</text>
+    <circle cx="32" cy="470" r="4" fill="#94A3B8"/>
+    <text x="44" y="470" class="body-text">Android .so (ARM/ARM64)</text>
+  </g>
+
+  <!-- ============ Arrow: angr -> Z3 ============ -->
+  <path d="M 690 300 C 716 300, 740 300, 766 300" stroke="#A78BFA" stroke-width="1.6" fill="none" marker-end="url(#arrow-violet)"/>
+
+  <!-- label on arrow -->
+  <rect x="706" y="272" width="48" height="20" rx="10" fill="#0F172A" stroke="#A78BFA" stroke-width="0.8"/>
+  <text x="730" y="283" class="proto-cmd" style="fill:#C4B5FD">solve</text>
+
+  <!-- ============ Card 3: Z3 Solver (Emerald) ============ -->
+  <g transform="translate(770, 90)">
+    <rect x="0" y="0" width="220" height="330" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="220" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="220" height="4" fill="#34D399"/>
+
+    <!-- title -->
+    <text x="20" y="36" class="card-title">Z3 Solver</text>
+    <text x="158" y="38" class="card-sub">(SMT)</text>
+
+    <!-- pill -->
+    <rect x="20" y="56" width="120" height="22" rx="11" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="80" y="68" class="pill-txt" fill="#6EE7B7">Constraint Solver</text>
+
+    <line x1="20" y1="90" x2="200" y2="90" stroke="#1E293B" stroke-width="1"/>
+
+    <text x="20" y="110" class="section-label">CAPABILITIES</text>
+    <circle cx="32" cy="132" r="4" fill="#34D399"/>
+    <text x="44" y="132" class="body-text">CDCL SAT engine</text>
+    <circle cx="32" cy="154" r="4" fill="#34D399"/>
+    <text x="44" y="154" class="body-text">Bit-vector theory</text>
+    <circle cx="32" cy="176" r="4" fill="#34D399"/>
+    <text x="44" y="176" class="body-text">Array theory</text>
+    <circle cx="32" cy="198" r="4" fill="#34D399"/>
+    <text x="44" y="198" class="body-text">Multi-solution enum</text>
+
+    <line x1="20" y1="218" x2="200" y2="218" stroke="#1E293B" stroke-width="1"/>
+
+    <!-- example constraint -->
+    <text x="20" y="238" class="section-label">EXAMPLE</text>
+    <rect x="16" y="252" width="188" height="62" rx="6" fill="#020617" stroke="#064E3B" stroke-width="1"/>
+    <text x="28" y="270" class="code"><tspan class="code-type">b0</tspan>==<tspan class="code-number">0x50</tspan> <tspan class="code-comment">'P'</tspan></text>
+    <text x="28" y="288" class="code"><tspan class="code-type">b2</tspan>^<tspan class="code-number">0x42</tspan>==<tspan class="code-number">0x10</tspan> <tspan class="code-comment">'R'</tspan></text>
+    <text x="28" y="306" class="code"><tspan class="code-type">b3</tspan>+<tspan class="code-number">0x20</tspan>==<tspan class="code-number">0x87</tspan> <tspan class="code-comment">'g'</tspan></text>
+  </g>
+
+  <!-- ============ Arrow: Z3 -> Solution ============ -->
+  <path d="M 880 420 C 880 450, 880 460, 880 490" stroke="#34D399" stroke-width="1.6" fill="none" marker-end="url(#arrow-green)"/>
+
+  <!-- ============ Card 4: Solution (Amber) ============ -->
+  <g transform="translate(770, 500)">
+    <rect x="0" y="0" width="220" height="70" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="220" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="220" height="4" fill="#FBBF24"/>
+
+    <text x="20" y="30" class="card-title">Solution</text>
+    <rect x="16" y="44" width="188" height="20" rx="4" fill="#020617" stroke="#713F12" stroke-width="1"/>
+    <text x="26" y="55" class="code"><tspan class="code-out">P4Rg</tspan> <tspan fill="#64748B">|</tspan> <tspan class="code-out">K9mZ-4wR2-Xp7B-3nLf</tspan></text>
+  </g>
+
+  <!-- ============ Data flow labels ============ -->
+  <!-- User interaction label at top of Card 1 -->
+  <g transform="translate(24, 590)">
+    <text x="145" y="0" class="footer-text"><tspan class="footer-em">User:</tspan> right-click in Listing / Decompiler</text>
+  </g>
+
+  <!-- Bottom label -->
+  <text x="600" y="630" class="footer-text"><tspan class="footer-em">Pipeline:</tspan> Symbolize Input &#8594; Fork at Branches &#8594; Collect Constraints &#8594; Z3 Solve &#8594; Concrete Values</text>
+
+</svg>
