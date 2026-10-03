@@ -382,7 +382,7 @@ byte3 = 0x67 = 103 → 'g'
 
 Results tab 显示求解结果：
 
-![Constraints Tab — 每条约束对应密码的一个字节](https://overkazaf.github.io/Ponce4Ghidra/docs/img/constraints-tab.png)
+![Constraints Tab — 每条约束对应密码的一个字节](images/constraints-tab.png)
 
 每条约束直接映射到密码的一个字节：`byte0 == 80 ('P')`、`byte1 == 52 ('4')`、`byte2 ^ 0x42 == 0x10 ('R')`、`byte3 + 0x20 == 0x87 ('g')`。
 
@@ -516,7 +516,7 @@ Ponce4Ghidra 默认请求最多 5 个解（`solve_all(max_solutions=5)`）。Res
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-![Results Tab — 5 个有效 license key 的多解枚举](https://overkazaf.github.io/Ponce4Ghidra/docs/img/results-table.png)
+![Results Tab — 5 个有效 license key 的多解枚举](images/results-table.png)
 
 5 个 key 都是 `K9mZ-4wR2-Xp7B-3nLf` 的变体，只有最后一个字节不同：`f`、`e`、`d`、`c`、`b`。
 
