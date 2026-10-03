@@ -1,0 +1,43 @@
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/architecture_new.svg
+  2de860b72f337f56 1-241
+content/posts/ponce4ghidra-symbolic-execution-crackme/images/workflow_new.svg
+  2de860b72f337f56 1-163
+content/posts/ponce4ghidra-symbolic-execution-crackme/index.md
+  2de860b72f337f56 1-786
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "053dd1630f139ac1e0345eb345f3de8a6a31b786",
+  "prompts": {
+    "2de860b72f337f56": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e9d33f14-1e56-4b56-b67f-c540bd5f2c02",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 1309,
+      "total_deletions": 119,
+      "accepted_lines": 1190,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/index.md": {
+          "additions": 902,
+          "deletions": 116,
+          "accepted_lines": 786
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/architecture_new.svg": {
+          "additions": 244,
+          "deletions": 3,
+          "accepted_lines": 241
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/images/workflow_new.svg": {
+          "additions": 163,
+          "accepted_lines": 163
+        }
+      }
+    }
+  }
+}
