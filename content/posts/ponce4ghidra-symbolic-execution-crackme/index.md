@@ -667,7 +667,86 @@ Ponce4Ghidra 默认开启 Veritesting。Unicorn 加速（`pip install unicorn`�
 
 **引申知识——路径爆炸的本质**：符号执行的路径数量与程序的**分支深度**呈指数关系。一个有 N 个串行 `if` 的程序产生 2^N 条路径。这就是为什么符号执行不适合分析大型完整程序——但非常适合分析**小的、孤立的校验函数**。Ponce4Ghidra 的 `Symbolize Function Argument` 正是利用了这一点：直接从目标函数入口开始，跳过程序启动阶段的所有分支。
 
-### 5.4 Bug #3: 过期引擎检测——为什么"Nothing is symbolized"
+### 5.4 Triton 引擎：当 angr 路径爆炸时的 Plan B
+
+🧑‍🔬 Veritesting 能缓解路径爆炸，但不能根治——遇到嵌套循环、虚拟机保护（VMP）、白盒加密这类深度分支结构时，angr 仍然会超时。于是笔者为 Ponce4Ghidra 实现了第二个引擎后端：**Triton**（concolic execution）。
+
+两者的核心区别在前面已经讲过：angr 同时分叉所有路径（内存 O(2^N)），Triton 只走一条具体路径然后取反分支重跑（内存 O(1)）。Triton **永远不会路径爆炸**，代价是可能需要多次重跑才能命中 Find 目标。
+
+#### 分支选择策略（strategy 参数）
+
+每次 Triton 走完一条路径没有命中 Find 目标时，它需要决定**取反哪个分支**。这个决策直接影响到达目标的速度。笔者实现了 4 种可配置的策略：
+
+```python
+# 通过 JSON 协议传递
+{"type": "explore", "params": {"strategy": "nearest", "max_attempts": 256}}
+```
+
+| 策略 | 选择方式 | 适合场景 | 不适合场景 |
+|------|----------|----------|-----------|
+| **dfs** (默认) | 取反**最后**收集到的分支（LIFO） | 线性校验（crackme 类），分支少，目标在函数末尾 | 深度嵌套循环 |
+| **bfs** | 取反**最先**收集到的分支（FIFO） | 宽扁的分支树，目标在早期分支的另一侧 | 深度大的函数（慢） |
+| **random** | **随机**选择一个分支取反 | 结构未知时的通用策略，增加探索多样性 | 需要确定性复现 |
+| **nearest** | 按分支 PC 到 Find 地址的**距离排序**，取反最近的 | 大函数、知道目标地址附近有关键分支 | CFG 非线性（距离不代表可达性） |
+
+🔬 **笔者的实验**：为什么默认选 dfs？
+
+以 crackme 为例，4 个 `if` 语句从上到下依次检查 byte0、byte1、byte2、byte3。用具体值 `AAAA` 首次执行时，第一个 `if (input[0] != 'P')` 就走向了 `return 0`。此时 `pending_models` 中只有一个模型——取反第一个分支，将 byte0 设为 `'P'`。
+
+```
+Attempt 1: input=AAAA → byte0!='P' → return 0 → 收集 1 个 not-taken 模型
+Attempt 2: input=P??? → byte0=='P', byte1!='4' → return 0 → 收集 1 个新模型
+Attempt 3: input=P4?? → byte0=='P', byte1=='4', byte2 XOR... → 收集 1 个新模型
+Attempt 4: input=P4R? → 前 3 个 pass, byte3 检查 → 收集 1 个新模型
+Attempt 5: input=P4Rg → 全部 pass → 命中 Find!
+```
+
+**dfs 只需要 5 次 attempt**——因为线性校验的最后一个分支（最晚收集到的）恰好是离 Find 最近的。如果用 bfs，第一次取反的是最早的分支，可能导致后续走向完全不同的路径，需要更多次尝试。
+
+但对于**非线性结构**（比如多层嵌套的 switch-case），dfs 的深度优先特性可能钻进死胡同。这时 **random** 或 **nearest** 策略更有优势。
+
+#### max_attempts 参数
+
+```python
+# 默认 64，最大 4096，受 timeout_sec 双重保护
+{"type": "explore", "params": {"max_attempts": 256, "timeout_sec": 120}}
+```
+
+每次 attempt 的开销约等于一次完整的函数执行（crackme ~0.065s，大函数可能 ~1s）。`max_attempts` 和 `timeout_sec` 是双重保护——即使设了 4096 次，超时也会提前终止。
+
+**经验法则**：
+
+| 函数复杂度 | 推荐 max_attempts | 推荐 strategy |
+|-----------|-------------------|---------------|
+| 简单校验（4-8 个 if） | 64（默认） | dfs |
+| 中等（license key, 20+ 分支） | 128-256 | dfs 或 nearest |
+| 复杂（VMP dispatch loop） | 512-1024 | random 或 nearest |
+| 未知结构 | 256 | random |
+
+#### angr vs Triton 选择决策
+
+🧑‍🔬 笔者的实际使用经验：
+
+```
+                    开始分析
+                      │
+              二进制大小 < 1MB？
+              ╱               ╲
+           是                   否
+            │                    │
+    已知校验函数？          用 Triton
+    ╱          ╲            (strategy=nearest)
+  是            否
+   │             │
+angr          angr
+func_arg      argv
+   │             │
+  超时？       超时？
+   │             │
+换 Triton     换 Triton
+```
+
+### 5.5 Bug #3: 过期引擎检测——为什么"Nothing is symbolized"
 
 🧑‍🔬 这是笔者遇到的最隐蔽的 bug。场景：
 
@@ -779,9 +858,10 @@ EngineProtocol.Response resp = engineManager.sendCommand(
 
 ### Ponce4Ghidra 路线图
 
-- **Triton concolic 引擎**：已实现，用于大二进制和 DRM 分析场景（angr 路径爆炸时的备选）
+- **Triton concolic 引擎**：已实现，支持 4 种分支选择策略（dfs/bfs/random/nearest）和可配置的 `max_attempts`（1-4096），用于大二进制和 DRM 分析场景
 - **Android .so 支持**：已实现 ARM/ARM64 的 deferred state creation
 - **Frida trace 集成**：将运行时 trace 导入 Triton 引擎，在具体路径上进行约束收集
+- **覆盖率引导策略**：计划实现类 fuzzing 的覆盖率引导分支选择——优先取反能到达未覆盖基本块的分支
 
 ### 参考文献
 
