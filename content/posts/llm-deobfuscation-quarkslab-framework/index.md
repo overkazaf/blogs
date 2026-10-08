@@ -1,8 +1,8 @@
 ---
 title: "当 LLM 学会拆炸弹 — Quarkslab 四维框架下的 AI 反混淆能力全景"
 slug: "llm-deobfuscation-quarkslab-four-dimensional-framework"
-date: 2026-10-09T10:00:00+08:00
-lastmod: 2026-10-09T10:00:00+08:00
+date: 2026-10-08T18:00:00+08:00
+lastmod: 2026-10-08T18:00:00+08:00
 draft: false
 tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G"]
 categories: ["reverse-engineering"]
