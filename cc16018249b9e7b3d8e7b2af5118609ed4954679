@@ -1,0 +1,58 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "cc16018249b9e7b3d8e7b2af5118609ed4954679",
+  "prompts": {
+    "4ff1a9b7fa970012": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc17cdcc-659a-4702-90ba-e73fbdae203a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 2063,
+      "total_deletions": 799,
+      "accepted_lines": 0,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/experiment_pipeline.html": {
+          "additions": 470,
+          "deletions": 46
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/resistance_tiers_new.svg": {
+          "deletions": 85
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/four_dimensions_new.svg": {
+          "deletions": 135
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/experiment_pipeline_new.svg": {
+          "deletions": 166
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/challenge_so_flow_new.svg": {
+          "deletions": 144
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/quarkslab_agent_lab_new.svg": {
+          "deletions": 146
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/resistance_tiers.html": {
+          "additions": 390,
+          "deletions": 39
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/challenge_so_flow.html": {
+          "additions": 408,
+          "deletions": 1
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/quarkslab_agent_lab.html": {
+          "additions": 413,
+          "deletions": 36
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/images/four_dimensions.html": {
+          "additions": 382,
+          "deletions": 1
+        }
+      }
+    }
+  }
+}
