@@ -1,0 +1,185 @@
+content/posts/playready-deep-dive/index.md
+  4ff1a9b7fa970012 43-46,312-315
+content/posts/android-native-vmp-analysis/index.md
+  4ff1a9b7fa970012 222-225,414-417
+content/posts/chrome-vmp-protection/index.md
+  4ff1a9b7fa970012 320-323,661-664
+content/posts/sixgod-metasec/index.md
+  4ff1a9b7fa970012 381-384,428-431
+content/posts/quarkslab-drm-breakers/index.md
+  4ff1a9b7fa970012 430-433,1004-1007
+content/posts/pinduoduo-libpdd-secure-antitoken/index.md
+  4ff1a9b7fa970012 116-119,174-177
+content/posts/ponce4ghidra-symbolic-execution-crackme/index.md
+  4ff1a9b7fa970012 636-639,674-677
+content/posts/fairplay-drm-reversing/index.md
+  4ff1a9b7fa970012 240-243,449-452
+content/posts/arm-trustzone-el0-to-el3/index.md
+  4ff1a9b7fa970012 433-436,620-623
+content/posts/taobao-securityguard-mtop-four-signatures/index.md
+  4ff1a9b7fa970012 69-72
+content/posts/chrome-cdm-stream-dump/index.md
+  4ff1a9b7fa970012 185-188,674-677
+content/posts/llm-deobfuscation-quarkslab-framework/index.md
+  4ff1a9b7fa970012 294-297,379-382
+layouts/shortcodes/insight.html
+  4ff1a9b7fa970012 1-8
+content/posts/device-fingerprinting-web-android/index.md
+  4ff1a9b7fa970012 509-512,968-971
+content/posts/cromite-bromite-widevine-failure/index.md
+  4ff1a9b7fa970012 128-131,536-539
+content/posts/android-apk-hardening-mainstream/index.md
+  4ff1a9b7fa970012 326-329,492-495
+content/posts/meituan-mtgsig-dfp-risk-control/index.md
+  4ff1a9b7fa970012 78-81,156-159
+content/posts/netflix-msl-protocol-analysis/index.md
+  4ff1a9b7fa970012 175-178,453-456
+content/posts/android-svc-syscall-protection/index.md
+  4ff1a9b7fa970012 897-900,1492-1495
+assets/css/extended/custom.css
+  4ff1a9b7fa970012 736-776
+content/posts/xiaohongshu-shield-device-risk/index.md
+  4ff1a9b7fa970012 92-95,116-119
+README.md
+  4ff1a9b7fa970012 109-116
+content/posts/fairplay-drm-optimization/index.md
+  4ff1a9b7fa970012 139-142,272-275
+content/posts/widevine-l3-keybox/index.md
+  4ff1a9b7fa970012 233-236,1122-1125
+content/posts/rp2350-diy-audio-drm/index.md
+  4ff1a9b7fa970012 477-480,565-568
+content/posts/ollvm-deobfuscation-engineering/index.md
+  4ff1a9b7fa970012 920-923,1028-1031
+content/posts/widevine-deep-dive/index.md
+  4ff1a9b7fa970012 56-59,1332-1335
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "0202b97dee1fc13965bdeb0a72e87e9e911711e8",
+  "prompts": {
+    "4ff1a9b7fa970012": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dc17cdcc-659a-4702-90ba-e73fbdae203a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 245,
+      "total_deletions": 0,
+      "accepted_lines": 245,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/taobao-securityguard-mtop-four-signatures/index.md": {
+          "additions": 4,
+          "accepted_lines": 4
+        },
+        "README.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/meituan-mtgsig-dfp-risk-control/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/android-svc-syscall-protection/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/widevine-deep-dive/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/android-apk-hardening-mainstream/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/netflix-msl-protocol-analysis/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/playready-deep-dive/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/ponce4ghidra-symbolic-execution-crackme/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/device-fingerprinting-web-android/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/pinduoduo-libpdd-secure-antitoken/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/fairplay-drm-reversing/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/cromite-bromite-widevine-failure/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/fairplay-drm-optimization/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/chrome-cdm-stream-dump/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/sixgod-metasec/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "assets/css/extended/custom.css": {
+          "additions": 41,
+          "accepted_lines": 41
+        },
+        "content/posts/chrome-vmp-protection/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/xiaohongshu-shield-device-risk/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/widevine-l3-keybox/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/android-native-vmp-analysis/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/rp2350-diy-audio-drm/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/llm-deobfuscation-quarkslab-framework/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/quarkslab-drm-breakers/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/arm-trustzone-el0-to-el3/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "layouts/shortcodes/insight.html": {
+          "additions": 8,
+          "accepted_lines": 8
+        },
+        "content/posts/ollvm-deobfuscation-engineering/index.md": {
+          "additions": 8,
+          "accepted_lines": 8
+        }
+      }
+    }
+  }
+}
