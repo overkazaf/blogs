@@ -427,6 +427,10 @@ cd Stark && make
 
 这就是 Deadpool 中 `attack_*` 脚本的核心逻辑。
 
+{{< insight title="白盒攻击的瓶颈往往不在密码分析，而在让目标可控地跑起来" >}}
+做 Widevine L3 DFA 时，phoenixAES 拿到 150 个 fault 后秒级就出了密钥，真正费功夫的是前面那段：把目标搬进 Unicorn/unidbg，找到能注入 fault 的位置，确认输出差分符合 4 字节模式。后面 LIEF 迁移 SECCON 那道题也是同样的结构，攻击脚本没变，变的是执行环境。所以现在拿到一个新白盒目标，我会先估算「多久能让它在可控环境里稳定运行并被插桩」，再去挑攻击算法。
+{{< /insight >}}
+
 ---
 
 ### 4.3 LIEF × SideChannelMarvels（2018）
@@ -996,6 +1000,10 @@ SideChannelMarvels 团队发起攻击:
 | **第 3 代** | 非标准白盒（密钥 blinding、无 T-table） | ? | ✗ （DCA/DFA 信号消失） |
 
 Chrome CDM 4.10.2934 属于第 3 代——笔者的 [13 次碰壁](https://overkazaf.github.io/blogs/posts/chrome-cdm-stream-dump-widevine-vtable-hook/) 从侧面佐证了这一判断。
+
+{{< insight title="工具全部失效时，先核对它的前提在目标里是否还成立" >}}
+把 Chrome CDM 上的 13 次碰壁放进这张代际表里看，原因就清楚了：DCA 依赖可观测中间值的相关性，DFA 依赖能定位的轮结构，BGE 依赖可识别的 T-table，而第 3 代白盒把这些前提一起拿掉了。在这样的目标上继续加 trace 数量或 fault 次数没有意义。每个工具的适用条件里都写着它的假设，失败时先逐条核对假设，比调参数更快找到该换的方向。
+{{< /insight >}}
 
 ---
 

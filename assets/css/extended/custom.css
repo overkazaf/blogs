@@ -733,6 +733,47 @@ th, #searchbox input {
     margin-bottom: 0;
 }
 
+/* ====== INSIGHT (启发时刻) ====== */
+
+.post-content .insight {
+    position: relative;
+    margin: 32px 0;
+    padding: 16px 20px 16px 22px;
+    background: var(--tertiary);
+    border: 1px solid var(--accent-dim);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+}
+
+.post-content .insight-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+}
+
+.post-content .insight-tag {
+    color: var(--accent);
+    font-size: 0.82em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.post-content .insight-title {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.post-content .insight-body p {
+    margin-bottom: 0.6em;
+}
+
+.post-content .insight-body > :last-child {
+    margin-bottom: 0;
+}
+
 /* ====== IMAGES ====== */
 
 .post-content img {

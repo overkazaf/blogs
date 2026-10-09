@@ -136,6 +136,10 @@ io.ReadFull(conn, decryptedChunk)                                // 等明文
 
 🧑‍🔬 **根因**：Go 的 `net.Dial` 默认不设置 `TCP_NODELAY`，TCP 的 Nagle 算法将每个 4 字节长度头缓冲 40ms 后才发送（等待凑满一个 MSS 或收到前一个包的 ACK）。
 
+{{< insight title="57 倍的慢，元凶是一个没设置的 TCP 默认值" >}}
+一开始我以为 193 秒是白盒解密本身太慢，差点一头扎进密码学。真正的根因却是默认没开 `TCP_NODELAY`——发送端被 Nagle 扣住、接收端 delayed ACK 压着不回，两边各等 40ms 定时器超时。这把我排查性能的顺序永久改了：遇到数量级的异常，先量一次 round-trip 的时间花在哪，再决定要不要动业务逻辑。
+{{< /insight >}}
+
 ![Nagle 卡顿 vs TCP_NODELAY 管线化的时序对比](https://overkazaf.github.io/blogs/images/fairplay-drm-optimization/nagle-vs-pipeline.png)
 *上半区（红）Phase 0：逐样本同步——每个 4B 长度头被 Nagle 扣住、对端 delayed ACK 压着不回，双方互等 ~40ms 定时器超时，单 sample ≈ 44ms，×4346 → 193s。下半区（绿）Phase 1-2：`TCP_NODELAY` 立即发包 + writer/reader 双线程全双工管线化，发送与接收重叠，整曲降至 3.4s（57x，吞吐 0.3 → 18.1 MB/s）。同样的 round-trip 模式也存在于 §十一 列出的 `zhaarey/wrapper` 等 Apple Music 工具中，这张图的优化路径可直接复用。*
 
@@ -264,6 +268,10 @@ with httpx.stream("GET", stream_url) as resp:
 | ffprobe | alac/88.2kHz/24bit | 同 | 验证通过 |
 
 速度略慢是因为流式方案的 send/recv 是严格串行的（不能管线化——因为 sample 数据来自 HTTP 流，需要等下载），而原始方案在下载完成后可以全速管线化。这是**速度 vs 内存的 tradeoff**——对于内存受限的环境（4GB 服务器），流式方案是唯一不 OOM 的选择。
+
+{{< insight title="优化不总是帕累托，受限环境里内存是硬约束" >}}
+流式 BMFF 让我用 26% 的速度损失换来内存从 181MB 降到 11MB。按纯吞吐看这是退步，但在 4GB 的机器上，原方案会直接 OOM 被杀——这时"更快"没有意义，"跑得完"才有。它提醒我：box 头自描述这类结构性质，往往能把内存和文件大小解耦；选哪个指标让步，取决于环境的硬边界，而不是基准测试里的漂亮数字。
+{{< /insight >}}
 
 ---
 

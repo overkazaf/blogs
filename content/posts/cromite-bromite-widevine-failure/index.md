@@ -125,6 +125,10 @@ Chrome 是 Google 发布的产品，Chromium 是其主要开源代码基础。Cr
 
 所以，Cromite 可以是一把很好用的 Chromium 手术刀，却不是“自带 Widevine 的开源 Chrome”。这两个定位只差几个字，后面的研究路线却完全不同。
 
+{{< insight title="动手编译之前，先读项目当前的 FAQ" >}}
+我差点被 Bromite 旧 README 里一句 “ask permission to play protected media” 带进一条不存在的路线，真正把它截断的却是 Cromite FAQ 里一个简短的 **No**。这让我改了顺序：在投入数小时编译之前，先核对目标项目**当前版本**对能力的官方表态，再去看历史文档。旧资料只能说明过去的 UI 行为，不能证明今天的分叉里有可用的组件。
+{{< /insight >}}
+
 ### 1.2 Chrome 下典型的 EME/CDM 进程架构
 
 确认项目状态后，笔者重新画了一遍 Chrome 的调用链。具体类名和服务拆分会随 Chromium 版本变化，但从公开 EME 接口和 Chromium 多进程模型看，受保护媒体始终绕不开下面这些角色：
@@ -528,6 +532,10 @@ Netflix 公开的[浏览器支持矩阵](https://help.netflix.com/en/node/30081)
 然后播放器仍然要求 Key System，或者在第一个加密 sample 上报错。
 
 🧑‍🔬 这一刻很容易误以为”还差一个 box”。其实 box 已经够了，缺的是 key。remux 能修封装、轨道和时间戳，却不会执行一次被授权的 CENC 解密。**视频合成不是主阻塞点，它只是排在密钥之后的工程问题。**
+
+{{< insight title="容器结构正确，不代表里面的数据可用" >}}
+`.m4s` 分片抓得完整、remux 后 MP4 结构也漂亮，很容易让我以为只差最后一个 box 或一个 FFmpeg 参数。可十六进制里的 `pssh`、`tenc`、`senc` 早就说明 sample 仍是密文。现在遇到“拼不出来”的问题，我会先确认载荷本身是什么状态，再去调封装参数，避免在错误的那一层反复打磨。
+{{< /insight >}}
 
 ### 6.5 第五条路：源码在手，干脆让 EME 返回成功
 

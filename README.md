@@ -106,6 +106,14 @@ categories: ["reverse-engineering"] # drm-security | reverse-engineering | hardw
 ```
 
 - 配图放在文章目录下的 `images/`，用相对路径引用（如 `![](images/arch.png)`），避免依赖外部 URL。
+- 每篇文章放 1-2 个「启发时刻」，提炼实验中的感悟，放在它产生的段落之后：
+
+  ```markdown
+  {{< insight title="一句话结论" >}}
+  2-5 句正文，写清楚是哪次实验 / 哪个失败带来的改变。
+  {{< /insight >}}
+  ```
+
 - 新增文章后记得同步更新本 README 的文章目录。
 
 ## 部署

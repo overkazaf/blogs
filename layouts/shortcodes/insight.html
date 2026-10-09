@@ -1,0 +1,8 @@
+{{- /* 启发时刻：{{< insight title="一句话结论" >}}正文（支持 Markdown）{{< /insight >}} */ -}}
+<aside class="insight" role="note">
+  <div class="insight-head">
+    <span class="insight-tag">[启发时刻]</span>
+    {{- with .Get "title" }}<span class="insight-title">{{ . | markdownify }}</span>{{ end }}
+  </div>
+  <div class="insight-body">{{ .Inner | .Page.RenderString (dict "display" "block") }}</div>
+</aside>

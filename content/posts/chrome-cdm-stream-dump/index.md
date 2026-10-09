@@ -182,6 +182,10 @@ CDM utility 进程有特殊的沙箱限制：
 
 🔬 **结论**：CDM 4.10.2934 **完全不使用 BoringSSL 的 AES 实现**。二进制中存在的 `aesni_*` 函数是链接残留物，从未被调用。
 
+{{< insight title="二进制里有这个函数，不等于它真的被调用" >}}
+我一开始 hook `aesni_set_encrypt_key`，等了很久一次都没触发，还以为是 hook 写错了。真正的原因是这些符号是 dead code。从这以后，看到一个诱人的符号，我不再直接基于它设计攻击，而是先用 eBPF / perf 确认运行时到底走不走这条路。静态存在的东西会骗人，我更愿意相信实际跑起来时的命中数据。
+{{< /insight >}}
+
 ### 4.2 Phase 2：内存搜索（5 次尝试）
 
 **假设**：即使不走 BoringSSL 路径，AES 密钥在解密时一定会以 16 字节裸值存在于堆中。
@@ -666,6 +670,10 @@ Chrome 的 CDM 运行在一个定制沙箱中（`--service-sandbox-type=cdm`）�
 | `pthread_create(...)` | **看似 OK 但阻塞** | seccomp 允许 `clone()`，但 constructor 完成前创建线程导致死锁 |
 
 🧑‍🔬 **发现 fd 1 的过程**：笔者最初使用 stderr 输出日志——一行输出都看不到，以为 hook 没有加载。切换到 `/tmp` 文件——权限拒绝。最后在绝望中尝试 `write(1, msg, len)`——日志出现在 Chrome 的 stdout 中！
+
+{{< insight title="调试手段本身失灵时，先枚举环境，别急着改代码" >}}
+看不到日志的那段时间，我差点去怀疑 hook 没加载、vtable patch 没生效，把力气花在根本没出问题的地方。实际卡点是沙箱把 stderr 关了、`/tmp` 也写不了。后来我靠 `/proc/self/fd/` 把可用的 fd 一个个列出来，才找到还活着的 stdout。现在进入一个陌生的受限环境，我会先确认“我用来观察的通道本身是否可用”，再去判断被观察的逻辑对不对。
+{{< /insight >}}
 
 原理：Chrome 的进程模型中，`fork()` + `execve()` 创建子进程时会选择性关闭文件描述符。CDM utility 进程关闭 stderr（安全考虑：防止 CDM 向用户终端输出信息），但保留 stdout（用于 IPC 日志收集）。这一行为没有文档化，笔者是通过 `/proc/self/fd/` 枚举发现的：
 

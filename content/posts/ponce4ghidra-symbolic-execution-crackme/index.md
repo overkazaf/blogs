@@ -633,6 +633,10 @@ state.memory.store(addr, claripy.BVV(value, state.arch.bits),
 
 但对**单字节值**（如 NUL 终止符），big-endian 和 little-endian 没有区别，所以不需要指定。笔者把这个区分写成了两个 helper 方法：`_store_word()`（多字节，指定字节序）和 `_store_bytes()`（逐字节存储，字节序无关）。
 
+{{< insight title="引擎报告 found，不等于答案就是对的" >}}
+这个 bug 里 angr 明明返回了 `found_count: 1`，给出的却是四个零字节。我反复检查 Find/Avoid 地址都没用，真正的线索是去看 found state 里 `rdi` 的具体值，发现它指向一个不存在的地址。从那以后我不再只看"成功"信号：求解出的结果一定要拿回原程序跑一遍，结果可疑时就去检查输入指针到底指向哪里。约束落在未映射内存上时，Z3 总能"解"出点什么，但那个解没有意义。
+{{< /insight >}}
+
 ### 5.3 深入：Veritesting——对抗路径爆炸
 
 ![路径爆炸 vs Veritesting - 524,288 条路径压缩为 54 条](images/path_explosion.png)
@@ -666,6 +670,10 @@ state.memory.store(addr, claripy.BVV(value, state.arch.bits),
 Ponce4Ghidra 默认开启 Veritesting。Unicorn 加速（`pip install unicorn`）在具体执行阶段用原生 CPU 模拟替代 VEX IR 解释，对 license key 样本可以再快约 30%。
 
 **引申知识——路径爆炸的本质**：符号执行的路径数量与程序的**分支深度**呈指数关系。一个有 N 个串行 `if` 的程序产生 2^N 条路径。这就是为什么符号执行不适合分析大型完整程序——但非常适合分析**小的、孤立的校验函数**。Ponce4Ghidra 的 `Symbolize Function Argument` 正是利用了这一点：直接从目标函数入口开始，跳过程序启动阶段的所有分支。
+
+{{< insight title="符号执行能不能跑完，取决于先把问题切得多小" >}}
+license 样本里只是一个 19 次的 checksum 循环，没开 Veritesting 时 60 秒都没找到路径，开了之后 6.02 秒完成。crackme 上 Function Argument 和 argv 两种方式也差了好几倍时间。我的体会是：用符号执行之前，先花时间在 Ghidra 里定位到那个小的校验函数，从它的入口开始，比事后调引擎参数有效得多。工具负责解方程，划定方程范围仍然是人的工作。
+{{< /insight >}}
 
 ### 5.4 Triton 引擎：当 angr 路径爆炸时的 Plan B
 

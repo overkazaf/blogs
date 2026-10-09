@@ -53,6 +53,10 @@ edef8ba9-79d6-4ace-a3c8-27dcd51d21ed
 
 Widevine 最容易制造的错觉就在这里：**协议里能被抓到的对象很多，真正可迁移的秘密很少。** MPD、PSSH、License Request、License Response 和加密分片都可能经过普通进程或网络，但系统的目标，是让这些对象离开原来的设备身份和执行环境后失去价值。
 
+{{< insight title="字段名越像答案，越要先问它离开设备后还剩多少价值" >}}
+我第一次拆 PSSH 时，看到 `key_id`、`policy`、`content_id` 一个比一个像密钥，就一路往 protobuf 深处解码，结果里面根本没有 `key`。后来我换了一个问法：这个对象被复制到另一台设备、另一个会话里，还能不能用？如果答案是“不能”，它就只是信令，不值得当成秘密去追。现在遇到看起来像答案的协议字段，我会先判断它属于哪一层，再决定要不要深挖。
+{{< /insight >}}
+
 本文沿着这条边界从媒体字节一路走到 L1。为避免把公开事实、实验观察和推测混成一锅，先约定三种证据等级：
 
 | 标记 | 含义 | 本文示例 |
@@ -1324,6 +1328,10 @@ python3 build/packager/pssh-box.py \
 7. audio/video 多 key 时，播放器是否建立了所需 session 或 multi-session。
 
 🔬 同一个 packager 同时负责写和读，可能让同一实现缺陷互相”证明正确”。用 Bento4、GPAC 和 Shaka 自带 PSSH 工具交叉验证，价值远高于换三种 Base64 网站。
+
+{{< insight title="写产物的工具，不能同时当验证产物的唯一裁判" >}}
+打包实验里最顺手的做法，是用 Shaka Packager 打包，再用 Shaka 自己 dump 检查，看到字段齐全就算通过。可如果 box 长度或 KID 映射写错了，同一套解析逻辑很可能读得“恰好一致”。所以我把 Bento4 的 `mp4dump`、GPAC 的 `MP4Box` 和 PSSH parser 放在一起交叉检查：独立实现之间出现的分歧，比任何一个工具单独报告“成功”更有信息量。
+{{< /insight >}}
 
 #### 16.6 播放侧实验
 
