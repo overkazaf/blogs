@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>抵抗力阶梯</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'JetBrains Mono', 'PingFang SC', 'Noto Sans SC', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      margin-bottom: 2rem;
+    }
+    
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+    
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+    
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    
+    svg {
+      width: 100%;
+      min-width: 900px;
+      display: block;
+    }
+    
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    
+    .card ul li { line-height: 1.6; }
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+    
+    .card li {
+      margin-bottom: 0.375rem;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .toolbar-toggle {
+      background: transparent;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions {
+      display: none;
+      gap: 0.5rem;
+    }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover {
+      background: rgba(51, 65, 85, 0.8);
+      color: white;
+      border-color: #475569;
+    }
+
+    @media print {
+      body { background: #020617; padding: 1rem; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>三层抵抗力 · 哪些混淆还挡得住 LLM</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">台阶越高，模型越难还原；数字为论文中的"攻击者知识等级"</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 85 1000 430">
+        <defs>
+          <marker id="ah-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker><marker id="ah-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker><marker id="ah-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker><marker id="ah-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker><marker id="ah-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker><marker id="ah-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/></marker><marker id="ah-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/></marker><marker id="ah-grey" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect y="85" width="100%" height="100%" fill="url(#grid)" />
+<path d="M 30 460 L 30 108" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah-grey)"/>
+<text x="44" y="112" fill="#94a3b8" font-size="12" font-weight="600" text-anchor="start">对 LLM 的抵抗力</text>
+<rect x="60" y="260" width="290" height="200" rx="6" fill="#0f172a"/>
+<rect x="60" y="260" width="290" height="200" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+<text x="76" y="288" fill="white" font-size="14" font-weight="600" text-anchor="start">低 · CFF 控制流平坦化</text>
+<rect x="76" y="302" width="110" height="20" rx="10" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+<text x="131.0" y="316" fill="#22d3ee" font-size="11" font-weight="600" text-anchor="middle">已不安全</text>
+<text x="334" y="317" fill="#22d3ee" font-size="16" font-weight="700" text-anchor="end">L0-2</text>
+<text x="76" y="352" fill="#cbd5e1" font-size="11" text-anchor="start">多数模型 Level 0-2</text>
+<text x="76" y="374" fill="#cbd5e1" font-size="11" text-anchor="start">长上下文直接把碎片拼回原样</text>
+<line x1="76" y1="422" x2="334" y2="422" stroke="#334155" stroke-width="1"/>
+<text x="76" y="444" fill="#22d3ee" font-size="11" font-weight="600" text-anchor="start">建议：不要单独使用</text>
+<path d="M 260 254 C 300 160, 330 230, 366 230" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#ah-grey)"/>
+<rect x="370" y="200" width="290" height="260" rx="6" fill="#0f172a"/>
+<rect x="370" y="200" width="290" height="260" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+<text x="386" y="228" fill="white" font-size="14" font-weight="600" text-anchor="start">中 · BCF 伪造控制流</text>
+<rect x="386" y="242" width="110" height="20" rx="10" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+<text x="441.0" y="256" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">看谓词复杂度</text>
+<text x="644" y="257" fill="#fbbf24" font-size="16" font-weight="700" text-anchor="end">L0-5</text>
+<text x="386" y="292" fill="#cbd5e1" font-size="11" text-anchor="start">Claude 3.7 Level 0，其余 Level 1-5</text>
+<text x="386" y="314" fill="#cbd5e1" font-size="11" text-anchor="start">x*(x-1) 为偶数：已被识破</text>
+<text x="386" y="336" fill="#cbd5e1" font-size="11" text-anchor="start">MBA 变种谓词：仍有一战</text>
+<line x1="386" y1="362" x2="644" y2="362" stroke="#334155" stroke-width="1"/>
+<text x="386" y="384" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="start">建议：换成 MBA 形式的谓词</text>
+<path d="M 570 194 C 610 100, 640 170, 676 170" fill="none" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#ah-grey)"/>
+<rect x="680" y="140" width="290" height="320" rx="6" fill="#0f172a"/>
+<rect x="680" y="140" width="290" height="320" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+<text x="696" y="168" fill="white" font-size="14" font-weight="600" text-anchor="start">高 · IS / 组合混淆</text>
+<rect x="696" y="182" width="110" height="20" rx="10" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+<text x="751.0" y="196" fill="#fb7185" font-size="11" font-weight="600" text-anchor="middle">当前有效防线</text>
+<text x="954" y="197" fill="#fb7185" font-size="16" font-weight="700" text-anchor="end">L5 / 失败</text>
+<text x="696" y="232" fill="#cbd5e1" font-size="11" text-anchor="start">IS 单独使用：Level 4-5</text>
+<text x="696" y="254" fill="#cbd5e1" font-size="11" text-anchor="start">组合混淆：全部 Level 5 或失败</text>
+<text x="696" y="276" fill="#cbd5e1" font-size="11" text-anchor="start">模型能猜模式，证不了等价</text>
+<line x1="696" y1="302" x2="954" y2="302" stroke="#334155" stroke-width="1"/>
+<text x="696" y="324" fill="#fb7185" font-size="11" font-weight="600" text-anchor="start">建议：IS 打底，再叠加多层</text>
+<text x="500" y="495" fill="#e2e8f0" font-size="12" font-weight="600" text-anchor="middle">单层混淆正在被 LLM 侵蚀，多层组合仍是有效防线（模型版本截至 2025 年 3 月）</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>低：CFF</h3>
+        </div>
+        <ul>
+          <li>• 分发器结构太规整</li>
+          <li>• 长上下文模型能整体拼回</li>
+          <li>• 只能当作组合中的一层</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>中：BCF</h3>
+        </div>
+        <ul>
+          <li>• 强度取决于不透明谓词</li>
+          <li>• 经典谓词已进入模型"常识"</li>
+          <li>• MBA 谓词能显著抬高门槛</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>高：IS / 组合</h3>
+        </div>
+        <ul>
+          <li>• 等价改写需要证明，不能靠猜</li>
+          <li>• 多层叠加让每个维度同时承压</li>
+          <li>• 短期内仍是可靠防线</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="footer">LLM 反混淆 · Quarkslab 四维框架</p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'diagram.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('diagram.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
