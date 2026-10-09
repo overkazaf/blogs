@@ -12,28 +12,9 @@ window.addEventListener('scroll', () => {
 (function() {
     var btn = document.createElement('button');
     btn.id = 'back-to-top';
-    btn.innerHTML = '↑';
+    btn.textContent = '[^] top';
     btn.setAttribute('aria-label', 'Back to top');
     document.body.appendChild(btn);
-
-    var style = document.createElement('style');
-    style.textContent = `
-        #back-to-top {
-            position: fixed; bottom: 32px; right: 32px;
-            width: 44px; height: 44px;
-            border-radius: 50%; border: 1px solid var(--border);
-            background: var(--entry); color: var(--primary);
-            font-size: 20px; cursor: pointer;
-            opacity: 0; transform: translateY(20px);
-            transition: all 0.3s ease;
-            z-index: 999; display: flex;
-            align-items: center; justify-content: center;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-        }
-        #back-to-top.visible { opacity: 1; transform: translateY(0); }
-        #back-to-top:hover { background: var(--primary); color: #fff; transform: translateY(-3px); }
-    `;
-    document.head.appendChild(style);
 
     window.addEventListener('scroll', function() {
         btn.classList.toggle('visible', window.scrollY > 400);
@@ -42,6 +23,20 @@ window.addEventListener('scroll', () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 })();
+
+// ====== Code block window bar ======
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.post-content .highlight').forEach(function(block) {
+        var code = block.querySelector('code[data-lang]');
+        var lang = code ? code.getAttribute('data-lang') : 'text';
+        var bar = document.createElement('div');
+        bar.className = 'code-header';
+        bar.setAttribute('aria-hidden', 'true');
+        bar.innerHTML = '<span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="code-lang"></span>';
+        bar.querySelector('.code-lang').textContent = lang;
+        block.insertBefore(bar, block.firstChild);
+    });
+});
 
 // ====== Image lightbox ======
 document.addEventListener('DOMContentLoaded', function() {

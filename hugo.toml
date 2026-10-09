@@ -25,7 +25,7 @@ comments = true
 
 [params.homeInfoParams]
 Title = "+5 Security Research"
-Content = "🔐 DRM 安全研究 · 🔧 逆向工程与二进制安全 · 🔩 硬件安全 · 🤖 AI Agent"
+Content = "DRM 安全研究 / 逆向工程与二进制安全 / 硬件安全 / AI Agent"
 
 [[params.socialIcons]]
 name = "email"
@@ -42,37 +42,37 @@ url = "index.xml"
 [menu]
 [[menu.main]]
 identifier = "posts"
-name = "📝 文章"
+name = "文章"
 url = "/posts/"
 weight = 10
 
 [[menu.main]]
 identifier = "categories"
-name = "📂 分类"
+name = "分类"
 url = "/categories/"
 weight = 15
 
 [[menu.main]]
 identifier = "tags"
-name = "🏷️ 标签"
+name = "标签"
 url = "/tags/"
 weight = 20
 
 [[menu.main]]
 identifier = "archives"
-name = "📅 归档"
+name = "归档"
 url = "/archives/"
 weight = 25
 
 [[menu.main]]
 identifier = "search"
-name = "🔍 搜索"
+name = "搜索"
 url = "/search/"
 weight = 30
 
 [[menu.main]]
 identifier = "about"
-name = "👤 关于"
+name = "关于"
 url = "/about/"
 weight = 40
 
