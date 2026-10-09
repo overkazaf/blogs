@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 800" width="1200" height="800"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FBBF24"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#34D399"/></marker>
+    <marker id="arrow-rose"  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FB7185"/></marker>
+  </defs>
+  <style>
+    .title-main   { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle     { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .col-label    { font-size: 13px; fill: #94A3B8; font-weight: 600; letter-spacing: 1px; dominant-baseline: central; }
+    .card-title   { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .card-en      { font-family: 'SF Mono','Menlo',monospace; font-size: 13px; fill: #7DD3FC; dominant-baseline: central; }
+    .body-text    { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .card-sub     { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .pill-txt     { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .footer-text  { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="800" fill="url(#canvasBg)"/>
+
+  <text x="600" y="42" class="title-main">四维框架 <tspan class="title-accent">·</tspan> 每种混淆在考模型的哪项能力</text>
+  <text x="600" y="72" class="subtitle">左边是模型需要的能力，右边是专门针对这项能力设计的混淆</text>
+
+  <text x="60"  y="108" class="col-label">模型需要的能力</text>
+  <text x="760" y="108" class="col-label">被考验的混淆技术</text>
+
+  <!-- connectors (drawn before cards) -->
+  <path d="M 500 180 C 630 180, 640 220, 758 220" stroke="#FBBF24" stroke-width="1.8" fill="none" marker-end="url(#arrow-amber)"/>
+  <path d="M 500 302 C 630 302, 640 262, 758 262" stroke="#FBBF24" stroke-width="1.8" fill="none" marker-end="url(#arrow-amber)"/>
+  <line x1="500" y1="424" x2="758" y2="424" stroke="#34D399" stroke-width="1.8" marker-end="url(#arrow-green)"/>
+  <line x1="500" y1="546" x2="758" y2="546" stroke="#FB7185" stroke-width="1.8" marker-end="url(#arrow-rose)"/>
+
+  <!-- left: four capability cards (cyan) -->
+  <g transform="translate(60, 128)">
+    <rect x="0" y="0" width="440" height="104" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="5" height="104" rx="2" fill="#38BDF8"/>
+    <text x="24" y="30" class="card-title">推理深度</text>
+    <text x="110" y="30" class="card-en">Reasoning Depth</text>
+    <text x="24" y="62" class="body-text">能否证明一个条件永远成立</text>
+    <text x="24" y="84" class="card-sub">例：x*(x-1) 一定是偶数，所以这个分支是假的</text>
+  </g>
+  <g transform="translate(60, 250)">
+    <rect x="0" y="0" width="440" height="104" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="5" height="104" rx="2" fill="#38BDF8"/>
+    <text x="24" y="30" class="card-title">噪声过滤</text>
+    <text x="110" y="30" class="card-en">Noise Filtering</text>
+    <text x="24" y="62" class="body-text">能否从大量无用代码里挑出真正干活的几行</text>
+    <text x="24" y="84" class="card-sub">假分支、死代码都是噪声</text>
+  </g>
+  <g transform="translate(60, 372)">
+    <rect x="0" y="0" width="440" height="104" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="5" height="104" rx="2" fill="#38BDF8"/>
+    <text x="24" y="30" class="card-title">模式识别</text>
+    <text x="110" y="30" class="card-en">Pattern Recognition</text>
+    <text x="24" y="62" class="body-text">能否认出被改写过的运算</text>
+    <text x="24" y="84" class="card-sub">例：(a^b) + 2*(a&amp;b) 其实就是 a + b</text>
+  </g>
+  <g transform="translate(60, 494)">
+    <rect x="0" y="0" width="440" height="104" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="5" height="104" rx="2" fill="#38BDF8"/>
+    <text x="24" y="30" class="card-title">上下文整合</text>
+    <text x="128" y="30" class="card-en">Context Integration</text>
+    <text x="24" y="62" class="body-text">能否把打散的代码块按原顺序拼回去</text>
+    <text x="24" y="84" class="card-sub">需要同时记住很多片段之间的跳转关系</text>
+  </g>
+
+  <!-- right: obfuscation cards -->
+  <g transform="translate(760, 128)">
+    <rect x="0" y="0" width="380" height="226" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="380" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="380" height="4" fill="#FBBF24"/>
+    <text x="24" y="40" class="card-title">BCF 伪造控制流</text>
+    <rect x="256" y="26" width="104" height="26" rx="13" fill="#713F12" stroke="#FBBF24" stroke-width="1"/>
+    <text x="308" y="39" class="pill-txt" fill="#FDE68A">抵抗力：中</text>
+    <text x="24" y="84" class="body-text">插入永远不会执行的假分支</text>
+    <text x="24" y="110" class="card-sub">分支条件看起来有意义，实际恒为真或恒为假</text>
+    <text x="24" y="168" class="card-sub"><tspan fill="#FBBF24" font-weight="600">同时考：</tspan>推理深度 + 噪声过滤</text>
+    <text x="24" y="194" class="card-sub"><tspan fill="#FBBF24" font-weight="600">表现：</tspan>Claude 3.7 自主识破，其余多需提示</text>
+  </g>
+  <g transform="translate(760, 372)">
+    <rect x="0" y="0" width="380" height="104" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="380" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="380" height="4" fill="#34D399"/>
+    <text x="24" y="36" class="card-title">IS 指令替换</text>
+    <rect x="256" y="22" width="104" height="26" rx="13" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="308" y="35" class="pill-txt" fill="#6EE7B7">抵抗力：高</text>
+    <text x="24" y="70" class="body-text">把简单运算换成等价但更绕的式子</text>
+    <text x="24" y="90" class="card-sub"><tspan fill="#34D399" font-weight="600">表现：</tspan>所有模型 Level 4-5</text>
+  </g>
+  <g transform="translate(760, 494)">
+    <rect x="0" y="0" width="380" height="104" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="380" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="380" height="4" fill="#FB7185"/>
+    <text x="24" y="36" class="card-title">CFF 控制流平坦化</text>
+    <rect x="256" y="22" width="104" height="26" rx="13" fill="#7F1D1D" stroke="#FB7185" stroke-width="1"/>
+    <text x="308" y="35" class="pill-txt" fill="#FECDD3">抵抗力：低</text>
+    <text x="24" y="70" class="body-text">把函数拆成碎片，用 switch 统一调度</text>
+    <text x="24" y="90" class="card-sub"><tspan fill="#FB7185" font-weight="600">表现：</tspan>多数模型 Level 0-2</text>
+  </g>
+
+  <!-- bottom: combined -->
+  <g transform="translate(60, 628)">
+    <rect x="0" y="0" width="1080" height="112" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="1080" height="5" rx="12" fill="#D946EF"/>
+    <rect x="0" y="3" width="1080" height="4" fill="#D946EF"/>
+    <text x="24" y="38" class="card-title">组合混淆 = BCF + IS + CFF</text>
+    <text x="24" y="72" class="body-text">四项能力同时被考，任何一项短板都会让整个还原失败</text>
+    <text x="24" y="94" class="card-sub"><tspan fill="#D946EF" font-weight="600">表现：</tspan>8 个模型全部 Level 5 或完全失败</text>
+    <g transform="translate(612, 56)">
+      <rect x="0"   y="0" width="104" height="28" rx="14" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+      <text x="52"  y="14" class="pill-txt" fill="#7DD3FC">推理深度</text>
+      <rect x="112" y="0" width="104" height="28" rx="14" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+      <text x="164" y="14" class="pill-txt" fill="#7DD3FC">噪声过滤</text>
+      <rect x="224" y="0" width="104" height="28" rx="14" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+      <text x="276" y="14" class="pill-txt" fill="#7DD3FC">模式识别</text>
+      <rect x="336" y="0" width="104" height="28" rx="14" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+      <text x="388" y="14" class="pill-txt" fill="#7DD3FC">上下文整合</text>
+    </g>
+    <text x="832" y="34" class="card-sub" style="text-anchor:middle">同时挑战</text>
+  </g>
+
+  <text x="600" y="772" class="footer-text"><tspan fill="#38BDF8" font-weight="600">读法：</tspan>想知道下一代模型会先攻破哪种混淆，就看它在哪个维度进步最快</text>
+</svg>

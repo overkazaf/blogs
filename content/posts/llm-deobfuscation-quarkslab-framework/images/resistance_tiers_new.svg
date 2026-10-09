@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 650" width="1200" height="650"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#94A3B8"/></marker>
+  </defs>
+  <style>
+    .title-main   { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle     { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .axis-label   { font-size: 18px; fill: #CBD5E1; font-weight: 600; dominant-baseline: central; }
+    .card-title   { font-size: 18px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .body-text    { font-size: 14px; fill: #E2E8F0; dominant-baseline: central; }
+    .pill-txt     { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .big-lvl      { font-family: 'SF Mono','Menlo',monospace; font-size: 30px; font-weight: 800; text-anchor: middle; dominant-baseline: central; }
+    .footer-text  { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .footer-main  { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="650" fill="url(#canvasBg)"/>
+
+  <text x="600" y="42" class="title-main">三层抵抗力 <tspan class="title-accent">·</tspan> 哪些混淆还挡得住 LLM</text>
+  <text x="600" y="72" class="subtitle">台阶越高，模型越难还原；数字为论文中的"攻击者知识等级"</text>
+
+  <g transform="translate(0, -110)">
+  <!-- axis -->
+  <line x1="84" y1="662" x2="84" y2="250" stroke="#94A3B8" stroke-width="1.6" marker-end="url(#arrow-flow)"/>
+  <text x="60" y="228" class="axis-label">对 LLM 的抵抗力</text>
+
+  <!-- low: CFF (rose) -->
+  <g transform="translate(110, 402)">
+    <rect x="0" y="0" width="340" height="260" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="340" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="340" height="4" fill="#FB7185"/>
+    <text x="20" y="38" class="card-title">低 · CFF 控制流平坦化</text>
+    <rect x="20" y="58" width="96" height="24" rx="12" fill="#450A0A" stroke="#FB7185" stroke-width="1"/>
+    <text x="68" y="70" class="pill-txt" fill="#F87171">已不安全</text>
+    <text x="20" y="112" class="body-text">多数模型 Level 0-2</text>
+    <text x="20" y="138" class="body-text">长上下文能力直接把碎片拼回原样</text>
+    <text x="170" y="186" class="big-lvl" fill="#FECDD3">L0-2</text>
+    <text x="20" y="232" class="footer-text"><tspan fill="#FB7185" font-weight="600">建议：</tspan>不要单独使用</text>
+  </g>
+
+  <!-- mid: BCF (amber) -->
+  <g transform="translate(470, 332)">
+    <rect x="0" y="0" width="340" height="330" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="340" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="340" height="4" fill="#FBBF24"/>
+    <text x="20" y="38" class="card-title">中 · BCF 伪造控制流</text>
+    <rect x="20" y="58" width="120" height="24" rx="12" fill="#713F12" stroke="#FBBF24" stroke-width="1"/>
+    <text x="80" y="70" class="pill-txt" fill="#FDE68A">看谓词复杂度</text>
+    <text x="20" y="112" class="body-text">Claude 3.7 Level 0，其余 Level 1-5</text>
+    <text x="20" y="138" class="body-text">简单谓词 x*(x-1) 为偶数：已被识破</text>
+    <text x="20" y="164" class="body-text">MBA 变种谓词：仍有一战</text>
+    <text x="170" y="250" class="big-lvl" fill="#FDE68A">L0-5</text>
+    <text x="20" y="302" class="footer-text"><tspan fill="#FBBF24" font-weight="600">建议：</tspan>换成 MBA 形式的谓词</text>
+  </g>
+
+  <!-- high: IS + combined (emerald) -->
+  <g transform="translate(830, 262)">
+    <rect x="0" y="0" width="340" height="400" rx="12" fill="#0F2A1F" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="340" height="5" rx="12" fill="#34D399"/>
+    <rect x="0" y="3" width="340" height="4" fill="#34D399"/>
+    <text x="20" y="38" class="card-title">高 · IS 指令替换 / 组合混淆</text>
+    <rect x="20" y="58" width="120" height="24" rx="12" fill="#052E1A" stroke="#34D399" stroke-width="1"/>
+    <text x="80" y="70" class="pill-txt" fill="#6EE7B7">当前有效防线</text>
+    <text x="20" y="112" class="body-text">IS 单独使用：所有模型 Level 4-5</text>
+    <text x="20" y="138" class="body-text">组合混淆：全部 Level 5 或失败</text>
+    <text x="20" y="164" class="body-text">模型靠统计"猜"模式，证不了等价</text>
+    <text x="170" y="320" class="big-lvl" fill="#6EE7B7">L5 / 失败</text>
+    <text x="20" y="372" class="footer-text"><tspan fill="#34D399" font-weight="600">建议：</tspan>IS 打底，再叠加多层组合</text>
+  </g>
+
+  </g>
+  <text x="600" y="606" class="footer-main"><tspan fill="#38BDF8" font-weight="600">结论：</tspan>单层混淆正在被 LLM 侵蚀，多层组合仍是有效防线（模型版本截至 2025 年 3 月）</text>
+</svg>

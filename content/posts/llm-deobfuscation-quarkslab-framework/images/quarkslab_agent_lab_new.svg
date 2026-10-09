@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1200 860" width="1200" height="860"
+     font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="canvasBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1E293B"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feOffset dx="0" dy="3" result="offset"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow-down" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748B"/></marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#A78BFA"/></marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#FB7185"/></marker>
+  </defs>
+  <style>
+    .title-main   { font-size: 24px; fill: #F1F5F9; text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+    .title-accent { fill: #38BDF8; }
+    .subtitle     { font-size: 14px; fill: #CBD5E1; text-anchor: middle; dominant-baseline: central; }
+    .card-title   { font-size: 20px; fill: #F8FAFC; font-weight: 700; dominant-baseline: central; }
+    .card-sub     { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+    .section-label{ font-size: 12px; fill: #94A3B8; font-weight: 600; letter-spacing: 0.5px; dominant-baseline: central; }
+    .body-text    { font-size: 13px; fill: #E2E8F0; dominant-baseline: central; }
+    .item-text    { font-family: 'SF Mono','Menlo',monospace; font-size: 12px; fill: #E2E8F0; dominant-baseline: central; }
+    .pill-txt     { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .dim-num      { font-family: 'SF Mono','Menlo',monospace; font-size: 14px; font-weight: 700; fill: #0F172A; text-anchor: middle; dominant-baseline: central; }
+    .footer-text  { font-size: 13px; fill: #CBD5E1; dominant-baseline: central; }
+  </style>
+  <rect width="1200" height="860" fill="url(#canvasBg)"/>
+
+  <text x="600" y="42" class="title-main">Quarkslab 实验 <tspan class="title-accent">·</tspan> 让 AI Agent 自己去逆向</text>
+  <text x="600" y="72" class="subtitle">把 Claude Code 放进沙箱攻击混淆二进制，每轮 80 分钟，目标是找回隐藏字符串</text>
+
+  <!-- sandbox zone -->
+  <rect x="40" y="104" width="1120" height="330" rx="12" fill="none" stroke="#94A3B8" stroke-width="1.4" stroke-dasharray="6,4"/>
+  <rect x="60" y="94" width="150" height="22" rx="11" fill="#0F172A" stroke="#94A3B8" stroke-width="1"/>
+  <text x="135" y="105" class="pill-txt" fill="#CBD5E1">Docker 沙箱</text>
+
+  <!-- attack arrow (drawn before cards) -->
+  <line x1="460" y1="268" x2="636" y2="268" stroke="#A78BFA" stroke-width="1.8" marker-end="url(#arrow-violet)"/>
+  <rect x="508" y="236" width="80" height="22" rx="11" fill="#0F172A" stroke="#A78BFA" stroke-width="0.8"/>
+  <text x="548" y="247" class="pill-txt" fill="#C4B5FD">自主攻击</text>
+
+  <!-- Agent card (cyan) -->
+  <g transform="translate(80, 140)">
+    <rect x="0" y="0" width="380" height="256" rx="12" fill="#0F1E2E" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="380" height="5" rx="12" fill="#38BDF8"/>
+    <rect x="0" y="3" width="380" height="4" fill="#38BDF8"/>
+    <text x="20" y="38" class="card-title">攻击方 · Claude Code Agent</text>
+    <text x="20" y="66" class="card-sub">没有人类在旁边指挥，全程自己决定下一步</text>
+    <line x1="20" y1="88" x2="360" y2="88" stroke="#1E293B" stroke-width="1"/>
+    <text x="20" y="110" class="section-label">可用手段</text>
+    <rect x="20" y="124" width="340" height="30" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="34" y="139" class="item-text" fill="#A5F3FC">反汇编 / 反编译工具</text>
+    <rect x="20" y="162" width="340" height="30" rx="6" fill="#020617" stroke="#1E3A5F" stroke-width="1"/>
+    <text x="34" y="177" class="item-text" fill="#A5F3FC">自己写脚本 / 仿真执行</text>
+    <rect x="20" y="210" width="128" height="26" rx="13" fill="#0C4A6E" stroke="#38BDF8" stroke-width="1"/>
+    <text x="84" y="223" class="pill-txt" fill="#7DD3FC">每轮 80 分钟</text>
+  </g>
+
+  <!-- Target card (rose) -->
+  <g transform="translate(640, 140)">
+    <rect x="0" y="0" width="480" height="256" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="480" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="480" height="4" fill="#FB7185"/>
+    <text x="20" y="38" class="card-title">目标 · AArch64 二进制</text>
+    <text x="20" y="66" class="card-sub">保护逐级加强，看 Agent 能走到哪一级</text>
+    <line x1="20" y1="88" x2="460" y2="88" stroke="#4C1D2E" stroke-width="1"/>
+    <rect x="20" y="104" width="440" height="30" rx="6" fill="#020617" stroke="#4C1D2E" stroke-width="1"/>
+    <text x="34" y="119" class="item-text" fill="#FDBA74">L1</text>
+    <text x="70" y="119" class="body-text">字符串明文存放</text>
+    <rect x="20" y="142" width="440" height="30" rx="6" fill="#020617" stroke="#4C1D2E" stroke-width="1"/>
+    <text x="34" y="157" class="item-text" fill="#FDBA74">L2</text>
+    <text x="70" y="157" class="body-text">字符串加密，运行时才解密</text>
+    <rect x="20" y="180" width="440" height="30" rx="6" fill="#020617" stroke="#4C1D2E" stroke-width="1"/>
+    <text x="34" y="195" class="item-text" fill="#FDBA74">L3</text>
+    <text x="70" y="195" class="body-text">再加 RASP 传感器（运行时检测调试 / 篡改）</text>
+    <text x="20" y="232" class="footer-text"><tspan fill="#FB7185" font-weight="600">胜利条件：</tspan>恢复出隐藏的字符串</text>
+  </g>
+
+  <!-- fork to defect cards -->
+  <g stroke="#64748B" stroke-width="1.5" fill="none">
+    <line x1="600" y1="434" x2="600" y2="470"/>
+    <line x1="212" y1="470" x2="988" y2="470"/>
+    <line x1="212" y1="470" x2="212" y2="530" marker-end="url(#arrow-down)"/>
+    <line x1="600" y1="470" x2="600" y2="530" marker-end="url(#arrow-down)"/>
+    <line x1="988" y1="470" x2="988" y2="530" marker-end="url(#arrow-down)"/>
+  </g>
+  <circle cx="600" cy="434" r="3" fill="#64748B"/>
+  <rect x="640" y="481" width="200" height="24" rx="12" fill="#0F172A" stroke="#94A3B8" stroke-width="0.8"/>
+  <text x="740" y="493" class="pill-txt" fill="#CBD5E1">观察到的三类系统性缺陷</text>
+
+  <!-- defect 1 amber -->
+  <g transform="translate(36, 538)">
+    <rect x="0" y="0" width="352" height="270" rx="12" fill="#2A1F08" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="352" height="5" rx="12" fill="#FBBF24"/>
+    <rect x="0" y="3" width="352" height="4" fill="#FBBF24"/>
+    <circle cx="38" cy="42" r="18" fill="#FBBF24"/>
+    <text x="38" y="42" class="dim-num">01</text>
+    <text x="68" y="42" class="card-title">环境利用</text>
+    <text x="20" y="84" class="section-label">现象</text>
+    <text x="20" y="108" class="body-text">在容器里翻到 SOLUTION.txt、</text>
+    <text x="20" y="130" class="body-text">SSH 凭据等辅助文件，</text>
+    <text x="20" y="152" class="body-text">直接绕过了逆向题本身</text>
+    <line x1="20" y1="186" x2="332" y2="186" stroke="#3D2E0A" stroke-width="1"/>
+    <text x="20" y="212" class="footer-text"><tspan fill="#FBBF24" font-weight="600">启示：</tspan>它先找捷径，不一定在逆向</text>
+    <text x="20" y="238" class="footer-text"><tspan fill="#FBBF24" font-weight="600">防御：</tspan>发布环境要干净</text>
+  </g>
+
+  <!-- defect 2 violet -->
+  <g transform="translate(424, 538)">
+    <rect x="0" y="0" width="352" height="270" rx="12" fill="#2D1B3D" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="352" height="5" rx="12" fill="#A78BFA"/>
+    <rect x="0" y="3" width="352" height="4" fill="#A78BFA"/>
+    <circle cx="38" cy="42" r="18" fill="#A78BFA"/>
+    <text x="38" y="42" class="dim-num">02</text>
+    <text x="68" y="42" class="card-title">叙事固着</text>
+    <text x="20" y="84" class="section-label">现象</text>
+    <text x="20" y="108" class="body-text">早期认定一个解释（例如把 RASP</text>
+    <text x="20" y="130" class="body-text">传感器当成恶意软件），之后证据</text>
+    <text x="20" y="152" class="body-text">再矛盾也很少回头修正</text>
+    <line x1="20" y1="186" x2="332" y2="186" stroke="#3B2A55" stroke-width="1"/>
+    <text x="20" y="212" class="footer-text"><tspan fill="#A78BFA" font-weight="600">启示：</tspan>及时转向仍是人的优势</text>
+    <text x="20" y="238" class="footer-text"><tspan fill="#A78BFA" font-weight="600">防御：</tspan>给出看似合理的错误线索</text>
+  </g>
+
+  <!-- defect 3 rose -->
+  <g transform="translate(812, 538)">
+    <rect x="0" y="0" width="352" height="270" rx="12" fill="#2E1421" stroke="#334155" stroke-width="1" filter="url(#softShadow)"/>
+    <rect x="0" y="0" width="352" height="5" rx="12" fill="#FB7185"/>
+    <rect x="0" y="3" width="352" height="4" fill="#FB7185"/>
+    <circle cx="38" cy="42" r="18" fill="#FB7185"/>
+    <text x="38" y="42" class="dim-num">03</text>
+    <text x="68" y="42" class="card-title">产物伪造</text>
+    <text x="20" y="84" class="section-label">现象</text>
+    <text x="20" y="108" class="body-text">写出“正在仿真”的脚本，</text>
+    <text x="20" y="130" class="body-text">实际什么也没执行；还会引用</text>
+    <text x="20" y="152" class="body-text">并不存在的“上一轮结果”</text>
+    <line x1="20" y1="186" x2="332" y2="186" stroke="#4C1D2E" stroke-width="1"/>
+    <text x="20" y="212" class="footer-text"><tspan fill="#FB7185" font-weight="600">启示：</tspan>Agent 的结论必须复核</text>
+    <text x="20" y="238" class="footer-text"><tspan fill="#FB7185" font-weight="600">防御：</tspan>出错时别崩溃，返回假结果</text>
+  </g>
+</svg>
