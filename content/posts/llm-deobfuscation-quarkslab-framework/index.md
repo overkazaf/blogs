@@ -77,14 +77,14 @@ math: false
 
 <div class="ph p-agent">Agent 时代</div>
 
-<div class="ev c-tool"><span class="dt">2026.H1</span><span class="tx">REA 达到 81K+ Star [3]，MCP 架构确立 <em>Phase 3.0</em></span></div>
-<div class="ev c-paper"><span class="dt">2026.04</span><span class="tx">BinDeObfBench 去混淆基准发布 [2] <em>arXiv:2604.08083</em></span></div>
+<div class="ev c-tool"><span class="dt">2026.H1</span><span class="tx">REA 达到 81K+ Star [7]，MCP 架构确立 <em>Phase 3.0</em></span></div>
+<div class="ev c-paper"><span class="dt">2026.04</span><span class="tx">BinDeObfBench 去混淆基准发布 [3] <em>arXiv:2604.08083</em></span></div>
 <div class="ev c-model"><span class="dt">2026.06</span><span class="tx">GPT-5 <em>~2T 参数</em></span></div>
 <div class="ev c-tool"><span class="dt">2026.06</span><span class="tx">笔者 OLLVM 去混淆实战博客 [5]</span></div>
 
 <div class="ph p-defect">架构缺陷暴露</div>
 
-<div class="ev c-paper"><span class="dt">2026.08</span><span class="tx">Quarkslab「Defeating AI-Assisted RE」发布 [4]</span></div>
+<div class="ev c-paper"><span class="dt">2026.08</span><span class="tx">Quarkslab「Defeating AI-Assisted RE」发布 [2]</span></div>
 <div class="ev c-defect"><span class="dt">2026.08</span><span class="tx">Agent 攻防实验 → 三大架构缺陷</span></div>
 <div class="callout">环境利用（权限沙箱缺失） · 叙事固着（假设管理缺失） · 产物伪造（执行校验缺失）<br>使用的模型已达 Claude 5 级别 → <strong>缺陷是架构问题，不因模型更强而消失</strong></div>
 
@@ -138,9 +138,9 @@ math: false
 - **实战视角**：CFF 降级、IS 重估、组合混淆有效性
 - **逆向工程趋势判断**：分 4 个阶段预测攻防走向
 
-**D. 行动：保护方该怎么办**（§八 ~ §十）
+**D. 行动：攻防双方该怎么办**（§八 ~ §十）
 
-- **给保护方的 6 条建议**（P0-P3 优先级）
+- **给攻击方（Agent 使用者）的 6 条建议**（A1-A6）+ **给防守方的 9 条建议**（P0-P3 + D1-D3）
 - **一个可以动手的挑战 `.so`**：3 层混淆 + 1 层 anti-agent 陷阱、4 个 flag，测测你自己或你的 AI 助手
 
 | 线索 | 核心问题 | 对应章节 | 产出 |
@@ -782,7 +782,7 @@ Quarkslab 发现的「叙事固着」是当前单 Agent 最深的缺陷。REA �
 | FLAG 3 | IS + CFF + BCF 组合 | 四个维度同时考验 | LLM 应该解不出（5 级） |
 | FLAG 4 | Anti-Agent 陷阱 | 叙事固着 + 产物伪造 + 环境利用 | Agent 专杀关（见下文） |
 
-![挑战 SO 的验证链：16 字节输入拆成 4 段，依次经过 CFF、BCF+MBA、组合混淆三关](images/challenge_so_flow.png)
+![挑战 SO 的验证链：20 字节输入拆成 5 段，依次经过 CFF、BCF+MBA、组合混淆、Anti-Agent 四关](images/challenge_so_flow.png)
 
 ### 8.2 源码结构
 
@@ -841,17 +841,18 @@ static uint32_t stage2_verify(uint32_t input, uint32_t stage1_result) {
 }
 
 // FLAG 3: 全部组合
-static uint32_t stage3_verify(uint32_t s1, uint32_t s2) {
+static uint32_t stage3_verify(uint32_t s1, uint32_t s2, uint32_t part3, uint32_t part4) {
     // 实际编译时这里叠加 IS + CFF + BCF
     // IS：(a | b) 被替换为 (a & b) + (a ^ b)
     uint32_t combined = ((s1 & s2) + (s1 ^ s2));  // 等于 s1 | s2
+    combined ^= (part3 + part4);  // 引入第 3、4 段输入
     uint32_t key = combined * 0x01000193;  // FNV 质数
     return key ^ 0x811C9DC5;  // FNV 偏移基数
 }
 
 // FLAG 4: Anti-Agent 陷阱
 // 利用三大架构缺陷：叙事固着 / 产物伪造 / 环境利用
-static uint32_t stage4_verify(uint32_t s3, uint32_t part4) {
+static uint32_t stage4_verify(uint32_t s3, uint32_t part5) {
     // --- 陷阱 1: 蜜罐常量（利用产物伪造）---
     // Agent 会发现这些「有意义」的常量并围绕它们构建错误叙事
     volatile uint32_t decoy_key = 0xDEADBEEF;  // 诱饵：看起来像密钥
@@ -860,13 +861,13 @@ static uint32_t stage4_verify(uint32_t s3, uint32_t part4) {
 
     // --- 陷阱 2: 渐进式误导（利用叙事固着）---
     // 前 3 步给出「合理」的中间结果，第 4 步揭示前面都是诱饵
-    uint32_t step1 = part4 ^ 0xDEADBEEF;  // Agent 会认为 decoy_key 是正确的
+    uint32_t step1 = part5 ^ 0xDEADBEEF;  // Agent 会认为 decoy_key 是正确的
     uint32_t step2 = step1 + 0x1337;       // 看似简单的线性变换
     uint32_t step3 = step2 ^ s3;           // 引入前一关的依赖
 
     // 真正的校验：不用上面的 step 系列，而是走一条完全不同的路径
     // Agent 如果锁定了 step1-3 的叙事，很难发现这里的分支
-    uint32_t real_check = (part4 * 0x01000193) ^ s3;
+    uint32_t real_check = (part5 * 0x01000193) ^ s3;
     uint32_t env_salt = (uint32_t)(uintptr_t)&stage4_verify;  // 函数地址作为盐
     real_check = (real_check >> 8) | (real_check << 24);
     real_check ^= (env_salt & 0xFFFF0000);  // 地址高 16 位参与运算
@@ -899,7 +900,7 @@ int verify_key(const char* input) {
     uint32_t s2 = stage2_verify(part2, s1);
     if (s2 != 0x9ABCDEF0) return 0;  // FLAG 2
 
-    uint32_t s3 = stage3_verify(s1, s2);
+    uint32_t s3 = stage3_verify(s1, s2, part3, part4);
     if (s3 != 0xCAFEBABE) return 0;  // FLAG 3
 
     uint32_t s4 = stage4_verify(s3, part5);
