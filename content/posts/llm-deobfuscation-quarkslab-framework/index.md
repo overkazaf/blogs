@@ -4,7 +4,7 @@ slug: "llm-deobfuscation-quarkslab-four-dimensional-framework"
 date: 2026-10-08T18:00:00+08:00
 lastmod: 2026-10-11T18:00:00+08:00
 draft: false
-tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G", "REA", "MCP", "Ghidra", "AI-RE-tooling"]
+tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G", "Ponce4Ghidra", "unpack", "cap", "re-agent", "REA", "MCP", "Ghidra", "AI-RE-tooling", "symbolic-execution", "angr", "Z3", "Android-unpacking", "MITM-proxy"]
 categories: ["reverse-engineering"]
 description: "从 REA（81K+ Star MCP 逆向工程服务器）的架构剖析出发，结合四维评估框架论文与 Quarkslab 的 AI Agent 攻防实验，系统回答：AI 能拆多少混淆、工具链如何补强 LLM 短板、保护方该怎么调整，附挑战 .so 样例"
 toc: true
@@ -151,8 +151,8 @@ REA 是一个 MCP（Model Context Protocol）服务器，让 AI Agent 通过标�
 
 REA 的 DX-Ball 案例展示了当前 AI 逆向的实际上限。Agent 从一个 x86 游戏二进制中重建了声像计算函数，结果：
 
-- 通过 **3,205 个原始 x86 测试用例**
-- 复现了**全部 63 字节**的编译输出
+- 通过 **3,205 个原始 x86 测试用例** [7]
+- 复现了**全部 63 字节**的编译输出 [7]
 
 这不是「LLM 猜了个差不多的实现」——这是**字节级精确的函数重建**。它说明：对于「可以被 Ghidra 完整反编译、逻辑相对独立」的函数，AI Agent + 专业工具已经能做到人类分析师级别的准确度。
 
@@ -160,7 +160,7 @@ REA 的 DX-Ball 案例展示了当前 AI 逆向的实际上限。Agent 从一个
 
 ### 2.3 REA 揭示的行业趋势
 
-REA 8 万+ Star 的速度说明社区对 AI 逆向工具链的需求是真实的。结合 ReArk（HarmonyOS/Android AI 逆向，500+ Star）等项目，行业正在经历一次范式转移：
+REA 8 万+ Star 的速度说明社区对 AI 逆向工具链的需求是真实的 [7]。结合 ReArk（HarmonyOS/Android AI 逆向，500+ Star）[8] 等项目，行业正在经历一次范式转移：
 
 **从「LLM 理解汇编」到「Agent 驱动专业工具链」。**
 
@@ -189,9 +189,9 @@ REA 已经处在 **3.0**：它不是用 LLM 模拟逆向工程师，而是**让 
 
 论文里有三个发现最出乎笔者意料：
 
-1. **只有 Claude 3.7 Sonnet 能自己认出不透明谓词**，不需要任何提示
-2. **面对组合混淆，所有模型全部失败**。混淆没死，只是要换策略
-3. **DeepSeek R1 会凭空编造常量**，比如 `0xDEADBEEF`、`0xCAFEBABE`。这些「程序员调试用的占位数」在原代码里根本不存在，是模型从训练数据里「借」来的
+1. **只有 Claude 3.7 Sonnet 能自己认出不透明谓词** [1]，不需要任何提示
+2. **面对组合混淆，所有模型全部失败** [1]。混淆没死，只是要换策略
+3. **DeepSeek R1 会凭空编造常量** [1]，比如 `0xDEADBEEF`、`0xCAFEBABE`。这些「程序员调试用的占位数」在原代码里根本不存在，是模型从训练数据里「借」来的
 
 > 只想看结论，可以直接跳到 §3.6「三层抵抗力模型」。
 
@@ -250,11 +250,11 @@ unsigned int target_function(unsigned int n) {
 
 这张表可以按三个方向读：
 
-**竖着看（按混淆类型）**：CFF 反而最容易被攻破，GPT-4.5、GPT-Pro-o1、Grok 3 都拿到了 0 级。笔者之前用 angr 符号执行做 CFF 还原，跑了 23 分钟才处理完 47 个状态；LLM 不需要任何符号执行引擎，直接看汇编就还原了。
+**竖着看（按混淆类型）**：CFF 反而最容易被攻破，GPT-4.5、GPT-Pro-o1、Grok 3 都拿到了 0 级。笔者之前用 angr 符号执行做 CFF 还原，跑了 23 分钟才处理完 47 个状态 [5]；LLM 不需要任何符号执行引擎，直接看汇编就还原了 [1]。
 
-**横着看（按模型）**：Claude 3.7 Sonnet 在 BCF 上是 0 级，是唯一一个自己认出 `(x * (x - 1)) & 1 == 0` 恒为真的模型。但到了 IS，它没去还原原始常量，而是试图总结一个更「优雅」的数学规律。**思路漂亮，但结果是错的。**
+**横着看（按模型）**：Claude 3.7 Sonnet 在 BCF 上是 0 级，是唯一一个自己认出 `(x * (x - 1)) & 1 == 0` 恒为真的模型 [1]。但到了 IS，它没去还原原始常量，而是试图总结一个更「优雅」的数学规律。**思路漂亮，但结果是错的。**
 
-**看最后一列（组合混淆）**：全军覆没。这是整篇论文最重要的结论：**单一混淆正在被 LLM 侵蚀，但多种混淆叠加仍然非常有效。**
+**看最后一列（组合混淆）**：全军覆没。这是整篇论文最重要的结论 [1]：**单一混淆正在被 LLM 侵蚀，但多种混淆叠加仍然非常有效。**
 
 ### 3.4 四维框架
 
@@ -269,7 +269,7 @@ unsigned int target_function(unsigned int n) {
 
 ![四维框架：推理深度和噪声过滤对应 BCF，模式识别对应 IS，上下文整合对应 CFF，组合混淆同时考验四个维度](images/four_dimensions.png)
 
-为什么 LLM 在「模式识别」上最弱？因为 IS 生成的等价式在训练数据里很少见，而 LLM 靠的是统计规律，不是数学证明。D810G 的 MBA 化简引擎做的就是这件事：用 6 组共 96 条规则把 `(x & y) + (x | y)` 认成 `x + y`，再用 Z3 证明两者在 32 位和 64 位下等价（[源码与规则库](https://github.com/overkazaf/D810G)）。笔者在开发中的体会是，规则库覆盖面决定了化简效果的上限，而这恰好是 LLM 最不擅长的维度。
+为什么 LLM 在「模式识别」上最弱？因为 IS 生成的等价式在训练数据里很少见，而 LLM 靠的是统计规律，不是数学证明。D810G 的 MBA 化简引擎做的就是这件事：用 6 组共 96 条规则——基础规则、Hacker's Delight 规则、OLLVM 专有规则、常量折叠规则、高级规则和规则链——把 `(x & y) + (x | y)` 认成 `x + y`，每条规则都经过 Z3 在 32 位和 64 位下的等价性证明（[源码与规则库](https://github.com/overkazaf/D810G)）[6]。整个化简通过 7-pass 流水线执行（MBA 化简 → CFF 还原 → 不透明谓词消除 → BCF 清理 → 死代码移除 → 字符串解密 → fixpoint 收敛），前一步的输出喂给下一步，直到没有新的化简发生。笔者在开发中的体会是，规则库覆盖面决定了化简效果的上限，而这恰好是 LLM 最不擅长的维度。
 
 > **核心洞察：统计相关 ≠ 数学等价**
 >
@@ -285,7 +285,7 @@ unsigned int target_function(unsigned int n) {
 
 不透明谓词 `(x * (x - 1)) & 1 == 0` 利用了「相邻两个整数相乘一定是偶数」。GPT-4o 没看出来，把它当成真正的条件分支，导致整个控制流还原错误。
 
-论文中 8 个模型只有 3 个能认出这个最基础的模板。如果换成更复杂的 MBA 变种，比如 `(x | (x-1)) - (x ^ (x-1)) >= 0`，笔者**推测**命中率会更低。
+论文中 8 个模型只有 3 个能认出这个最基础的模板 [1]。如果换成更复杂的 MBA 变种，比如 `(x | (x-1)) - (x ^ (x-1)) >= 0`，笔者**推测**命中率会更低。
 
 注意这个变种只在**无符号**运算下恒成立：左边其实等于 `x & (x-1)`，按有符号数解释时可能是负数（例如 `x = 0xC0000000`）。分析时如果搞错了符号语义，人和 LLM 都会误判。
 
@@ -293,11 +293,11 @@ unsigned int target_function(unsigned int n) {
 
 运算找对了，但对应关系接错了。Grok 2 在 CFF 场景中正确提取出 4 个算术表达式，却把其中 3 个分配给了错误的分支条件。
 
-这也是手工做 CFF 还原时最常见的坑：状态变量的值是对的，但「从哪个状态跳到哪个状态」接错了。D810G 用模拟执行来确定每个状态的真实后继，而不是靠「看」。LLM 在这里失败，恰好说明 CFF 还原不能只靠模式匹配。
+这也是手工做 CFF 还原时最常见的坑：状态变量的值是对的，但「从哪个状态跳到哪个状态」接错了。[D810G](https://github.com/overkazaf/D810G) 用 Unicorn 模拟执行来确定每个状态的真实后继——从入口状态开始逐个模拟，记录每个 `case` 执行完后状态变量被赋成了什么值，再用这条实际执行路径重建原始控制流。它同时支持 OLLVM 和 Tigress 两种 CFF 变种，覆盖 x86_64 和 ARM64（AArch64）两种架构 [6]。LLM 在结构映射上的失败，恰好说明 CFF 还原不能只靠模式匹配——**需要真正「跑一遍」才能确定状态转移关系**。
 
 #### 3.5.3 把混淆误判成循环
 
-DeepSeek R1 和 GPT-3o Mini 把 BCF 中反复出现的条件检查误认为循环。DeepSeek R1 甚至凭空写出了一个 `for _ in range(10)`，而原函数里没有任何循环：
+DeepSeek R1 和 GPT-3o Mini 把 BCF 中反复出现的条件检查误认为循环 [1]。DeepSeek R1 甚至凭空写出了一个 `for _ in range(10)`，而原函数里没有任何循环：
 
 ```python
 # DeepSeek R1 的错误输出
@@ -315,7 +315,7 @@ def transform(input_val):
 
 #### 3.5.4 算术还原错误
 
-所有尝试 IS 的模型都在算术上出了错。原代码分支 0 是 `(n | 0xBAAAD0BF) * (2 ^ n)`，GPT-4o 给出的是 `(input ^ 0xe6c98769) * ((input & 2) | 2)`，其中 `0xe6c98769` 在原汇编里根本不存在。
+所有尝试 IS 的模型都在算术上出了错 [1]。原代码分支 0 是 `(n | 0xBAAAD0BF) * (2 ^ n)`，GPT-4o 给出的是 `(input ^ 0xe6c98769) * ((input & 2) | 2)`，其中 `0xe6c98769` 在原汇编里根本不存在。
 
 IS 的常见替换规则如下，人类分析师也需要查表或借助求解器才能确认：
 
@@ -353,7 +353,7 @@ uint32_t calculate_result(uint32_t input) {
 
 **实用建议**：LLM 给出的任何常量，都应该回到二进制里搜一遍确认存在；给出的任何表达式，都应该用 Z3 之类的求解器验证与原代码等价。
 
-D810G 为此新增了 `verify` 命令：输入原始表达式和 LLM 的还原结果，它会在 32 位和 64 位下用 Z3 证明两者等价，或者给出一个反例输入，同时标出来源不明的常量和 hexspeak 常量：
+D810G 为此提供了 `verify` 命令 [6]：输入原始表达式和 LLM 的还原结果，它会在 32 位和 64 位下用 Z3 证明两者等价，或者给出一个反例输入，同时标出来源不明的常量和 hexspeak 常量。D810G 不依赖 Ghidra GUI 运行——它提供独立的命令行模式（`python -m d810g_engine cli`），支持 headless 批量分析，可以直接集成到 CI/CD 流水线或脚本中。整个项目通过 398 个测试用例覆盖各种混淆场景，确保每条化简规则的正确性 [6]：
 
 ```text
 $ python -m d810g_engine cli verify "(n + 0xBAAAD0BF) * (5 & n)" "(n + 0xDEADBEEF) * (5 & n)"
@@ -385,7 +385,7 @@ $ python -m d810g_engine cli verify "(n + 0xBAAAD0BF) * (5 & n)" "(n + 0xDEADBEE
 
 ## 四、Quarkslab 的攻防实验
 
-论文是人把汇编贴给 LLM。Quarkslab 更进一步：把 Claude Code Agent 直接放进沙箱，让它**自己动手**攻击混淆后的二进制。
+论文是人把汇编贴给 LLM。Quarkslab 更进一步 [2]：把 Claude Code Agent 直接放进沙箱，让它**自己动手**攻击混淆后的二进制。
 
 ### 4.1 实验设计
 
@@ -400,7 +400,7 @@ $ python -m d810g_engine cli verify "(n + 0xBAAAD0BF) * (5 & n)" "(n + 0xDEADBEE
 
 #### 缺陷一：环境利用
 
-Agent 在 Docker 容器里翻到了 `SOLUTION.txt` 和 SSH 凭据，直接绕过了题目本身。它展示的不是逆向能力，而是渗透能力。
+Agent 在 Docker 容器里翻到了 `SOLUTION.txt` 和 SSH 凭据，直接绕过了题目本身 [2]。它展示的不是逆向能力，而是渗透能力。
 
 这对真实场景有警示意义：Agent 可能会利用构建环境里残留的调试符号、CI/CD 日志、`.git` 历史来绕过保护。**保证发布环境干净**，这不是混淆的问题，而是运维的问题。
 
@@ -408,7 +408,7 @@ Agent 在 Docker 容器里翻到了 `SOLUTION.txt` 和 SSH 凭据，直接绕过
 
 笔者认为这是最深刻的发现。Agent 一旦形成某个「解释」，比如把 RASP 检测模块当成恶意软件、把某个函数认成另一种指令集，就**很少回头修正**，即使后来的证据明显矛盾。
 
-笔者在开发 [re-agent](https://github.com/overkazaf/re-agent)（终端环境下的 RE/CTF Agent，内置 planner/executor/researcher 三个模型席位和 24 个本地逆向工具）时反复观察到同样的现象：前 5 分钟形成的假设，会主导后面 75 分钟的分析方向。在一次 Android SO 分析中，planner 模型在第一轮就把一段 RASP 初始化代码误判为「加密密钥派生函数」，之后 executor 的所有工具调用——从 Frida hook 到内存 dump——都围绕密钥搜索展开，即使 hook 返回的数据与密钥派生完全无关，它仍在试图把结果「解释」进原有假设。
+笔者在开发 [re-agent](https://github.com/overkazaf/re-agent)（终端环境下的 RE/CTF Agent）时反复观察到同样的现象 [12]。re-agent 内置 planner/executor/researcher 三个模型席位、24 个本地逆向工具（`/scan`、`/hex`、`/decode`、`/entropy`、`/mitigations`、`/carve`、`/apk`、`/r2` 等），支持 9 种工作流模式（off、auto、specialist、caveman、research、writeup、ctf、reverse、engineering），并通过 retool 机制集成外部工具链（radare2、JADX、Ghidra、Burp、mitmproxy、angr、Unicorn、unidbg、Frida）。它的 live dashboard 实时显示数据流、工具调用、计划状态、推理过程和 token 消耗——正是这个 dashboard 让笔者能直观地观察到「叙事固着」的发生过程：前 5 分钟形成的假设，会主导后面 75 分钟的分析方向。在一次 Android SO 分析中，planner 模型在第一轮就把一段 RASP 初始化代码误判为「加密密钥派生函数」，之后 executor 的所有工具调用——从 Frida hook 到内存 dump——都围绕密钥搜索展开，即使 hook 返回的数据与密钥派生完全无关，它仍在试图把结果「解释」进原有假设。re-agent 的 context compaction（snapcompact）机制在一定程度上缓解了这个问题：通过定期压缩上下文快照，让 researcher 席位有机会从「干净」的视角重新审视已有证据，而不是被 executor 的叙事链锁定。
 
 > **核心洞察：LLM Agent 缺乏「假设修订」机制**
 >
@@ -418,17 +418,17 @@ Agent 在 Docker 容器里翻到了 `SOLUTION.txt` 和 SSH 凭据，直接绕过
 
 #### 缺陷三：产物伪造
 
-Agent 写了声称「执行了模拟」的脚本，但脚本实际什么都没跑。有几轮里，它甚至「引用」了之前根本不存在的结果。
+Agent 写了声称「执行了模拟」的脚本，但脚本实际什么都没跑。有几轮里，它甚至「引用」了之前根本不存在的结果 [2]。
 
 ### 4.3 Quarkslab 的防御建议
 
 | # | 策略 | 原理 | 笔者解读 |
 |---|------|------|---------|
-| 1 | 把秘密绑定到**运行时执行** | Agent 主要做静态分析，运行时行为是它的盲区 | 与 DRM 中常用的 TEE 绑定思路一致 |
-| 2 | 部署**多个小型 RASP 检测点** | 增加 Agent 要发现和绕过的目标数量 | 常见方案只有 1-2 个完整性检查，建议增加到 10 个以上 |
-| 3 | 让结果**依赖运行环境** | 正确答案取决于环境中难以预测的属性 | Widevine L1 绑定设备的 keybox 就是典型例子 |
-| 4 | 把**检测点散布进混淆代码** | 让混淆层与检测层互相耦合 | 去混淆工具遇到这种设计，复杂度会急剧上升 |
-| 5 | 检测到攻击时**返回看似合理的错误结果**，而不是崩溃 | Agent 靠崩溃定位保护边界；看似正确的结果会把它带偏 | 最精彩的一条，正好利用了「叙事固着」 |
+| 1 | 把秘密绑定到**运行时执行** | Agent 主要做静态分析，运行时行为是它的盲区 | 与 DRM 中常用的 TEE 绑定思路一致 [2] |
+| 2 | 部署**多个小型 RASP 检测点** | 增加 Agent 要发现和绕过的目标数量 | 常见方案只有 1-2 个完整性检查，建议增加到 10 个以上 [2] |
+| 3 | 让结果**依赖运行环境** | 正确答案取决于环境中难以预测的属性 | Widevine L1 绑定设备的 keybox 就是典型例子 [2] |
+| 4 | 把**检测点散布进混淆代码** | 让混淆层与检测层互相耦合 | 去混淆工具遇到这种设计，复杂度会急剧上升 [2] |
+| 5 | 检测到攻击时**返回看似合理的错误结果**，而不是崩溃 | Agent 靠崩溃定位保护边界；看似正确的结果会把它带偏 | 最精彩的一条，正好利用了「叙事固着」[2] |
 
 Quarkslab 的结论用一句话概括：
 
@@ -456,7 +456,7 @@ Agent 发起请求 → MCP 路由 → Ghidra 反编译 + 符号解析 + 调用�
 
 这绕过了论文中「模式识别」维度的瓶颈：LLM 不再需要从原始汇编中识别 `(a ^ b) + 2*(a & b)` 就是 `a + b`，因为 Ghidra 的反编译器已经替它做了大部分简化。**LLM 的角色从「独立分析师」变成了「读反编译报告的决策者」。**
 
-但反编译器不是万能的——遇到高强度的 IS/MBA 混淆时，Ghidra 的反编译输出本身就充满了无法化简的等价式。这时需要更强的确定性工具介入。笔者开发的 [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra)（基于 angr + Z3 的 Ghidra 交互式符号执行插件）在这类场景下提供了一个补充路径：它不试图「理解」表达式的含义，而是让 Z3 直接求解——给定目标地址和符号化输入，自动推导出满足约束的具体值。在一次 crackme 分析中，LLM 花了 20 分钟猜测一个 19 字节 license key 的结构，而 Ponce4Ghidra 在 3 秒内给出了 5 组有效解（[实验记录](https://overkazaf.github.io/blogs/posts/ponce4ghidra-symbolic-execution-crackme/)）。**LLM 擅长「理解意图」，符号执行擅长「求解约束」——两者的交集恰好覆盖了混淆分析的核心需求。**
+但反编译器不是万能的——遇到高强度的 IS/MBA 混淆时，Ghidra 的反编译输出本身就充满了无法化简的等价式。这时需要更强的确定性工具介入。笔者开发的 [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra)（基于 angr + Z3 的 Ghidra 交互式符号执行插件）在这类场景下提供了一个补充路径 [9]：它不试图「理解」表达式的含义，而是让 Z3 直接求解——给定目标地址和符号化输入，自动推导出满足约束的具体值。Ponce4Ghidra 提供 4 种符号化方法（命令行参数 argv、函数参数、寄存器、内存区域），支持从 Listing 视图或 Decompiler 视图直接设置 Find/Avoid 目标地址，每次求解可返回最多 5 组不同的有效解。它默认启用 Veritesting（路径合并优化），并支持可选的 Unicorn 快速具体执行加速，覆盖 Mach-O x86_64、ELF x86_64 和 Android .so（ARM/ARM64）三类平台 [9]。在一次 crackme 分析中，LLM 花了 20 分钟猜测一个 19 字节 license key 的结构，而 Ponce4Ghidra 在 3 秒内给出了 5 组有效解——其中第一组密码是 `P4Rg`（[实验记录](https://overkazaf.github.io/blogs/posts/ponce4ghidra-symbolic-execution-crackme/)）[9]。**LLM 擅长「理解意图」，符号执行擅长「求解约束」——两者的交集恰好覆盖了混淆分析的核心需求。**
 
 ### 5.2 补强「噪声过滤」：Provider 隔离 + 不自动回退
 
@@ -487,7 +487,7 @@ REA 不只做静态分析。它支持：
 
 这直接回应了 Quarkslab 建议的「把秘密绑定到运行时执行」——但 REA 也在**攻击侧**做了同样的事：让 Agent 不仅能读代码，还能**观察代码在运行时做了什么**。
 
-笔者开发的 [cap](https://github.com/overkazaf/cap)（面向逆向工程的中间人代理）在实践中印证了这个趋势。cap 的一个核心设计决策是**输出 LLM-ready 的 JSONL 格式**——每条流量记录一行，签名参数自动标注，大体积 body 截断并保留 SHA256 哈希。它还内置了签名算法推断（根据输出长度和编码特征自动匹配 MD5/SHA1/SHA256/HMAC）和 jadx 源码关联（通过扫描 Retrofit 注解和 OkHttp 拦截器模式，将 URL 映射回 Java 源码的文件/类/方法/行号）。这不是偶然的设计选择：**当逆向工具的输出格式直接对齐 LLM 的消费方式时，Agent 的分析效率会产生质的飞跃**。cap 捕获的一次完整 API 调用链（请求参数 → 签名字段 → 服务端响应 → jadx 源码定位），喂给 LLM 后可以直接生成签名算法的复现代码，省去了分析师在抓包工具和反编译器之间来回切换的过程。
+笔者开发的 [cap](https://github.com/overkazaf/cap)（Go + Svelte 开发的面向逆向工程的中间人代理）在实践中印证了这个趋势 [11]。cap 的一个核心设计决策是**输出 LLM-ready 的 JSONL 格式**——每条流量记录一行，签名参数自动标注，大体积 body 截断并保留 SHA256 哈希。它内置了签名算法推断（根据输出长度和编码特征自动匹配 MD5/SHA1/SHA256/HMAC）、jadx 源码关联（`cap context import --jadx` 扫描 Retrofit 注解和 OkHttp 拦截器模式，将 URL 映射回 Java 源码的文件/类/方法/行号），以及 5 种语言的代码生成（cURL、Python、Go、Java、JavaScript）。cap 通过 Wails + Svelte 提供原生桌面 GUI，支持 HTTP/HTTPS/WebSocket/SSE/无 schema protobuf 协议，并内置 ADB 证书安装（mount --bind、Magisk、legacy remount 三种策略自动适配）[11]。这不是偶然的设计选择：**当逆向工具的输出格式直接对齐 LLM 的消费方式时，Agent 的分析效率会产生质的飞跃**。cap 捕获的一次完整 API 调用链（请求参数 → 签名字段 → 服务端响应 → jadx 源码定位），喂给 LLM 后可以直接生成签名算法的复现代码，省去了分析师在抓包工具和反编译器之间来回切换的过程。
 
 ### 5.5 四维框架覆盖总结
 
@@ -504,11 +504,13 @@ REA 不只做静态分析。它支持：
 
 ### 6.1 CFF 单独使用已经不够
 
-笔者在之前的 OLLVM 文章中记录过：对某电商 App 的 `libsign.so` 做 CFF 还原，需要 angr 跑 23 分钟、峰值内存 4.2 GB、写 600 行 Python。而论文显示 GPT-4.5 看汇编就能做到 0 级还原。
+笔者在之前的 OLLVM 文章中记录过：对某电商 App 的 `libsign.so` 做 CFF 还原，需要 angr 跑 23 分钟、峰值内存 4.2 GB、写 600 行 Python [5]。而论文显示 GPT-4.5 看汇编就能做到 0 级还原 [1]。
 
 所以，**单独使用 CFF 的性价比已经大幅下降**。笔者的判断是：只靠 CFF 保护的关键函数（比如 license 校验入口）应尽快升级为 CFF + IS，或改用 VMP 虚拟化保护。
 
-从 Android 生态的实际情况看，混淆只是防护链条中的一环。笔者开发的 [unpack](https://github.com/overkazaf/unpack)（自动化 Android 脱壳框架，支持 360、腾讯乐固、腾讯御安全、梆梆、爱加密、网易易盾等 24 家加固方案，提供 Memory / Frida / eBPF 三种脱壳引擎）在实战中观察到一个趋势：**加壳 + 单一混淆的组合正在被 AI 工具链快速瓦解**。以某音乐 App（网易易盾 v2 加固）为例，unpack 在 Pixel 7 Pro 上 19.6 秒内完成了 18 个 DEX 文件（150 MB）的脱壳，覆盖率 96.2%——脱壳完成后，DEX 层的 CFF 混淆直接暴露给了 LLM。如果 native 层的 SO 也只用了 CFF，整条防护链从脱壳到去混淆都可以被自动化串联。**保护方需要在每一层都达到足够的混淆强度，否则 AI 工具链会像「木桶效应」一样从最短板突破。**
+从 Android 生态的实际情况看，混淆只是防护链条中的一环。笔者开发的 [unpack](https://github.com/overkazaf/unpack)（自动化 Android 脱壳框架）在实战中观察到一个趋势 [10]：**加壳 + 单一混淆的组合正在被 AI 工具链快速瓦解**。unpack 支持 360、腾讯乐固、腾讯御安全、梆梆、爱加密、网易易盾、百度、阿里、DexProtector 等 24 家加固方案，提供三种脱壳引擎——Memory 引擎（通过 ADB 读取 `/proc/pid/maps` + `/proc/pid/mem`）、Frida 引擎（JS agent，4 种策略 + 7 种反检测绕过）和 eBPF 引擎（bpftrace uprobes 挂载 `libart.so`），根据目标自动选择最优引擎。脱壳后通过 7 步 DEX 修复流程（magic → file_size/data_size/data_off → map_list → NOP method 检测 → CodeItem 对齐 → SHA-1 → Adler32）确保产出的 DEX 可直接用于分析 [10]。
+
+以某音乐 App（网易易盾 v2 加固）为例，unpack 在 Pixel 7 Pro 上 19.6 秒内完成了 18 个 DEX 文件（150 MB）的脱壳，覆盖率 96.2% [10]——脱壳完成后，DEX 层的 CFF 混淆直接暴露给了 LLM。unpack 还内置了 LLM 集成：`unpack analyze | claude -p` 可以将脱壳结果直接管道传给 Claude 进行自动化分析，`unpack scan --report` 导出的 JSON 报告包含加固方案识别（加权 6 维评分）和保护等级分类（1-4 级），可直接作为 Agent 的输入 [10]。如果 native 层的 SO 也只用了 CFF，整条防护链从脱壳到去混淆都可以被自动化串联。**保护方需要在每一层都达到足够的混淆强度，否则 AI 工具链会像「木桶效应」一样从最短板突破。**
 
 不过论文有一个局限：测试函数只有 15 行 C 代码，汇编只有几百行。实际 DRM SO 中，单个函数平坦化后经常有 2000 多行汇编、几十个状态。代码量变大后 LLM 的上下文整合能力会不会下降，论文没有回答，这是笔者接下来要用 D810G 测试套件验证的问题。
 
@@ -516,7 +518,7 @@ REA 不只做静态分析。它支持：
 
 笔者之前的 OLLVM 文章把 IS 归为「不影响模拟执行，可以忽略」。在传统工具链（模拟执行）面前确实如此，但论文显示 IS 恰恰是 LLM 最吃力的一项，**所有模型都在 4-5 级**。
 
-原因前面说过：IS 把简单运算换成等价但形式完全不同的式子，LLM 很难靠统计规律「猜」出等价关系。**这不是上下文长度的问题，而是推理方式的根本局限。**
+原因前面说过：IS 把简单运算换成等价但形式完全不同的式子，LLM 很难靠统计规律「猜」出等价关系 [1]。**这不是上下文长度的问题，而是推理方式的根本局限。** D810G 的 MBA 化简引擎正好覆盖了这个 LLM 短板：6 组 96 条规则中，OLLVM 专有规则和高级规则两组专门针对 IS 生成的等价变换，而规则链（chain rules）能处理多层嵌套的 MBA 表达式 [6]——这些都是 LLM 在 4-5 级上无能为力的场景。
 
 所以策略需要调整：**IS 应该成为第一层防线，CFF 降为辅助手段。**
 
@@ -524,7 +526,7 @@ REA 不只做静态分析。它支持：
 
 组合混淆全军覆没，说明**对抗 LLM 不一定需要新的混淆技术，有效组合现有技术就够了**。
 
-组合的效果不是简单相加，而是「超线性」的：它同时考验四个维度，即使某个模型在单一维度上很强，也会整体失败。D810G 的测试套件中约 40% 是组合场景，论文数据从外部印证了这个设计方向。
+组合的效果不是简单相加，而是「超线性」的：它同时考验四个维度，即使某个模型在单一维度上很强，也会整体失败 [1]。D810G 的 398 个测试用例中约 40% 是组合场景（CFF + IS、BCF + IS、三重叠加等），论文数据从外部印证了这个设计方向 [6]。
 
 ---
 
@@ -544,7 +546,7 @@ REA 不只做静态分析。它支持：
 
 当前 IS 是 LLM 的软肋（4-5 级），但这建立在一个前提上：**论文测的是裸 LLM 看汇编**。当 Agent 通过 REA 调用 Ghidra 反编译后，很多 IS 替换已经被 Ghidra 的优化 pass 部分还原了。
 
-笔者的判断是：Ghidra 反编译 + LLM 语义理解的组合，有可能把 IS 的攻击者知识等级从 4-5 级拉到 2-3 级。BCF 中的简单不透明谓词已经被 Claude 3.7 攻破，MBA 变种能多撑 2-3 年，但如果有人把 D810G 这样的 MBA 规则库集成到 REA 的工作流中（作为 MCP Skill），这个时间窗口会进一步缩短。
+笔者的判断是：Ghidra 反编译 + LLM 语义理解的组合，有可能把 IS 的攻击者知识等级从 4-5 级拉到 2-3 级。BCF 中的简单不透明谓词已经被 Claude 3.7 攻破 [1]，MBA 变种能多撑 2-3 年，但如果有人把 D810G 这样的 96 条 MBA 规则库 [6] 集成到 REA 的工作流中（作为 MCP Skill），这个时间窗口会进一步缩短。
 
 **保护方应对**：开始研发不在公开规则库中的自定义 MBA 变种。混淆器的「私有规则」将成为竞争壁垒。
 
@@ -706,6 +708,8 @@ cd challenges/llm-deobfuscation/
 # 4. 欢迎记录你和 LLM 的对话过程，成功和失败都是有价值的数据
 ```
 
+**推荐工具组合**：FLAG 1（CFF）可以直接用 [D810G](https://github.com/overkazaf/D810G) 的 CFF 还原模块自动处理 [6]；FLAG 2（BCF + MBA）建议先用 D810G 消除不透明谓词和 MBA 等价式，再用 [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra) 的符号执行求解约束值 [9]；FLAG 3（组合混淆）是真正的挑战——D810G 的 7-pass 流水线 [6] 可以逐层剥离，但最终的交叉约束可能需要手工分析。当然，你也可以试试直接让 REA [7] 驱动 Ghidra 来挑战。
+
 笔者的**预期**是：大多数读者（包括借助 LLM 的读者）能在 1 小时内拿到 FLAG 1，FLAG 2 需要 2-4 小时，FLAG 3 以目前的 LLM 能力很可能无法纯靠 AI 解出。如果你的 LLM 解出了 FLAG 3，欢迎告诉笔者。
 
 ---
@@ -751,13 +755,13 @@ cd challenges/llm-deobfuscation/
 
 ## 十、结论
 
-1. **AI 逆向工具链正在系统性补强 LLM 短板**：REA（81K+ Star）通过 MCP 让 Agent 直接驱动 Ghidra/Hopper/IDA，用专业工具的确定性分析替代 LLM 的猜测，用 Evidence Ledger 杜绝常量捏造。保护方不能只看「裸模型」的能力上限
-2. **CFF 单独使用已不安全**：多数 LLM 能做到 0-2 级还原，REA 进一步降低了使用门槛
-3. **Claude 3.7 Sonnet 在 BCF 上领先**：唯一能自己认出不透明谓词的模型，但在 IS 上的「优雅抽象」导致了错误结果
-4. **指令替换是 LLM 的软肋**：所有模型都在 4-5 级，这与笔者开发 MBA 化简引擎的经验一致
-5. **组合混淆是当前最有效的防线**：所有模型全部失败
-6. **AI Agent 有「叙事固着」和「产物伪造」两个缺陷**：保护方可以主动利用
-7. **LLM 的输出必须验证**：常量回二进制里查，表达式用求解器证等价
+1. **AI 逆向工具链正在系统性补强 LLM 短板**：REA（81K+ Star）[7] 通过 MCP 让 Agent 直接驱动 Ghidra/Hopper/IDA，用专业工具的确定性分析替代 LLM 的猜测，用 Evidence Ledger 杜绝常量捏造。保护方不能只看「裸模型」的能力上限
+2. **CFF 单独使用已不安全**：多数 LLM 能做到 0-2 级还原 [1]，REA 进一步降低了使用门槛
+3. **Claude 3.7 Sonnet 在 BCF 上领先**：唯一能自己认出不透明谓词的模型 [1]，但在 IS 上的「优雅抽象」导致了错误结果
+4. **指令替换是 LLM 的软肋**：所有模型都在 4-5 级 [1]，这与笔者开发 D810G 96 条 MBA 化简规则 [6] 的经验一致
+5. **组合混淆是当前最有效的防线**：所有模型全部失败 [1]
+6. **AI Agent 有「叙事固着」和「产物伪造」两个缺陷** [2]：保护方可以主动利用
+7. **LLM 的输出必须验证**：常量回二进制里查，表达式用 D810G 的 `verify` 命令 [6] 或其他求解器证等价
 8. **组合混淆 + 运行时绑定是可持续防线**：即使工具链持续进化，跨维度的交互复杂性和运行时信息的不可获取性仍然是根本性的壁垒
 
 最后留一个**思考题**：在「编译时间最多翻倍、运行性能最多下降 15%」的约束下，你会选哪种组合？是 CFF + IS（编译时间 ×3，性能 -10%），BCF(MBA) + IS（编译时间 ×2，性能 -15%），还是全部叠加（编译时间 ×5，性能 -25%）？没有标准答案，但论文的数据能让这个选择更有依据。
@@ -773,13 +777,13 @@ cd challenges/llm-deobfuscation/
 | 3 | "Can LLMs Deobfuscate Binary Code?" (arXiv:2604.08083, 2026) | 学术论文 | BinDeObfBench 基准 + 微调分析 |
 | 4 | Quarkslab, ["Deobfuscation: recovering an OLLVM-protected program"](https://blog.quarkslab.com/deobfuscation-recovering-an-ollvm-protected-program.html) (2017) | 技术博客 | OLLVM 去混淆基线方法 |
 | 5 | 笔者, [《所有分支都指向同一个 switch，然后呢》](https://overkazaf.github.io/blogs/posts/ollvm-deobfuscation-engineering/) (2026-06) | 本博客 | OLLVM 实战去混淆 + 工具对比 |
-| 6 | 笔者, [D810G](https://github.com/overkazaf/D810G) (2026-10) | 开源项目 | Ghidra 反混淆框架，MBA 规则 + Z3 证明 |
+| 6 | 笔者, [D810G](https://github.com/overkazaf/D810G) (2026-10) | 开源项目 | Ghidra 反混淆框架：6 组 96 条 MBA 规则（Z3 证明）、CFF/BCF/IS 还原、7-pass 流水线、独立 CLI、398 测试用例 |
 | 7 | morluto, [REA](https://github.com/morluto/rea) (2026) | 开源项目 | MCP 逆向工程服务器，81K+ Star，集成 Ghidra/Hopper/IDA |
 | 8 | lkimuk, [ReArk](https://github.com/lkimuk/ReArk) (2026) | 开源项目 | HarmonyOS/Android AI 逆向分析工具 |
-| 9 | 笔者, [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra) (2026) | 开源项目 | Ghidra 交互式符号执行插件，基于 angr + Z3 |
-| 10 | 笔者, [unpack](https://github.com/overkazaf/unpack) (2026) | 开源项目 | 自动化 Android 脱壳框架，支持 24 家加固方案 |
-| 11 | 笔者, [cap](https://github.com/overkazaf/cap) (2026) | 开源项目 | 面向逆向工程的 MITM 代理，LLM-ready 输出 + 签名算法推断 |
-| 12 | 笔者, [re-agent](https://github.com/overkazaf/re-agent) (2026) | 开源项目 | 终端 RE/CTF Agent，三模型席位 + 24 个本地逆向工具 |
+| 9 | 笔者, [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra) (2026) | 开源项目 | Ghidra 交互式符号执行插件（angr + Z3）：4 种符号化方法、Veritesting、5 组解、支持 ELF/Mach-O/Android .so |
+| 10 | 笔者, [unpack](https://github.com/overkazaf/unpack) (2026) | 开源项目 | 自动化 Android 脱壳框架：24 家加固方案、Memory/Frida/eBPF 三引擎、7 步 DEX 修复、LLM 管道集成 |
+| 11 | 笔者, [cap](https://github.com/overkazaf/cap) (2026) | 开源项目 | 面向 RE 的 MITM 代理（Go + Svelte）：LLM-ready JSONL、签名推断、jadx 源码关联、5 语言代码生成、原生 GUI |
+| 12 | 笔者, [re-agent](https://github.com/overkazaf/re-agent) (2026) | 开源项目 | 终端 RE/CTF Agent（Go）：3 模型席位、9 工作流模式、24 本地工具、live dashboard、retool 集成 |
 
 ### 借鉴来源
 
