@@ -4,7 +4,7 @@ slug: "llm-deobfuscation-quarkslab-four-dimensional-framework"
 date: 2026-10-08T18:00:00+08:00
 lastmod: 2026-10-11T18:00:00+08:00
 draft: false
-tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G", "REA", "RAG", "multi-agent", "AI-RE-tooling"]
+tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G", "REA", "MCP", "Ghidra", "AI-RE-tooling"]
 categories: ["reverse-engineering"]
 description: "精读四维评估框架论文与 Quarkslab 的 AI 逆向攻防实验，结合 REA 等 AI 逆向工具链分析行业趋势，用入门者也能看懂的方式讲清：8 个主流 LLM 面对 BCF / IS / CFF / 组合混淆分别表现如何、会犯哪些错、AI 逆向工具链正在如何演进、保护方该怎么调整，附挑战 .so 样例"
 toc: true
@@ -77,7 +77,7 @@ math: false
 |---|---|---|---|
 | 学术论文（同行评审/预印本） | 2 | A-B | arXiv:2505.19887, arXiv:2604.08083 |
 | 安全公司技术博客 | 1 | B | Quarkslab "Defeating AI-Assisted RE" (2026-08) |
-| 开源 AI 逆向项目 | 1 | B | mytechnotalent/rea — RAG + 多 Agent 逆向助手 |
+| 开源 AI 逆向项目 | 1 | B | morluto/rea — MCP 逆向工程服务器（81K+ Star） |
 | 笔者一手逆向/开发经验 | — | A | OLLVM 去混淆、D810G 开发、DRM SO 分析 |
 | 笔者复现验证 | 3 | A | 对论文测试函数的独立验证 |
 
@@ -387,83 +387,97 @@ Quarkslab 的结论用一句话概括：
 
 ## 六、AI 逆向工具链的演进：以 REA 为例
 
-前面几节讨论的是 LLM 的「裸能力」：把汇编贴给模型或让单个 Agent 进沙箱。但攻击者不会停在这里。2024 年至今，一批专门面向逆向工程的 AI 工具链正在成型，它们正在系统性地补强 LLM 在四维框架中暴露的短板。
+前面几节讨论的是 LLM 的「裸能力」：把汇编贴给模型或让单个 Agent 进沙箱。但攻击者不会停在这里。2026 年，一个名为 REA 的开源项目在半年内拿到了 **8 万+ Star**，成为 GitHub 上最热门的 AI 逆向工程项目。它代表的不是实验室原型，而是一个**已经在被大规模使用的攻击侧基础设施**。
 
-[REA（Reverse Engineering Assistant）](https://github.com/mytechnotalent/rea) 是其中一个值得剖析的开源项目。它的口号是 **"Point it at a binary. Get an answer."**，目标是让逆向工程从「专家手艺」变成「一条命令」。
+[REA（Reverse Engineer Anything）](https://github.com/morluto/rea) 的口号是 **"One MCP for reverse engineering across binaries, applications, and runtime behavior."**——一个 MCP 协议，逆向一切。
 
 ### 6.1 REA 是什么
 
-REA 是一个基于 RAG（检索增强生成）和 LLM 的逆向工程助手，核心特性：
+REA 是一个 MCP（Model Context Protocol）服务器，让 AI Agent 通过标准化协议直接调用专业逆向工具。它不是另一个「把代码贴给 LLM」的包装器，而是**让 Agent 拥有了逆向工程师的工具箱**。
 
 | 特性 | 说明 |
 |------|------|
-| **一键分析** | `python -m gateway scan ./suspect.exe` 即可完成二进制分类 |
-| **离线优先** | 无 API Key 也能工作，用离线提取式回答替代生成式回答 |
-| **RAG 知识库** | 本地文档索引 + IDF 加权检索，为 LLM 提供领域知识上下文 |
-| **多 Agent 流水线** | propose → review → gate → adjudicate 四阶段循环，多角色协作 |
-| **证据溯源** | 每条发现都带 `Evidence` 记录：来源、类型、结构化细节、局限性 |
-| **MCP 集成** | CLI 和 MCP Server 共享同一个工具目录，可被任何 MCP 客户端调用 |
+| **MCP 原生** | 通过 MCP 协议暴露工具，Claude Code、Codex、Cursor、Gemini CLI 等 Agent 均可调用 |
+| **专业工具集成** | 直接驱动 Ghidra、Hopper、IDA 进行反编译和反汇编，不是用 `objdump` 凑合 |
+| **全栈逆向** | 原生二进制（ELF/Mach-O/PE）、Android APK、.NET、EVM 字节码、固件、JS/Electron、网络抓包 |
+| **证据溯源** | 每条发现附带 Evidence 记录，包含来源、覆盖范围、已知局限，可直接传递给对比工具 |
+| **字节级验证** | DX-Ball 案例中的函数重建通过了 3,205 个原始 x86 测试用例，复现了全部 63 字节编译输出 |
+| **安装即用** | `npx rea-agents setup` 一条命令注册 MCP 服务器并安装分析工作流 |
 
-支持的目标格式包括 ELF、Mach-O、PE 原生二进制和 JavaScript/Electron 应用。
+这不是「LLM 猜测汇编含义」，而是 **Agent 通过 MCP 调用 Ghidra 获取精确的伪代码和调用图，再用 LLM 理解和重建逻辑**。
 
 ### 6.2 架构剖析：用四维框架看 REA
 
-REA 的架构设计，几乎是在**逐维度回应**论文暴露的 LLM 短板。这不是巧合——当你知道 LLM 在哪里弱，工具链的设计方向就很明确了。
+REA 的架构与论文暴露的 LLM 短板形成了精确的对位关系。
 
-#### 补强「模式识别」：RAG 知识库
+#### 补强「模式识别」与「推理深度」：专业工具做确定性分析
 
-论文显示 LLM 在指令替换（IS）上最弱，因为 MBA 等价式在训练数据里太少见。REA 的 RAG 引擎正好针对这个问题：
+论文显示 LLM 在 IS 上最弱（4-5 级），因为 MBA 等价式靠统计规律猜不出来。REA 的策略不是让 LLM 去猜——**而是让 Ghidra/Hopper/IDA 先做确定性反编译，把伪代码和数据流交给 Agent**。
 
 ```
-文档 → 分块（重叠窗口）→ IDF 加权索引 → 检索 Top-K → 拼入 Prompt → LLM 生成
+Agent 发起请求 → MCP 路由 → Ghidra 反编译 + 符号解析 + 调用图
+                                    ↓
+                            Evidence（伪代码 + 引用 + 局限性）
+                                    ↓
+                        Agent 用 LLM 理解语义 + 重建逻辑
 ```
 
-如果在知识库里索引一份 MBA 等价规则表（比如 D810G 的规则库），LLM 在处理 IS 时就不再需要「从训练数据里猜」，而是能直接检索到 `(a ^ b) + 2*(a & b) == a + b` 这样的规则。笔者估计，这种 RAG 增强有可能把 IS 的攻击者知识等级从 4-5 级拉到 2-3 级。
+这绕过了论文中「模式识别」维度的瓶颈：LLM 不再需要从原始汇编中识别 `(a ^ b) + 2*(a & b)` 就是 `a + b`，因为 Ghidra 的反编译器已经替它做了大部分简化。**LLM 的角色从「独立分析师」变成了「读反编译报告的决策者」。**
 
-#### 补强「推理深度」与「噪声过滤」：多 Agent 流水线
+#### 补强「噪声过滤」：Provider 隔离 + 不自动回退
 
-Quarkslab 实验揭示的「叙事固着」问题（Agent 一旦形成假设就不回头），REA 的多 Agent 流水线是一个结构性的应对：
+REA 的 Provider 架构有一个设计决策与 Quarkslab 的发现直接相关：**REA 绝不自动切换分析 Provider**。一旦 Ghidra 启动失败，它不会偷偷降级到 Hopper，而是明确报错。
 
-| 阶段 | 角色 | 对应的补强 |
-|------|------|-----------|
-| **Propose** | 提议者 | 针对目标生成候选分析方案 |
-| **Review** | 审查者 | 对抗性审查，过滤不合理的假设（补强噪声过滤） |
-| **Gate** | 门控器 | 用确定性工具（命令行检查）验证候选，不靠 LLM 判断（补强推理深度） |
-| **Adjudicate** | 裁决者 | 综合 Gate 分数选出最优方案，LLM 失效时回退到最高分（鲁棒性保底） |
+这对抗的正是 Quarkslab 发现的「产物伪造」：如果工具链悄悄降级，Agent 可能基于低质量的分析结果做出错误判断，却以为自己在使用完整的反编译输出。**显式失败优于静默降级。**
 
-关键设计：**每个阶段都有离线回退**。LLM 不可用时，Proposer 生成确定性模板，Reviewer 用长度规则过滤，Adjudicator 按分数排序。整条流水线永远能跑完，不会因为 LLM 抽风而中断。
+#### 补强「上下文整合」：证据账本（Evidence Ledger）
 
-这正好解决了 Quarkslab 实验中「产物伪造」的问题：Gate 阶段用的是 `readelf`、`objdump` 这些确定性工具，不是 LLM 自己声称「我已经验证了」。
+REA 的 Evidence 系统远比简单的「附带来源」要深。每条 Evidence：
 
-#### 补强「上下文整合」：证据溯源
+- 有唯一 ID（`ev_` 前缀），可被后续工具引用
+- 包含 `normalized_result`（标准化结果）和 `raw_result`（原始 Provider 输出）
+- 记录 `analysis_profile`（分析配置的语义标识）
+- 支持 `integrity_policy=record-and-continue`：发现字节不匹配时，隔离矛盾数据，让已验证的部分继续
+- 结果超过 10 MiB 传输限制时，保留完整 Evidence 供按需导出
 
-REA 的 `Evidence` 数据类是一个冻结的记录，包含四个字段：
+**Agent 看到的不是「这是答案」，而是「这是在什么条件下、用什么工具、从哪个偏移量得到的答案，以及这个答案的哪些部分还没有被验证」。** 这正是论文中 DeepSeek R1 编造 `0xDEADBEEF` 时缺少的东西——如果有 Evidence Ledger，Agent 会知道这个常量没有出现在任何 Provider 的原始输出中。
 
-```python
-@dataclass(frozen=True)
-class Evidence:
-    kind: str                           # 观测类别，如 "native-binary"
-    source: str                         # 来源路径或标识
-    detail: Mapping[str, object]        # 结构化载荷
-    limitations: tuple[str, ...]        # 观测的局限性
-```
+#### 运行时观测：突破静态分析的天花板
 
-**每一条发现都必须声明自己的局限性。** 这是对论文中「常量捏造」问题的直接回应：当 LLM 无法确认某个常量的来源时，`limitations` 字段会记录 `"constant not verified in binary"`。下游消费者看到这个字段就知道需要额外验证。
+REA 不只做静态分析。它支持：
 
-### 6.3 REA 揭示的行业趋势
+- **LLDB 动态追踪**：启动目标进程，在指定函数/ObjC selector 处记录参数和调用栈
+- **UI 可访问性捕获**：记录窗口状态和 accessibility 数据
+- **场景录制**：执行 UI 操作并记录前后状态差异
+- **进程行为捕获**：通过 PTY 记录进程的实际 I/O 行为
 
-REA 不是孤例。笔者观察到的类似项目还有 ReArk（支持 HarmonyOS 和 Android 的 AI 逆向工具，500+ Star）、Luvvydev/reassist（Ghidra 辅助分析）等。它们共同指向一个方向：
+这直接回应了 Quarkslab 建议的「把秘密绑定到运行时执行」——但 REA 也在**攻击侧**做了同样的事：让 Agent 不仅能读代码，还能**观察代码在运行时做了什么**。
 
-**AI 逆向正在从「聊天式辅助」进化为「自主攻击流水线」。**
+### 6.3 DX-Ball 案例：字节级精确重建
+
+REA 的 DX-Ball 案例展示了当前 AI 逆向的实际上限。Agent 从一个 x86 游戏二进制中重建了声像计算函数，结果：
+
+- 通过 **3,205 个原始 x86 测试用例**
+- 复现了**全部 63 字节**的编译输出
+
+这不是「LLM 猜了个差不多的实现」——这是**字节级精确的函数重建**。它说明：对于「可以被 Ghidra 完整反编译、逻辑相对独立」的函数，AI Agent + 专业工具已经能做到人类分析师级别的准确度。
+
+但也要注意局限：DX-Ball 的目标函数逻辑清晰、没有混淆。面对组合混淆的函数，即使有 Ghidra 的反编译输出，LLM 仍然会在四维框架的多个维度上失败。
+
+### 6.4 REA 揭示的行业趋势
+
+REA 8 万+ Star 的速度说明社区对 AI 逆向工具链的需求是真实的。结合 ReArk（HarmonyOS/Android AI 逆向，500+ Star）等项目，行业正在经历一次范式转移：
+
+**从「LLM 理解汇编」到「Agent 驱动专业工具链」。**
 
 | 阶段 | 代表形态 | 四维框架覆盖 | 对保护方的威胁 |
 |------|---------|-------------|-------------|
 | 1.0 聊天辅助 | 把汇编贴给 ChatGPT | 单维度，取决于模型 | 低：需要人工判断 |
-| 2.0 工具集成 | LLM + IDA/Ghidra 脚本 | 1-2 维度 | 中：半自动化 |
-| 3.0 RAG 增强 | REA 的 RAG + 多 Agent | 3-4 维度 | 高：知识库可针对性构建 |
-| 4.0 端到端自主 | 未来的 Agent 集群 | 目标：全覆盖 | 极高：全自动 + 并行 + 通宵运行 |
+| 2.0 脚本集成 | LLM + IDA/Ghidra 脚本 | 1-2 维度 | 中：半自动化 |
+| **3.0 MCP 工具链** | **REA：Agent 通过 MCP 驱动 Ghidra/Hopper/IDA** | **3 维度（模式识别由工具覆盖）** | **高：专业工具 + LLM 理解力** |
+| 4.0 端到端自主 | Agent 集群 + 动态追踪 + 自动验证 | 目标：全覆盖 | 极高：全自动 + 并行 + 通宵 |
 
-REA 处在 **2.5-3.0** 的位置：它有 RAG 和多 Agent，但 Gate 阶段还依赖外部命令行工具，离真正的端到端自主还有距离。
+REA 已经处在 **3.0**：它不是用 LLM 模拟逆向工程师，而是**让 LLM 指挥真正的逆向工具**，拿到确定性的分析结果后再做判断。这比论文测试的「裸 LLM 看汇编」要强得多。
 
 ---
 
@@ -473,50 +487,52 @@ REA 处在 **2.5-3.0** 的位置：它有 RAG 和多 Agent，但 Gate 阶段还�
 
 ### 7.1 短期（1-2 年）：单一混淆将被自动化消灭
 
-论文已经证明 CFF 单独使用时多数 LLM 能做到 0-2 级还原。随着 REA 这类工具的成熟，**连「需要人把汇编贴进去」这一步都会被省掉**。`scan` 一条命令就够了。
+论文已经证明 CFF 单独使用时多数 LLM 能做到 0-2 级还原。REA 更进一步——Agent 通过 MCP 调用 Ghidra 拿到反编译伪代码，CFF 的 `while(true) { switch(state) {...} }` 结构在 Ghidra 的分析下已经被大幅简化，LLM 甚至不需要自己做「上下文整合」。
+
+**连「需要人把汇编贴进去」这一步都已经被省掉了。** `npx rea-agents setup` + 一句 prompt 就够了。
 
 **保护方应对**：P0 优先级，立即将单一 CFF 升级为 CFF + IS 组合。
 
-### 7.2 中期（2-4 年）：RAG + 领域知识库将侵蚀 BCF/MBA
+### 7.2 中期（2-4 年）：工具链 + 知识库将侵蚀 BCF/MBA
 
-当前 IS 是 LLM 的软肋（4-5 级），但这建立在一个前提上：LLM 在训练数据里很少见到 MBA 等价规则。REA 的 RAG 架构已经展示了绕过这个限制的路径——**把规则库喂进检索引擎**。
+当前 IS 是 LLM 的软肋（4-5 级），但这建立在一个前提上：**论文测的是裸 LLM 看汇编**。当 Agent 通过 REA 调用 Ghidra 反编译后，很多 IS 替换已经被 Ghidra 的优化 pass 部分还原了。
 
-笔者的判断是：一旦社区积累出足够大的 MBA 等价规则知识库（类似 D810G 的规则库但规模更大），IS 的抵抗力等级将从 4-5 级下降到 2-3 级。BCF 中的简单不透明谓词已经被 Claude 3.7 攻破，MBA 变种能多撑 2-3 年。
+笔者的判断是：Ghidra 反编译 + LLM 语义理解的组合，有可能把 IS 的攻击者知识等级从 4-5 级拉到 2-3 级。BCF 中的简单不透明谓词已经被 Claude 3.7 攻破，MBA 变种能多撑 2-3 年，但如果有人把 D810G 这样的 MBA 规则库集成到 REA 的工作流中（作为 MCP Skill），这个时间窗口会进一步缩短。
 
 **保护方应对**：开始研发不在公开规则库中的自定义 MBA 变种。混淆器的「私有规则」将成为竞争壁垒。
 
-### 7.3 中远期（3-5 年）：多 Agent 协作将系统性克服「叙事固着」
+### 7.3 中远期（3-5 年）：静态 + 动态联合分析将克服「叙事固着」
 
-Quarkslab 发现的「叙事固着」是当前 AI Agent 最深的缺陷。但 REA 的 propose-review-gate-adjudicate 流水线已经在架构层面回应了这个问题：**用角色对抗代替单一视角**。
+Quarkslab 发现的「叙事固着」是当前单 Agent 最深的缺陷。REA 已经在架构层面回应了这个问题的一半：**用确定性工具的 Evidence 约束 LLM 的推测**。Agent 不能凭空编造常量，因为 Evidence Ledger 会记录每个值的来源。
 
-笔者预测，未来 2-3 年内会出现专门针对逆向工程的多 Agent 框架，其中：
-- **Proposer Agent** 负责生成去混淆假设
-- **Adversarial Reviewer** 负责找反例推翻假设
-- **Symbolic Executor** 负责用 Z3/angr 验证等价性
-- **Oracle Agent** 负责用动态执行确认运行时行为
+另一半是动态分析。REA 支持 LLDB 追踪和进程行为捕获——当静态分析的假设与运行时观测矛盾时，Agent 有机会发现并修正错误。笔者预测，未来 2-3 年内会出现：
 
-当这四种角色跑在同一个循环里时，单点的「叙事固着」将不再致命。
+- **静态-动态对比验证**：Ghidra 反编译结果 vs LLDB 运行时追踪，自动发现矛盾
+- **符号执行集成**：Z3/angr 作为 MCP Provider，验证表达式等价性
+- **多 Agent 协作**：不同 Agent 负责不同维度的分析，用 Evidence Ledger 共享发现
 
-**保护方应对**：让混淆层与运行时检测层深度耦合，使得静态分析的结论无法直接迁移到动态执行。Quarkslab 建议的「返回看似合理的错误结果」在这个阶段将变得格外重要。
+当这些能力在同一个 MCP 生态中组合时，单点的「叙事固着」将不再致命。
+
+**保护方应对**：让混淆层与运行时检测层深度耦合，使得静态分析的结论无法直接迁移到动态执行。Quarkslab 建议的「返回看似合理的错误结果」在这个阶段将变得格外重要——它会同时污染静态 Evidence 和动态观测。
 
 ### 7.4 长期（5 年以上）：组合混淆 + 运行时绑定仍是持久防线
 
-即使上述所有进步都实现了，**组合混淆在论文中依然是全军覆没的 5 级**。原因是组合混淆同时考验四个维度，即使每个维度都有针对性的补强，跨维度的交互复杂性仍然是指数级的。
+即使上述所有进步都实现了，**组合混淆在论文中依然是全军覆没的 5 级**。原因是组合混淆同时考验四个维度，即使 Ghidra 反编译能简化 CFF，IS 的 MBA 替换又会让反编译输出重新变得难以理解——**反编译器的简化和混淆器的复杂化在同一个维度上对抗**。
 
 加上运行时绑定（TEE、设备 Keybox、服务端校验），保护方有一条可持续的防线：
 
-> **让「正确答案」依赖于攻击者无法在静态分析环境中获得的信息。**
+> **让「正确答案」依赖于攻击者无法在分析环境中获得的信息。**
 
-这条原则不会因为 LLM 的进步而失效，因为它从根本上限制了静态分析（无论是人还是 AI）能获得的信息量。
+这条原则不会因为 LLM 或工具链的进步而失效。REA 的 DX-Ball 案例能做到字节级重建，前提是目标函数的逻辑完全可以从二进制中静态提取。一旦正确行为依赖于运行时环境（设备密钥、服务端响应、TEE 隔离区），再精确的反编译也无法重建完整逻辑。
 
 ### 7.5 趋势总结
 
 | 时间 | 攻击侧进化 | 防御侧应对 | 四维框架状态 |
 |------|-----------|-----------|------------|
 | 现在 | 单 LLM 聊天式 | 组合混淆即可 | CFF 被攻破，其余稳固 |
-| 1-2 年 | 一键扫描工具成熟 | 淘汰单一 CFF | BCF 开始受压 |
-| 2-4 年 | RAG + 领域知识库 | 自定义 MBA + 私有规则 | IS 抵抗力下降 |
-| 3-5 年 | 多 Agent 协作框架 | 混淆与运行时耦合 | 模式识别被 RAG 部分补强 |
+| 1-2 年 | REA 等 MCP 工具链成熟 | 淘汰单一 CFF | BCF 开始受压 |
+| 2-4 年 | Ghidra 反编译 + 领域知识库 | 自定义 MBA + 私有规则 | IS 抵抗力下降 |
+| 3-5 年 | 静态 + 动态联合 Agent | 混淆与运行时检测耦合 | 模式识别被工具链覆盖 |
 | 5+ 年 | 端到端自主 Agent 集群 | 运行时绑定 + 服务端校验 | 组合混淆 + 动态绑定仍有效 |
 
 ---
@@ -690,7 +706,7 @@ cd challenges/llm-deobfuscation/
 4. **组合混淆是当前最有效的防线**：所有模型全部失败
 5. **AI Agent 有「叙事固着」和「产物伪造」两个缺陷**：保护方可以主动利用
 6. **LLM 的输出必须验证**：常量回二进制里查，表达式用求解器证等价
-7. **AI 逆向工具链正在系统性补强 LLM 短板**：REA 等项目用 RAG 补模式识别、用多 Agent 补叙事固着、用证据溯源补常量捏造，保护方不能只看「裸模型」的能力上限
+7. **AI 逆向工具链正在系统性补强 LLM 短板**：REA（81K+ Star）通过 MCP 让 Agent 直接驱动 Ghidra/Hopper/IDA，用专业工具的确定性分析替代 LLM 的猜测，用 Evidence Ledger 杜绝常量捏造。保护方不能只看「裸模型」的能力上限
 8. **组合混淆 + 运行时绑定是可持续防线**：即使工具链持续进化，跨维度的交互复杂性和运行时信息的不可获取性仍然是根本性的壁垒
 
 最后留一个**思考题**：在「编译时间最多翻倍、运行性能最多下降 15%」的约束下，你会选哪种组合？是 CFF + IS（编译时间 ×3，性能 -10%），BCF(MBA) + IS（编译时间 ×2，性能 -15%），还是全部叠加（编译时间 ×5，性能 -25%）？没有标准答案，但论文的数据能让这个选择更有依据。
@@ -707,7 +723,7 @@ cd challenges/llm-deobfuscation/
 | 4 | Quarkslab, ["Deobfuscation: recovering an OLLVM-protected program"](https://blog.quarkslab.com/deobfuscation-recovering-an-ollvm-protected-program.html) (2017) | 技术博客 | OLLVM 去混淆基线方法 |
 | 5 | 笔者, [《所有分支都指向同一个 switch，然后呢》](https://overkazaf.github.io/blogs/posts/ollvm-deobfuscation-engineering/) (2026-06) | 本博客 | OLLVM 实战去混淆 + 工具对比 |
 | 6 | 笔者, [D810G](https://github.com/overkazaf/D810G) (2026-10) | 开源项目 | Ghidra 反混淆框架，MBA 规则 + Z3 证明 |
-| 7 | mytechnotalent, [REA](https://github.com/mytechnotalent/rea) (2024-2026) | 开源项目 | RAG + 多 Agent 逆向工程助手 |
+| 7 | morluto, [REA](https://github.com/morluto/rea) (2026) | 开源项目 | MCP 逆向工程服务器，81K+ Star，集成 Ghidra/Hopper/IDA |
 | 8 | lkimuk, [ReArk](https://github.com/lkimuk/ReArk) (2026) | 开源项目 | HarmonyOS/Android AI 逆向分析工具 |
 
 ### 借鉴来源
@@ -719,8 +735,9 @@ cd challenges/llm-deobfuscation/
 | 5 类错误 | [1] | 引用 + 结合 D810G 经验补充 |
 | Agent 实验方法 | [2] | 总结关键发现 + 补充自研 Agent 经验 |
 | 测试函数设计 | [1] | 作为挑战 SO 的骨架 |
-| REA 架构设计 | [7] | 源码分析 + 四维框架映射 |
+| REA 架构与 MCP 合约 | [7] | 架构文档分析 + 四维框架映射 |
 | AI 逆向工具生态 | [7][8] | 趋势判断的佐证 |
+| DX-Ball 字节级重建案例 | [7] | 引用为 AI 逆向能力上限的实证 |
 
 ### 独立贡献
 
