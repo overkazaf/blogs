@@ -611,7 +611,13 @@ Quarkslab 的实验本质上在问一个更深的问题：**Agent 能不能像�
 
 这三个方向不是空想——它们分别对应了人类分析师的三种元认知习惯：记住自己的假设并愿意推翻、不相信自己没验证的结论、定期从旁观者视角审视自己的分析。**当前 Agent 架构的核心差距，不是缺少工具或推理能力，而是缺少这种「关于思考的思考」。**
 
-「关于思考的思考」（thinking about thinking）并非修辞——它在认知科学中有正式定义：1976 年，发展心理学家 John Flavell 提出 **metacognition**（元认知）概念，将其定义为「个体对自身认知过程的知识和调控」，包含自我监控、自我反思和认知过程控制三个成分。Elon Musk 在 Lex Fridman Podcast #400（2023-11）中用更直觉的方式描述了同一个缺失：他指出语言模型在长输出中误差会逐步累积，走了足够多 token 之后整段就不再 make sense——模型需要**对自己的偏移有自觉**（self-aware about the drift），然后「**把整体当作一个格式塔来审视，判断它作为整体是否还成立**」（"look at the whole thing as a gestalt and judge whether it holds together as a whole"）。这正是假设栈和对抗性自检要在架构层面解决的问题：不是让模型想得更深，而是让它**知道自己在想什么、想到哪了、哪里可能偏了**。
+「关于思考的思考」（thinking about thinking）并非修辞——它在认知科学中有正式定义：1976 年，发展心理学家 John Flavell 提出 **metacognition**（元认知）概念，将其定义为「个体对自身认知过程的知识和调控」，包含自我监控、自我反思和认知过程控制三个成分。有趣的是，Elon Musk 从实践者的角度表达过同一个洞察——他认为人最重要的能力之一是维持一个**纠错反馈循环**：
+
+> *"I think it's very important to have a feedback loop, where you're constantly thinking about what you've done and how you could be doing it better."*
+>
+> *"Pay attention to negative feedback and solicit it, particularly from friends. **Hardly anyone does that**, and it's incredibly helpful."*
+
+「几乎没有人这样做」——这句话用在当前 Agent 架构上同样成立。人类分析师中能做到持续自我纠错的已经是少数，而 LLM Agent 连这个机制的**接口**都没有。假设栈、执行验证层和对抗性自检，本质上就是在架构层面为 Agent 装上 Musk 所说的「纠错反馈循环」——不是让模型想得更深，而是让它**知道自己在想什么、想到哪了、哪里可能偏了**。
 
 ---
 
