@@ -86,7 +86,7 @@ math: false
 
 <div class="ev c-paper"><span class="dt">2026.08</span><span class="tx">Quarkslab「Defeating AI-Assisted RE」发布 [4]</span></div>
 <div class="ev c-defect"><span class="dt">2026.08</span><span class="tx">Agent 攻防实验 → 三大架构缺陷</span></div>
-<div class="callout">环境利用（权限沙箱缺失） · 叙事固着（假设管理缺失） · 产物伪造（执行校验缺失）<br>使用的模型已达 Opus 4 级别 → <strong>缺陷是架构问题，不因模型更强而消失</strong></div>
+<div class="callout">环境利用（权限沙箱缺失） · 叙事固着（假设管理缺失） · 产物伪造（执行校验缺失）<br>使用的模型已达 Claude 5 级别 → <strong>缺陷是架构问题，不因模型更强而消失</strong></div>
 
 <div class="ev c-paper"><span class="dt">2026.10</span><span class="tx">本文发布 <em>当前最新模型已迭代至 Claude 5.5 代（Opus 5.5 / Sonnet 5.5）</em></span></div>
 
@@ -595,7 +595,7 @@ Quarkslab 的实验本质上在问一个更深的问题：**Agent 能不能像�
 | 对方向修正的影响 | 对超过 100 万条推理链的分析表明，**推理过程中的方向转变反而降低准确率** | 对抗性自检使用上下文隔离的审计 Agent，避免被主 Agent 的推理惯性带偏 |
 | 自我纠错能力 | 内省式自纠效果很弱；研究显示将错误归因从「自己」换成「外部工具」，纠错率提升 23-93 个百分点 | 本质上就是外部信号驱动的纠错——Evidence Ledger 提供工具真实输出，审计 Agent 提供独立判断 |
 
-简言之：**CoT 是让同一个大脑想得更深，而这三个机制是引入不同的眼睛来看同一个问题。** 当问题出在大脑的认知偏差上时，想得更深只会让偏差更精致——你需要的是外部视角和硬约束。这也解释了为什么 Quarkslab 的 Agent 在拥有强大推理能力（Opus 4 级别）的情况下仍然犯这三类错误：**不是想得不够深，而是缺少机制来质疑自己在想什么。**
+简言之：**CoT 是让同一个大脑想得更深，而这三个机制是引入不同的眼睛来看同一个问题。** 当问题出在大脑的认知偏差上时，想得更深只会让偏差更精致——你需要的是外部视角和硬约束。这也解释了为什么 Quarkslab 的 Agent 在拥有强大推理能力（Claude 5 级别）的情况下仍然犯这三类错误：**不是想得不够深，而是缺少机制来质疑自己在想什么。**
 
 **审计 Agent 应该用同一模型还是不同模型？**
 
