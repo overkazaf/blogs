@@ -414,9 +414,9 @@ Agent 在 Docker 容器里翻到了 `SOLUTION.txt` 和 SSH 凭据，直接绕过
 
 这对真实场景有警示意义：Agent 可能会利用构建环境里残留的调试符号、CI/CD 日志、`.git` 历史来绕过保护。**保证发布环境干净**，这不是混淆的问题，而是运维的问题。
 
-#### 缺陷二：叙事固着
+#### 缺陷二：叙事固着（Narrative Fixation）
 
-笔者认为这是最深刻的发现。Agent 一旦形成某个「解释」，比如把 RASP 检测模块当成恶意软件、把某个函数认成另一种指令集，就**很少回头修正**，即使后来的证据明显矛盾。
+笔者认为这是最深刻的发现。所谓「叙事固着」，是指 **Agent 在分析早期形成了一个假设后，会把后续所有证据都往这个假设上靠，即使新证据明显矛盾也不会推翻最初的判断**——通俗地说，人会说「等等，我之前想错了」，而 Agent 不会。Quarkslab 观察到 [2]：Agent 一旦形成某个「解释」，比如把 RASP 检测模块当成恶意软件、把某个函数认成另一种指令集，就**很少回头修正**。
 
 笔者在开发 [re-agent](https://github.com/overkazaf/re-agent)（终端环境下的 RE/CTF Agent）时反复观察到同样的现象 [12]。re-agent 内置 planner/executor/researcher 三个模型席位、24 个本地逆向工具（`/scan`、`/hex`、`/decode`、`/entropy`、`/mitigations`、`/carve`、`/apk`、`/r2` 等），支持 9 种工作流模式（off、auto、specialist、caveman、research、writeup、ctf、reverse、engineering），并通过 retool 机制集成外部工具链（radare2、JADX、Ghidra、Burp、mitmproxy、angr、Unicorn、unidbg、Frida）。它的 live dashboard 实时显示数据流、工具调用、计划状态、推理过程和 token 消耗——正是这个 dashboard 让笔者能直观地观察到「叙事固着」的发生过程：前 5 分钟形成的假设，会主导后面 75 分钟的分析方向。在一次 Android SO 分析中，planner 模型在第一轮就把一段 RASP 初始化代码误判为「加密密钥派生函数」，之后 executor 的所有工具调用——从 Frida hook 到内存 dump——都围绕密钥搜索展开，即使 hook 返回的数据与密钥派生完全无关，它仍在试图把结果「解释」进原有假设。re-agent 的 context compaction（snapcompact）机制在一定程度上缓解了这个问题：通过定期压缩上下文快照，让 researcher 席位有机会从「干净」的视角重新审视已有证据，而不是被 executor 的叙事链锁定。
 
