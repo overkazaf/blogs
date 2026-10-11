@@ -88,7 +88,7 @@ math: false
 <div class="ev c-defect"><span class="dt">2026.08</span><span class="tx">Agent 攻防实验 → 三大架构缺陷</span></div>
 <div class="callout">环境利用（权限沙箱缺失） · 叙事固着（假设管理缺失） · 产物伪造（执行校验缺失）<br>使用的模型已达 Opus 4 级别 → <strong>缺陷是架构问题，不因模型更强而消失</strong></div>
 
-<div class="ev c-paper"><span class="dt">2026.10</span><span class="tx">本文发布 <em>当前最新模型已迭代至 Opus 4 / Sonnet 5 代</em></span></div>
+<div class="ev c-paper"><span class="dt">2026.10</span><span class="tx">本文发布 <em>当前最新模型已迭代至 Claude 5.5 代（Opus 5.5 / Sonnet 5.5）</em></span></div>
 
 <div class="ph p-fix">改良方向（开放问题）</div>
 
