@@ -43,6 +43,14 @@ C/C++, Go, JavaScript, Python, Java
 
 ### Projects
 
+| Project | Stack | Description |
+|---------|-------|-------------|
+| [D810G](https://github.com/overkazaf/D810G) | Python · Java | Ghidra deobfuscation framework — 6 rule sets with 96 Z3-verified MBA simplification rules, CFF deflattening (Unicorn emulation, OLLVM + Tigress), opaque predicate elimination, BCF removal, string decryption, VM devirtualization. 7-pass pipeline with fixpoint convergence. Standalone CLI + headless mode. x86_64 / ARM64 / ARM32. 398 tests. |
+| [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra) | Python · Java | Interactive symbolic execution plugin for Ghidra via angr + Z3. 4 symbolization methods (argv, function args, registers, memory). Find/Avoid targets from Listing or Decompiler views. Up to 5 alternative solutions per query. Veritesting + optional Unicorn fast concrete execution. Platforms: Mach-O x86_64, ELF x86_64, Android .so ARM/ARM64. |
+| [unpack](https://github.com/overkazaf/unpack) | Python | Automated Android unpacking — 24 packer vendors (360, Tencent Legu, Bangcle, Ijiami, NetEase Yidun, Baidu, Alibaba, DexProtector, etc.). 3 engines: Memory (`/proc/pid/maps`+`mem`), Frida (4 strategies, 7 anti-detection bypasses), eBPF (bpftrace uprobes on `libart.so`). 7-step DEX repair. Packer scanner with 6-dimension weighted scoring. LLM integration: `unpack analyze \| claude -p`. |
+| [cap](https://github.com/overkazaf/cap) | Go · Svelte | MITM proxy for reverse engineering — LLM-ready JSONL output (sign params auto-tagged), signature algorithm inference (MD5/SHA1/SHA256/HMAC), jadx source correlation (Retrofit annotations + OkHttp patterns → file/class/method/line), 5-language codegen (cURL, Python, Go, Java, JS). Native desktop GUI (Wails + Svelte). ADB cert install (3 strategies). HTTP/HTTPS/WebSocket/SSE/schema-less protobuf. |
+| [re-agent](https://github.com/overkazaf/re-agent) | Go | Terminal RE/CTF agent — 3 AI model seats (planner / executor / researcher), 9 workflow modes, 24 built-in tools (`/scan`, `/hex`, `/decode`, `/entropy`, `/r2`, etc.). Live dashboard (dataflow, tools, plan, reasoning, telemetry). Retool integration: radare2, JADX, Ghidra, Burp, mitmproxy, angr, Unicorn, unidbg, Frida. Context compaction (snapcompact). Remote mode with encrypted SSH. |
+
 🔬 [Reverse Engineering Blog](https://overkazaf.github.io/reverse_engineering) — Writeups, tools, and methodology for binary analysis, DRM research, and protocol reverse engineering.
 
 ### Contact
