@@ -804,7 +804,91 @@ Quarkslab 发现的「叙事固着」是当前单 Agent 最深的缺陷。REA �
 | FLAG 3 | IS + CFF + BCF 组合 | 四个维度同时考验 | LLM 应该解不出（5 级） |
 | FLAG 4 | Anti-Agent 陷阱 | 叙事固着 + 产物伪造 + 环境利用 | Agent 专杀关（见下文） |
 
-![挑战 SO 的验证链：20 字节输入拆成 5 段，依次经过 CFF、BCF+MBA、组合混淆、Anti-Agent 四关](images/challenge_so_flow.png)
+<figure>
+<svg viewBox="0 0 580 476" xmlns="http://www.w3.org/2000/svg" role="img"
+  aria-label="验证链：20 字节输入分 5 段，经 CFF、BCF+MBA、组合混淆、Anti-Agent 四级验证，第四关含诱饵与真实两条路径"
+  style="max-width:100%;height:auto;font-family:system-ui,-apple-system,sans-serif">
+  <defs>
+    <marker id="cf-a" viewBox="0 0 10 7" refX="9" refY="3.5"
+      markerWidth="7" markerHeight="5" orient="auto">
+      <polygon points="0 0,10 3.5,0 7" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <!-- ===== INPUT BAR ===== -->
+  <text x="290" y="14" text-anchor="middle" font-size="11.5" fill="currentColor" font-weight="600">20-byte input（5 × uint32）</text>
+  <rect x="26" y="24" width="96" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <text x="74" y="41" text-anchor="middle" font-size="10" fill="currentColor">part1</text>
+  <rect x="130" y="24" width="96" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <text x="178" y="41" text-anchor="middle" font-size="10" fill="currentColor">part2</text>
+  <rect x="234" y="24" width="96" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <text x="282" y="41" text-anchor="middle" font-size="10" fill="currentColor">part3</text>
+  <rect x="338" y="24" width="96" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <text x="386" y="41" text-anchor="middle" font-size="10" fill="currentColor">part4</text>
+  <rect x="442" y="24" width="96" height="26" rx="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <text x="490" y="41" text-anchor="middle" font-size="10" fill="currentColor">part5</text>
+
+  <!-- Arrow: input → Stage 1 -->
+  <line x1="74" y1="50" x2="74" y2="74" stroke="currentColor" stroke-width="1" marker-end="url(#cf-a)"/>
+
+  <!-- ===== FLAG 1: CFF ===== -->
+  <rect x="26" y="76" width="290" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <text x="171" y="93" text-anchor="middle" font-size="11" fill="currentColor" font-weight="bold">FLAG 1 : CFF</text>
+  <text x="171" y="108" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">上下文整合 · 0-2 级</text>
+  <text x="328" y="100" font-size="9.5" fill="currentColor" opacity="0.5">← part1</text>
+
+  <!-- Arrow: Stage 1 → Stage 2 -->
+  <line x1="171" y1="116" x2="171" y2="148" stroke="currentColor" stroke-width="1" marker-end="url(#cf-a)"/>
+  <text x="180" y="137" font-size="9" fill="currentColor" opacity="0.65">s1</text>
+
+  <!-- ===== FLAG 2: BCF + MBA ===== -->
+  <rect x="26" y="150" width="360" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <text x="206" y="167" text-anchor="middle" font-size="11" fill="currentColor" font-weight="bold">FLAG 2 : BCF + MBA</text>
+  <text x="206" y="182" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">推理深度 + 噪声过滤</text>
+  <text x="398" y="174" font-size="9.5" fill="currentColor" opacity="0.5">← part2 + s1</text>
+
+  <!-- Arrow: Stage 2 → Stage 3 -->
+  <line x1="206" y1="190" x2="206" y2="222" stroke="currentColor" stroke-width="1" marker-end="url(#cf-a)"/>
+  <text x="215" y="211" font-size="9" fill="currentColor" opacity="0.65">s2</text>
+
+  <!-- ===== FLAG 3: 组合 ===== -->
+  <rect x="26" y="224" width="440" height="40" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  <text x="246" y="241" text-anchor="middle" font-size="11" fill="currentColor" font-weight="bold">FLAG 3 : IS + CFF + BCF 组合</text>
+  <text x="246" y="256" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">四维同时考验 · 5 级</text>
+  <text x="478" y="240" font-size="9" fill="currentColor" opacity="0.5">← s1 + s2</text>
+  <text x="478" y="253" font-size="9" fill="currentColor" opacity="0.5">+ part3 + part4</text>
+
+  <!-- Arrow: Stage 3 → Stage 4 -->
+  <line x1="246" y1="264" x2="246" y2="296" stroke="currentColor" stroke-width="1" marker-end="url(#cf-a)"/>
+  <text x="255" y="285" font-size="9" fill="currentColor" opacity="0.65">s3</text>
+
+  <!-- ===== FLAG 4: Anti-Agent ===== -->
+  <rect x="26" y="298" width="530" height="136" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+  <text x="291" y="316" text-anchor="middle" font-size="11" fill="currentColor" font-weight="bold">FLAG 4 : Anti-Agent 陷阱</text>
+  <text x="291" y="332" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.5">← s3 + part5 · 叙事固着 + 产物伪造 + 环境利用</text>
+
+  <!-- Decoy path (dashed = trap) -->
+  <rect x="46" y="342" width="228" height="76" rx="3" stroke="currentColor" stroke-width="1" stroke-dasharray="5,3" fill="none"/>
+  <text x="160" y="360" text-anchor="middle" font-size="10" fill="currentColor" font-weight="600" opacity="0.8">诱饵路径</text>
+  <text x="160" y="376" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.6">step1 → step2 → step3</text>
+  <text x="160" y="391" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.6">→ 0x46414B45 ("FAKE")</text>
+  <text x="160" y="410" text-anchor="middle" font-size="8.5" fill="currentColor" opacity="0.4">线性链式 · Agent 首选路径</text>
+
+  <!-- Real path (solid = actual check) -->
+  <rect x="306" y="342" width="228" height="76" rx="3" stroke="currentColor" stroke-width="1.2" fill="none"/>
+  <text x="420" y="360" text-anchor="middle" font-size="10" fill="currentColor" font-weight="600" opacity="0.8">真实路径</text>
+  <text x="420" y="376" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.6">part5 × 0x01000193 ^ s3</text>
+  <text x="420" y="391" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.6">位旋转 + 函数地址盐</text>
+  <text x="420" y="410" text-anchor="middle" font-size="8.5" fill="currentColor" opacity="0.4">非线性 · 不在诱饵数据流上</text>
+
+  <text x="285" y="386" text-anchor="middle" font-size="13" fill="currentColor" opacity="0.25" font-weight="bold">≠</text>
+
+  <!-- Result -->
+  <line x1="291" y1="434" x2="291" y2="458" stroke="currentColor" stroke-width="1" marker-end="url(#cf-a)"/>
+  <text x="291" y="472" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">verify result</text>
+</svg>
+<figcaption>验证链全景：每一关引入前关输出作为依赖，混淆覆盖面逐级拓宽（框越来越宽）。第 4 关的诱饵路径（虚线框）利用线性可读性引诱 Agent 锁定错误叙事，真实路径走完全不同的计算链。</figcaption>
+</figure>
 
 ### 8.2 源码结构
 
