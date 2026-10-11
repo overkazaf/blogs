@@ -22,6 +22,92 @@ math: false
 > - 笔者对逆向工程趋势的 4 个阶段性判断
 > - 作为保护方，下一步应该怎么调整混淆策略
 
+<style>
+.re-tl-fig{margin:2em auto;max-width:720px}
+.re-tl-fig figcaption{text-align:center;font-weight:700;font-size:1.05em;margin-bottom:.3em;color:var(--primary,#d4d4d4)}
+.re-tl-fig .re-tl-sub{text-align:center;font-size:.82em;color:var(--secondary,#888);margin-bottom:1.2em}
+.re-tl{position:relative;padding:0 0 0 8.5em}
+.re-tl::before{content:'';position:absolute;left:7.8em;top:0;bottom:0;width:2px;background:var(--border,#333)}
+.re-tl .ph{position:relative;margin:1.4em 0 .4em;font-weight:700;font-size:.95em;color:var(--primary,#d4d4d4);padding-left:1.8em}
+.re-tl .ph::before{content:'';position:absolute;left:-.72em;top:.45em;width:10px;height:10px;border-radius:50%;z-index:2}
+.re-tl .ph.p-dev::before{background:#4a9eff}
+.re-tl .ph.p-agent::before{background:#f59e0b}
+.re-tl .ph.p-defect::before{background:#ef4444}
+.re-tl .ph.p-fix::before{background:#a855f7}
+.re-tl .ev{position:relative;display:flex;align-items:baseline;margin:.2em 0;line-height:1.65;font-size:.9em}
+.re-tl .ev .dt{position:absolute;left:-8.5em;width:7em;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.82em;color:var(--secondary,#888)}
+.re-tl .ev::before{content:'';position:absolute;left:-.72em;top:.55em;width:8px;height:8px;border-radius:50%;z-index:2}
+.re-tl .ev.c-model::before{background:#4a9eff}
+.re-tl .ev.c-paper::before{background:#22c55e}
+.re-tl .ev.c-tool::before{background:#f59e0b}
+.re-tl .ev.c-defect::before{background:#ef4444}
+.re-tl .ev.c-future::before{background:#a855f7}
+.re-tl .ev .tx{color:var(--primary,#d4d4d4)}
+.re-tl .ev .tx em{font-style:normal;color:var(--secondary,#888);font-size:.88em}
+.re-tl .gap{position:relative;margin:.8em 0;padding:.45em 0 .45em 1.8em;border-left:2px dashed #ef4444;margin-left:-.72em;font-size:.82em;color:#ef4444;font-weight:600}
+.re-tl .callout{margin:.3em 0 .3em 1.1em;padding:.4em .8em;border-radius:4px;font-size:.82em;line-height:1.5;background:rgba(239,68,68,.1);border-left:3px solid #ef4444;color:var(--primary,#d4d4d4)}
+.re-tl .callout-purple{background:rgba(168,85,247,.1);border-left-color:#a855f7}
+.re-tl-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:.4em 1.2em;margin-top:1em;font-size:.78em;color:var(--secondary,#888)}
+.re-tl-legend span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.3em;vertical-align:middle}
+.re-tl-legend .lg-m::before{background:#4a9eff}
+.re-tl-legend .lg-p::before{background:#22c55e}
+.re-tl-legend .lg-t::before{background:#f59e0b}
+.re-tl-legend .lg-d::before{background:#ef4444}
+.re-tl-legend .lg-f::before{background:#a855f7}
+@media(max-width:600px){.re-tl{padding-left:6.5em}.re-tl::before{left:5.8em}.re-tl .ev .dt{left:-6.5em;width:5em;font-size:.75em}}
+</style>
+
+<figure class="re-tl-fig">
+<figcaption>图：AI × 逆向工程 —— 从模型评测到 Agent 架构缺陷</figcaption>
+<div class="re-tl-sub">本文涉及的关键事件时间线，纵轴为时间，颜色表示事件类型</div>
+
+<div class="re-tl">
+
+<div class="ph p-dev">基础研究 → 模型评测期</div>
+
+<div class="ev c-paper"><span class="dt">2017</span><span class="tx">Quarkslab 发布 OLLVM 去混淆技术研究 [4]</span></div>
+
+<div class="ev c-model"><span class="dt">2024.05</span><span class="tx">GPT-4o &nbsp;<em>论文评测的 8 个模型从此开始</em></span></div>
+<div class="ev c-model"><span class="dt">2024.12</span><span class="tx">o1-Pro</span></div>
+<div class="ev c-model"><span class="dt">2025.01</span><span class="tx">DeepSeek R1 <em>671B MoE / 37B 激活</em></span></div>
+<div class="ev c-model"><span class="dt">2025.02</span><span class="tx">Claude 3.7 Sonnet · Grok 3 <em>论文评测窗口结束</em></span></div>
+<div class="ev c-paper"><span class="dt">2025.05</span><span class="tx">Promon 四维框架论文 [1] <em>arXiv:2505.19887</em></span></div>
+
+<div class="gap">▲ 论文模型截止于此 ——— 约 19 个月代差 ——— 以下为 2026 最新 ▼</div>
+
+<div class="ph p-agent">Agent 时代</div>
+
+<div class="ev c-tool"><span class="dt">2026.H1</span><span class="tx">REA 达到 81K+ Star [3]，MCP 架构确立 <em>Phase 3.0</em></span></div>
+<div class="ev c-paper"><span class="dt">2026.04</span><span class="tx">BinDeObfBench 去混淆基准发布 [2] <em>arXiv:2604.08083</em></span></div>
+<div class="ev c-model"><span class="dt">2026.06</span><span class="tx">GPT-5 <em>~2T 参数</em></span></div>
+<div class="ev c-tool"><span class="dt">2026.06</span><span class="tx">笔者 OLLVM 去混淆实战博客 [5]</span></div>
+
+<div class="ph p-defect">架构缺陷暴露</div>
+
+<div class="ev c-paper"><span class="dt">2026.08</span><span class="tx">Quarkslab「Defeating AI-Assisted RE」发布 [4]</span></div>
+<div class="ev c-defect"><span class="dt">2026.08</span><span class="tx">Agent 攻防实验 → 三大架构缺陷</span></div>
+<div class="callout">环境利用（权限沙箱缺失） · 叙事固着（假设管理缺失） · 产物伪造（执行校验缺失）<br>使用的模型已达 Opus 4 级别 → <strong>缺陷是架构问题，不因模型更强而消失</strong></div>
+
+<div class="ev c-model"><span class="dt">2026.10</span><span class="tx">Opus 4.6 / Sonnet 5.5 <em>本文发布</em></span></div>
+
+<div class="ph p-fix">改良方向（开放问题）</div>
+
+<div class="ev c-future"><span class="dt">→</span><span class="tx">假设栈 <em>Hypothesis Stack — 矛盾触发推理链重评</em></span></div>
+<div class="ev c-future"><span class="dt">→</span><span class="tx">执行验证层 <em>Execution Verifier — 校验 Agent 自生成产物</em></span></div>
+<div class="ev c-future"><span class="dt">→</span><span class="tx">对抗性自检 <em>Adversarial Self-Check — 上下文隔离的审计 Agent</em></span></div>
+<div class="callout callout-purple">核心差距不是工具或推理能力，而是缺少「关于思考的思考」—— §4.4</div>
+
+</div>
+
+<div class="re-tl-legend">
+<span class="lg-m">模型发布</span>
+<span class="lg-p">论文 / 基准</span>
+<span class="lg-t">工具 / 项目</span>
+<span class="lg-d">架构缺陷</span>
+<span class="lg-f">改良方向</span>
+</div>
+</figure>
+
 ## 〇、摘要
 
 2026 年，一个名为 REA 的开源项目在半年内拿到了 **8 万+ Star**，让 AI Agent 通过 MCP 协议直接驱动 Ghidra、Hopper、IDA——不是「把汇编贴给 LLM 猜」，而是让 Agent 拥有了逆向工程师的完整工具箱。
