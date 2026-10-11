@@ -16,6 +16,7 @@ Currently diving deep into **Widevine L1 Keybox dumping** — exploring trusted 
 |-----------|----------|------------|
 | 🔐 **DRM Security** | Widevine · FairPlay · PlayReady · White-box Crypto · CENC · EME | L3 keybox DFA mass production, Chrome CDM white-box AES bypass, Netflix MSL protocol RE, FairPlay decryption chain |
 | 🔧 **Reverse Engineering & Binary Security** | Android Native · TEE · Signature Algorithms · Device Fingerprinting · APK Hardening | Douyin MetaSec signature RE, ARM TrustZone EL0→EL3 attack surface, mainstream hardening analysis |
+| 🔩 **Firmware & Embedded Security** | RP2350 · ESP32 · ARM Cortex-M · TrustZone-M · Secure Boot · HMAC-SHA256 | RP2350 hardware DRM prototype (key hierarchy + TrustZone-M + 8-attack self-assessment), MCU firmware extraction & diffing, embedded crypto implementation audit |
 | 🤖 **AI Agent** | LLM-assisted RE · Automated Fuzzing · AI in Offense/Defense | Exploring — boundaries and practices of AI in security research |
 
 ### Education
@@ -36,7 +37,9 @@ C/C++, Go, JavaScript, Python, Java
 ### Interests
 
 - DRM internals & content protection systems
-- Reverse engineering (Android native, TEE, embedded)
+- Reverse engineering (Android native, TEE, embedded, firmware)
+- Firmware & embedded security (RP2350/Pico 2, ESP32, ARM Cortex-M; built a [complete hardware DRM prototype on RP2350](https://overkazaf.github.io/blogs/posts/rp2350-diy-audio-drm-from-scratch/) with HMAC-SHA256 key hierarchy, TrustZone-M secure boot, and 8-attack self-assessment)
+- ARM TrustZone attack surface research (EL0→EL3, [TA extraction & secure world RE](https://overkazaf.github.io/blogs/posts/arm-trustzone-el0-to-el3/))
 - Vulnerability research & exploit development
 - Cryptography in real-world protocols
 - AI Agent practices in security research
