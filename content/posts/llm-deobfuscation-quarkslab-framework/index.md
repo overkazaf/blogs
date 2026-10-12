@@ -234,9 +234,140 @@ REA 是一个 MCP（Model Context Protocol）服务器，让 AI Agent 通过标�
 
 这不是「LLM 猜测汇编含义」，而是 **Agent 通过 MCP 调用 Ghidra 获取精确的伪代码和调用图，再用 LLM 理解和重建逻辑**。三个设计精华值得展开：
 
-1. **MCP 标准化**：所有逆向工具（Ghidra、Hopper、IDA）通过统一的 MCP 接口暴露能力，Agent 不需要为每个工具写适配脚本。换工具后端不影响 Agent 逻辑——这与传统的「写 IDA Python 脚本 → 手工解析输出 → 再贴给 LLM」的碎片化工作流有本质区别。
-2. **Evidence Ledger（证据账本）**：论文发现 DeepSeek R1 会凭空编造 `0xDEADBEEF` 这类「程序员调试占位数」[1]。REA 的应对是**每条数据都标记来源**（"Ghidra 反编译第 42 行"），附带覆盖范围和已知局限。LLM 的推理结论可以被追溯到具体的工具输出，无法偷偷塞入训练数据里「借」来的常量。
-3. **按需查询 vs 一次性塞入**：传统做法是把整个反汇编输出塞进 LLM 的上下文窗口，容易超限且噪声极大。REA 让 Agent 像人类分析师一样逐步深入：先看导出表定位入口 → 反编译关键函数 → 追交叉引用 → 按需展开调用链。每一步只请求需要的信息，既节省上下文空间，也让 LLM 能专注于当前问题。
+**精华 1：MCP 标准化——ToolContract + Provider 抽象**
+
+所有逆向工具通过统一的 MCP 接口暴露能力。REA 的核心类 `EvidenceMcpServer` 继承自 MCP SDK 的 `McpServer`，每个工具通过 `ToolContract` 注册：
+
+```ts
+// REA 的工具合约定义（简化自 src/contracts/toolContractTypes.ts）
+interface ToolContract<Name, Input, Output> {
+  name: Name;                    // "procedure_pseudo_code"
+  kind: ToolKind;                // "official-proxy" | "enhanced" | "native-provider"
+  inputSchema: ZodSchema<Input>; // Zod 验证的输入 schema
+  outputSchema: ZodSchema<Output>;
+  annotations: {
+    readOnlyHint: boolean;       // 是否只读（指导 Agent 规划）
+    destructiveHint: boolean;    // 是否有副作用
+    idempotentHint: boolean;     // 是否幂等
+  };
+}
+
+// 注册：遍历合约数组，统一绑定到 MCP 服务器
+for (const contract of TOOL_CONTRACTS) {
+  server.registerTool(contract.name, toolRegistrationOptions(contract), handler);
+}
+```
+
+后端差异通过 `AnalysisProvider` 接口抹平——Ghidra、Hopper、IDA 各自实现同一个 `AnalysisClient.execute(operation, parameters)` 方法，Agent 侧完全无感：
+
+```ts
+// Provider 抽象（简化自 src/application/AnalysisProvider.ts）
+interface AnalysisProvider {
+  identity(): ProviderIdentity;          // { id: "ghidra", name: "Ghidra", version: "11.3" }
+  capabilities(): CapabilityDescriptor[];
+  createClient(target): AnalysisClient;  // 返回统一的操作接口
+}
+
+interface AnalysisClient {
+  execute(operation: string, params: JsonObject): Result<AnalysisExecution, AnalysisError>;
+}
+
+// Agent 调用时只需指定 provider: "auto"，REA 自动选择可用后端
+// 换 Ghidra 为 IDA 不影响任何 Agent 逻辑
+```
+
+这与传统的「写 IDA Python 脚本 → 手工解析输出 → 再贴给 LLM」有本质区别。
+
+**精华 2：Evidence Ledger——内容寻址的证据账本**
+
+论文发现 DeepSeek R1 会凭空编造 `0xDEADBEEF` 这类常量 [1]。REA 的应对是：**每条工具输出都封装为一条 Evidence 记录**，用内容的 SHA-256 哈希作为 ID，天然防篡改：
+
+```ts
+// Evidence 记录（简化自 src/domain/evidence.ts）
+interface Evidence {
+  evidence_id: string;           // "ev_<sha256>" — 内容寻址，确定性生成
+  subject: {                     // 分析目标
+    name: string;                // "libsign.so"
+    digest: { sha256: string };  // 二进制哈希
+    architecture: string;        // "x86_64"
+  };
+  provider: {                    // 数据来源
+    id: string;                  // "ghidra"
+    name: string;
+    version: string;
+  };
+  operation: string;             // "procedure_pseudo_code"
+  parameters: JsonObject;        // 精确的调用参数
+  normalized_result: JsonValue;  // 结构化输出
+  confidence: "observed" | "derived" | "inferred";
+  locations: EvidenceLocation[]; // 地址 / 地址范围 / 文件偏移
+  limitations: string[];         // 已知局限（"虚函数调用未解析"）
+  evidence_links: string[];      // 引用其他 Evidence ID → 形成 DAG
+}
+
+// 每次工具调用的返回路径：
+// handler → createEvidence(target, provider, observation)
+//         → recordEvidence(evidence)   // 写入 Ledger
+//         → toEvidenceToolResult(...)  // 返回给 LLM
+```
+
+`evidence_links` 字段让 Evidence 之间形成有向无环图（DAG）：反编译结果引用二进制加载记录，交叉引用结果引用反编译记录。LLM 的任何推理结论都可以沿着链条追溯到原始工具输出——**常量是 Ghidra 在地址 `0x4012a0` 反编译出来的，还是 LLM 自己编的，一查便知。**
+
+**精华 3：原子化工具 + 组合工作流——按需查询**
+
+传统做法是把整个反汇编塞进上下文窗口。REA 把能力拆成两层：底层原子工具和上层组合工作流。
+
+```
+底层原子工具（official-proxy，直接映射到 Ghidra/IDA 操作）：
+├── 导航：list_procedures, list_segments, list_strings, list_names
+├── 检查：procedure_pseudo_code, procedure_assembly, procedure_info
+├── 引用：xrefs, procedure_callers, procedure_callees
+├── 搜索：search_procedures, search_strings (literal / regex)
+└── 标注：set_comment, set_bookmark, annotate_native_function
+
+上层组合工具（enhanced，串联多个原子操作 + 逐步返回 Evidence）：
+├── trace_feature    → strings → procedures → xrefs（特征追踪）
+├── get_call_graph   → 从符号出发遍历 callers/callees（调用图）
+├── trace_call_path  → 找 start 到 goal 之间的调用路径
+├── batch_decompile  → 并发反编译多个函数
+└── binary_overview  → 元数据 + 统计（分析入口点）
+```
+
+Agent 的典型操作链——以分析 `libsign.so` 的签名校验为例：
+
+```
+Agent                            REA (MCP Server)               Ghidra
+  │                                  │                              │
+  ├─ binary_overview("libsign.so") ──►│─── 加载 + 分析 ──────────────►│
+  │◄── Evidence: 42 functions,       │◄── segments, exports ────────│
+  │    3 segments, arch=arm64        │                              │
+  │                                  │                              │
+  ├─ list_procedures() ─────────────►│                              │
+  │◄── Evidence: [verify_sig,        │                              │
+  │    init_ctx, get_dev_id, ...]    │                              │
+  │                                  │                              │
+  │  "verify_sig 像是入口"            │                              │
+  ├─ procedure_pseudo_code ─────────►│─── 反编译 ──────────────────►│
+  │   ("verify_sig")                 │◄── 伪代码 ─────────────────│
+  │◄── Evidence: if (hmac(...)==..)  │                              │
+  │    confidence: "observed"        │                              │
+  │    provider: ghidra 11.3         │                              │
+  │                                  │                              │
+  │  "hmac 的 key 从哪来？"           │                              │
+  ├─ xrefs("key", direction: ───────►│─── 交叉引用查询 ────────────►│
+  │        "incoming")               │◄── 引用列表 ────────────────│
+  │◄── Evidence: key ← get_dev_id() │                              │
+  │    evidence_links: [ev_abc...]   │  ← 引用了上一条 Evidence      │
+  │                                  │                              │
+  ├─ procedure_pseudo_code ─────────►│                              │
+  │   ("get_dev_id")                 │                              │
+  │◄── Evidence: reads /proc/cpuinfo │                              │
+  │                                  │                              │
+  │  【结论】key = SHA256(cpuinfo)    │                              │
+  │  全链条 Evidence 可追溯 ✓         │                              │
+```
+
+每一步只请求需要的信息，既节省上下文空间，也让 LLM 能专注于当前问题。`annotations` 中的 `readOnlyHint`、`idempotentHint` 等元数据进一步帮助 Agent 规划调用顺序——只读工具可以随意重试，有副作用的工具需要谨慎调用。
 
 > ⚠️ **国内用户特别提醒**
 >
