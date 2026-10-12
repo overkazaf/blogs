@@ -217,7 +217,7 @@ math: false
 
 ## 二、AI 逆向工具链的演进：以 REA 为例
 
-[REA（Reverse Engineer Anything）](https://github.com/morluto/rea) 的口号是 **"One MCP for reverse engineering across binaries, applications, and runtime behavior."**——一个 MCP 协议，逆向一切。
+[REA（Reverse Engineer Anything）](https://github.com/morluto/rea) 的口号是 **"One MCP for reverse engineering across binaries, applications, and runtime behavior."**——一个 MCP 协议，逆向一切。项目作者 **morluto** 以匿名身份活跃在 GitHub 上，其它公开信息不多，但 REA 本身的代码质量和架构设计（TypeScript 实现、MIT 协议）说明作者对 MCP 生态和逆向工具链有深入理解。2026 年 10 月初 REA 登上 GitHub Trending 后迅速出圈，YouTube 上 Matthew Berman 等科技博主的推介进一步推高了关注度。
 
 ### 2.1 REA 是什么
 
@@ -283,7 +283,7 @@ REA 已经处在 **3.0**：它不是用 LLM 模拟逆向工程师，而是**让 
 
 ### 3.1 为什么这篇论文值得读
 
-大多数「LLM + 逆向」的讨论停留在演示层面：贴一段代码，截一张图，宣布混淆已死。Promon 团队的论文（arXiv:2505.19887）做得更严谨：
+大多数「LLM + 逆向」的讨论停留在演示层面：贴一段代码，截一张图，宣布混淆已死。Promon 团队的论文（arXiv:2505.19887）做得更严谨。**[Promon](https://promon.co/)** 是一家挪威移动安全公司，2006 年成立于奥斯陆，技术源自 SINTEF 和奥斯陆大学的研究，核心产品 Promon SHIELD 是一套运行时应用自保护（RASP）方案，服务于银行、游戏、医疗等行业。论文的三位作者 **Anton Tkachenko、Dmitrij Suskevic 和 Benjamin Adolphi** 均来自 Promon，他们对混淆技术有丰富的一线经验——毕竟 Promon 自身就是混淆方案的提供商，这让论文在评估框架的设计上兼顾了攻防双方的视角。具体来说，他们：
 
 - 同一段 C 代码，用 OLLVM 编译出 5 个版本（无混淆 / BCF / IS / CFF / 全部组合）
 - 让 8 个主流 LLM 分别去还原 **x86_64 汇编**（不是源码，也不是伪代码）
@@ -516,7 +516,9 @@ $ python -m d810g_engine cli verify "(n + 0xBAAAD0BF) * (5 & n)" "(n + 0xDEADBEE
 
 ## 四、Quarkslab 的攻防实验
 
-论文是人把汇编贴给 LLM。Quarkslab 更进一步 [2]：把 Claude Code Agent 直接放进沙箱，让它**自己动手**攻击混淆后的二进制。
+**[Quarkslab](https://quarkslab.com/)** 是一家法国网络安全公司，2011 年由 Fred Raynal（MISC 杂志创始人、SSTIC 联合创始人）在巴黎创立，目前约 100 名员工（巴黎和雷恩），2026 年被 Airbus 收购。Quarkslab 在混淆领域有深厚积累：早在 2014 年，Francis Gabriel 就发表过基于 Miasm 框架的 OLLVM 去混淆研究（至今仍是该领域引用最多的技术博客之一）[4]；其商业产品 Epona 是一套基于 LLVM 的混淆编译器。这篇博客的作者 **Remy Salim** 于 2026 年 8 月发表了「Defeating AI-Assisted Reverse Engineering」[2]，把实验从「人贴汇编给 LLM」推进到了「Agent 自主攻击」。
+
+具体来说，Quarkslab 这次 [2] 把 Claude Code Agent 直接放进沙箱，让它**自己动手**攻击混淆后的二进制。
 
 ### 4.1 实验设计
 
