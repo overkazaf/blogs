@@ -1,0 +1,30 @@
+content/posts/llm-deobfuscation-quarkslab-framework/index.md
+  dc6b3c23ef4db66e 2,5,9,22,81,114,120,142,144-146,149,156-157,194,206,208,406,943-1115,1370,1372,1384,1395,1409,1419,1448,1498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8-ntes.9",
+  "base_commit_sha": "e2ee64bcc9d0dcf863bdfbcc076e50b695588515",
+  "prompts": {
+    "dc6b3c23ef4db66e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1c2a235-58e3-4fd2-be6f-fc192612ae14",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "nongjiawu",
+      "messages": [],
+      "total_additions": 203,
+      "total_deletions": 25,
+      "accepted_lines": 200,
+      "overriden_lines": 0,
+      "per_file_stats": {
+        "content/posts/llm-deobfuscation-quarkslab-framework/index.md": {
+          "additions": 203,
+          "deletions": 25,
+          "accepted_lines": 200
+        }
+      }
+    }
+  }
+}
