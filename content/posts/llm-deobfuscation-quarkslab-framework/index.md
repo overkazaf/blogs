@@ -1,12 +1,12 @@
 ---
-title: "从 REA 的 8 万 Star 说起 — AI 逆向的能力边界与攻防趋势"
+title: "当 AI Agent 拿起逆向工具链 — 能力边界、架构缺陷与攻防趋势"
 slug: "llm-deobfuscation-quarkslab-four-dimensional-framework"
 date: 2026-10-08T18:00:00+08:00
-lastmod: 2026-10-11T18:00:00+08:00
+lastmod: 2026-10-14T18:00:00+08:00
 draft: false
 tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G", "Ponce4Ghidra", "unpack", "cap", "re-agent", "REA", "MCP", "Ghidra", "AI-RE-tooling", "symbolic-execution", "angr", "Z3", "Android-unpacking", "MITM-proxy"]
 categories: ["reverse-engineering"]
-description: "从 REA（81K+ Star MCP 逆向工程服务器）的架构剖析出发，结合四维评估框架论文与 Quarkslab 的 AI Agent 攻防实验，系统回答：AI 能拆多少混淆、工具链如何补强 LLM 短板、保护方该怎么调整，附挑战 .so 样例"
+description: "从 REA（MCP 逆向工程服务器）的架构剖析出发，结合四维评估框架论文与 Quarkslab 的 AI Agent 攻防实验，系统回答：AI 能拆多少混淆、工具链如何补强 LLM 短板、Agent 架构如何改良、保护方该怎么调整，附挑战 .so 样例"
 toc: true
 math: false
 ---
@@ -19,6 +19,7 @@ math: false
 > - 8 个主流 LLM 在同一段混淆代码上的成绩单，以及它们最常犯的 5 类错误
 > - AI Agent 自主逆向时暴露的 3 个系统性缺陷
 > - 工具链如何在四维框架的每个维度上补强 LLM 的弱点
+> - 如何通过 Hypothesis Manager / Evidence Arbitrator / Adversarial Auditor 三机制改良 Agent 架构
 > - 笔者对逆向工程趋势的 4 个阶段性判断
 > - 作为保护方，下一步应该怎么调整混淆策略
 
@@ -77,7 +78,7 @@ math: false
 
 <div class="ph p-agent">Agent 时代</div>
 
-<div class="ev c-tool"><span class="dt">2026.H1</span><span class="tx">REA 达到 81K+ Star [7]，MCP 架构确立 <em>Phase 3.0</em></span></div>
+<div class="ev c-tool"><span class="dt">2026.H1</span><span class="tx">REA 达到 192K+ Star [7]，MCP 架构确立 <em>Phase 3.0</em></span></div>
 <div class="ev c-paper"><span class="dt">2026.04</span><span class="tx">BinDeObfBench 去混淆基准发布 [3] <em>arXiv:2604.08083</em></span></div>
 <div class="ev c-model"><span class="dt">2026.06</span><span class="tx">GPT-5 <em>~2T 参数</em></span></div>
 <div class="ev c-tool"><span class="dt">2026.06</span><span class="tx">笔者 OLLVM 去混淆实战博客 [5]</span></div>
@@ -110,13 +111,13 @@ math: false
 
 ## 〇、摘要
 
-2026 年，一个名为 REA 的开源项目在半年内拿到了 **8 万+ Star**，让 AI Agent 通过 MCP 协议直接驱动 Ghidra、Hopper、IDA——不是「把汇编贴给 LLM 猜」，而是让 Agent 拥有了逆向工程师的完整工具箱。
+2026 年，一个名为 REA 的开源项目在半年内拿到了 **19 万+ Star**，让 AI Agent 通过 MCP 协议直接驱动 Ghidra、Hopper、IDA——不是「把汇编贴给 LLM 猜」，而是让 Agent 拥有了逆向工程师的完整工具箱。
 
 笔者日常做 DRM 方向的安全研究，一半时间在给保护方案加混淆，另一半时间在拆别人的混淆。面对 AI 逆向工具链的快速演进，被问得最多的问题是：**混淆还有用吗？**
 
 为了不拍脑袋回答，笔者从三个维度切入：
 
-1. **工具链**：剖析 REA（81K+ Star）的 MCP 架构，理解 AI 逆向的当前形态和演进方向
+1. **工具链**：剖析 REA（192K+ Star）的 MCP 架构，理解 AI 逆向的当前形态和演进方向
 2. **能力评估**：精读 Promon 的四维框架论文 + Quarkslab 的 Agent 攻防实验，用数据回答「AI 能做到什么」和「做不到什么」
 3. **实战验证**：结合笔者的 OLLVM 去混淆经验（见[《所有分支都指向同一个 switch，然后呢》](https://overkazaf.github.io/blogs/posts/ollvm-deobfuscation-engineering/)）和自研工具链（[D810G](https://github.com/overkazaf/D810G) 反混淆框架、[Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra) 符号执行插件、[unpack](https://github.com/overkazaf/unpack) 脱壳框架、[cap](https://github.com/overkazaf/cap) 中间人代理、[re-agent](https://github.com/overkazaf/re-agent) 逆向 Agent）的开发实践，给出攻防趋势判断
 
@@ -138,17 +139,22 @@ math: false
 - **实战视角**：CFF 降级、IS 重估、组合混淆有效性
 - **逆向工程趋势判断**：分 4 个阶段预测攻防走向
 
-**D. 行动：攻防双方该怎么办**（§八 ~ §十）
+**D. 改良：Agent 架构如何升级**（§八）
 
-- **给攻击方（Agent 使用者）的 6 条建议**（A1-A6）+ **给防守方的 9 条建议**（P0-P3 + D1-D3）
+- **从趋势到实践**：Hypothesis Manager / Evidence Arbitrator / Adversarial Auditor 三机制改良路线图 + 攻防共演三轮阶梯
+
+**E. 行动：攻防双方该怎么办**（§九 ~ §十一）
+
 - **一个可以动手的挑战 `.so`**：3 层混淆 + 1 层 anti-agent 陷阱、4 个 flag，测测你自己或你的 AI 助手
+- **给攻击方（Agent 使用者）的 6 条建议**（A1-A6）+ **给防守方的 9 条建议**（P0-P3 + D1-D3）
 
 | 线索 | 核心问题 | 对应章节 | 产出 |
 |------|---------|---------|------|
 | **A 现状** | AI 逆向工具链长什么样？ | §一 ~ §二 | MCP 架构分析 + 行业四阶段模型 |
 | **B 能力** | AI 能做到什么、做不到什么？ | §三 ~ §四 | 成绩单 + 错误分类 + 四维框架 + Agent 缺陷 |
 | **C 分析** | 工具链如何补强 LLM？趋势如何？ | §五 ~ §七 | 四维对位分析 + 实战校准 + 趋势预测 |
-| **D 行动** | 攻防双方该怎么调整？ | §八 ~ §十 | 攻击方 6 条 + 防守方 9 条建议 + 挑战 `llm_challenge.so`（含 anti-agent 关卡） |
+| **D 改良** | Agent 架构如何升级？ | §八 | 三机制改良 + 攻防共演三轮阶梯 |
+| **E 行动** | 攻防双方该怎么调整？ | §九 ~ §十一 | 挑战 `llm_challenge.so` + 攻击方 6 条 + 防守方 9 条建议 |
 
 ---
 
@@ -185,7 +191,7 @@ math: false
 |---|---|---|---|
 | 学术论文（同行评审/预印本） | 2 | A-B | arXiv:2505.19887, arXiv:2604.08083 |
 | 安全公司技术博客 | 1 | B | Quarkslab "Defeating AI-Assisted RE" (2026-08) |
-| 开源 AI 逆向项目 | 1 | B | morluto/rea — MCP 逆向工程服务器（81K+ Star） |
+| 开源 AI 逆向项目 | 1 | B | morluto/rea — MCP 逆向工程服务器（192K+ Star） |
 | 笔者一手逆向/开发经验 | — | A | OLLVM 去混淆、D810G / Ponce4Ghidra / unpack / cap / re-agent 开发实践、SO 逆向分析 |
 | 笔者复现验证 | 3 | A | 对论文测试函数的独立验证 |
 
@@ -197,9 +203,9 @@ math: false
 
 ---
 
-## 一、引言：从 REA 的 8 万 Star 说起
+## 一、引言：从 REA 的 19 万 Star 说起
 
-2026 年上半年，一个名为 REA（Reverse Engineer Anything）的开源项目在 GitHub 上半年拿到了 **8 万+ Star**。它不是又一个「把代码贴给 LLM」的包装器——它是一个 MCP 服务器，让 AI Agent 通过标准化协议直接驱动 Ghidra、Hopper、IDA。
+2026 年上半年，一个名为 REA（Reverse Engineer Anything）的开源项目在 GitHub 上半年拿到了 **19 万+ Star**。它不是又一个「把代码贴给 LLM」的包装器——它是一个 MCP 服务器，让 AI Agent 通过标准化协议直接驱动 Ghidra、Hopper、IDA。
 
 当笔者第一次看到 REA 的 DX-Ball 案例——Agent 从 x86 游戏二进制中重建函数，通过 3,205 个测试用例，复现全部 63 字节编译输出——第一反应是：**作为保护方，我们需要重新评估混淆的有效性了。**
 
@@ -397,7 +403,7 @@ REA 的 DX-Ball 案例展示了当前 AI 逆向的实际上限。Agent 从一个
 
 ### 2.3 REA 揭示的行业趋势
 
-REA 8 万+ Star 的速度说明社区对 AI 逆向工具链的需求是真实的 [7]。结合 ReArk（HarmonyOS/Android AI 逆向，500+ Star）[8] 等项目，行业正在经历一次范式转移：
+REA 19 万+ Star 的速度说明社区对 AI 逆向工具链的需求是真实的 [7]。结合 ReArk（HarmonyOS/Android AI 逆向，600+ Star）[8] 等项目，行业正在经历一次范式转移：
 
 **从「LLM 理解汇编」到「Agent 驱动专业工具链」。**
 
@@ -934,7 +940,179 @@ Quarkslab 发现的「叙事固着」是当前单 Agent 最深的缺陷。REA �
 
 ---
 
-## 八、挑战样例
+## 八、从趋势到实践：改良逆向 Agent 的攻防路线图
+
+前面六章的分析可以浓缩成一句话：**当前 Agent 的瓶颈不是模型能力，而是架构中缺少元认知机制。** 这一章把趋势判断落地为具体的改良路线——笔者以自研的 re-agent 为蓝本，给出攻击方的架构升级思路，并同步推演防守方的对应策略，形成一张攻防共演的路线图。
+
+### 8.1 改良目标：从「会用工具的 LLM」到「会反思的分析师」
+
+re-agent 当前的三席位架构（planner / executor / researcher）已经实现了基本的分工：planner 制定策略，executor 调用工具执行，researcher 整理和检索知识。但 Quarkslab 的实验（§4.2）和笔者自己的 dashboard 观测都表明，三个席位**共享同一个上下文窗口**是致命的——executor 的叙事链会污染 researcher 的判断，planner 的初始假设会锁定整个分析方向。
+
+改良的核心不是加更多工具，而是在架构层面引入三个缺失的机制：
+
+| 缺失机制 | 对应的人类元认知 | 改良模块 | 论文/实验依据 |
+|---------|--------------|---------|-------------|
+| 假设管理 | "等等，我之前的假设可能错了" | Hypothesis Manager | Quarkslab 叙事固着 [2] |
+| 执行校验 | "让我验证一下这个结果是不是真的" | Evidence Arbitrator | DeepSeek R1 常量捏造 [1] |
+| 对抗审计 | "换个角度重新审视整个分析" | Adversarial Auditor | 同模型审计 Jaccard 仅 41.2% [arXiv:2610.01471] |
+
+### 8.2 改良架构：四层五模块
+
+![逆向 Agent 改良架构全景：四层五模块 - 元认知层（Hypothesis Manager + Adversarial Auditor，上下文隔离）、分析层（Planner/Executor/Researcher，共享上下文）、验证层（Evidence Arbitrator + Execution Verifier）、工具层（MCP Tool Chain）](images/arch_four_layers.png)
+
+> - **元认知层**（上下文隔离）：Hypothesis Manager（假设栈）+ Adversarial Auditor（独立上下文 · 跨模型 · 只看 Evidence）
+> - **分析层**：Planner → Executor → Researcher（现有三席位）
+> - **验证层**：Evidence Arbitrator（静态-动态矛盾检测）+ Execution Verifier（脚本执行校验）
+> - **工具层**：MCP Tool Chain — Ghidra / Frida / D810G / Ponce4Ghidra / angr / LLDB / cap
+>
+> 核心改变：从「三席位共享上下文」→「四层五模块 + 上下文隔离」。矛盾不再靠模型自觉发现，而是由验证层自动触发假设修订。
+
+相比 re-agent 当前架构，关键的变化有三处：
+
+**变化一：Hypothesis Manager 从隐式到显式。** 当前 re-agent 的 planner 把假设隐藏在 prompt 的推理链中，一旦假设生成就无法被独立审查。改良后，每个假设被外化为一条结构化记录：
+
+```jsonc
+{
+  "id": "H-003",
+  "claim": "sub_401280 是 AES-128-CBC 解密函数",
+  "confidence": 0.7,
+  "supporting_evidence": ["ev_ghidra_decompile_401280", "ev_strings_aes_sbox"],
+  "contradicting_evidence": [],          // 一旦非空，confidence 自动降级
+  "derived_hypotheses": ["H-004", "H-005"],  // 依赖链：H-003 倒了，H-004/005 同时标记待重评
+  "status": "active",                    // active | revised | rejected
+  "created_at_step": 5,
+  "last_challenged_at_step": null
+}
+```
+
+当 Evidence Arbitrator 检测到新 Evidence 与某条假设矛盾时，不是把矛盾信息塞回 executor 的上下文（那样只会让叙事更固化），而是**直接在 Hypothesis Manager 中降低该假设的 confidence，并级联标记所有依赖假设为待重评**。planner 在下一轮规划时，会看到假设栈的变化，从而有机会调整方向。
+
+**变化二：Evidence Arbitrator 做静态-动态交叉验证。** 当前 re-agent 的工具输出直接进入 executor 的上下文。改良后，所有工具输出先经过 Evidence Arbitrator：
+
+```
+Ghidra 反编译输出（静态）    →  Arbitrator  ← Frida hook 运行时参数（动态）
+       ↓ 比对                                    ↓ 比对
+"函数参数是 AES key"          vs          "运行时该参数全是 0x00"
+       → 矛盾！触发 H-003 置信度降级
+```
+
+这直接对抗了两类错误：常量捏造（如果 Agent 声称发现了一个常量，Arbitrator 会检查它是否出现在 Ghidra 的原始输出中）和叙事固着（静态和动态观测的矛盾会强制打破已有叙事）。
+
+**变化三：Adversarial Auditor 上下文隔离。** 这是最关键的改变。当前 re-agent 的 researcher 虽然可以质疑 executor，但因为共享上下文，它的质疑往往被 executor 的叙事"同化"。改良后：
+
+- Auditor 运行在**独立会话**中，不共享分析层的上下文
+- Auditor 只接收 **Hypothesis Manager 的假设栈 + Evidence Arbitrator 的结构化 Evidence**，不看 executor 的推理过程
+- Auditor 使用**不同家族的模型**（如主分析用 Opus，审计用 GPT-5），利用跨模型审计的盲区互补（Jaccard 仅 41.2%，见 §4.4）
+- Auditor 的目标函数是「找到主分析的错误」而非「帮助完成任务」——这个激励错位是设计上刻意为之的
+
+### 8.3 攻防共演：改良每一步，防守方如何应对
+
+攻击方的架构升级不是在真空中发生的——防守方会看到同样的论文，读到同样的趋势判断，并据此调整混淆策略。下面用三轮「改良 → 反制 → 再改良」的推演，展示攻防共演的动态。
+
+![攻防共演三轮阶梯：第一轮假设管理（Hypothesis Manager vs 多轮存活诱饵）、第二轮交叉验证（Evidence Arbitrator vs 跨维度一致性诱饵）、第三轮对抗审计（Adversarial Auditor vs 审计注意力陷阱），螺旋上升](images/coevolution_ladder.png)
+
+> 螺旋上升的本质：每一轮改良都提高了攻击方的下限，但防守方只需让诱饵的复杂度跟上 Agent 的验证能力。
+
+#### 第一轮：假设管理 vs 多轮存活诱饵
+
+**攻击方改良**：引入 Hypothesis Manager 后，Agent 可以在发现矛盾时修订假设。例如当 Frida 追踪发现某个"解密函数"的输出全是 0x00，Agent 会把"H-003: sub_401280 是 AES 解密"的置信度从 0.7 降到 0.2，并重新规划分析方向。
+
+**防守方反制**：设计**能存活一轮修订**的多层诱饵。具体做法：
+
+```
+第一层（初始诱饵）:
+  Agent 发现 "decrypt_key" 字符串 → 形成假设 H: "这是解密入口"
+
+第二层（修订后诱饵）:
+  Agent 通过动态追踪发现 H 不对 → 修订假设
+  → 但修订过程中发现另一个 "real_decrypt" 函数（仍是诱饵）
+  → 形成新假设 H': "之前的是假的，这个才是真的"
+
+真实路径:
+  隐藏在一个看起来像初始化代码的函数中
+  没有任何与 "decrypt" 相关的命名
+```
+
+关键洞察：**Hypothesis Manager 让 Agent 能修订一次假设，但不太可能修订两次**——因为修订本身消耗大量 token 和分析步骤，而且 Agent 倾向于对修订后的假设赋予更高的信任（"我已经纠正过了"的认知偏差）。
+
+#### 第二轮：交叉验证 vs 跨维度一致性诱饵
+
+**攻击方改良**：Evidence Arbitrator 通过比对静态分析和动态追踪来识别诱饵——如果 Ghidra 的反编译显示一个函数在做 AES，但 Frida hook 显示运行时输入输出不符合 AES 特征，Arbitrator 会标记矛盾。
+
+**防守方反制**：让诱饵**在静态和动态两个维度上都保持一致**。具体做法：
+
+| 维度 | 传统诱饵 | 升级后诱饵 |
+|------|---------|-----------|
+| 静态分析 | 假函数名 `decrypt_key` | 真正实现一个 AES 函数（但密钥是假的） |
+| 动态追踪 | 不被调用或崩溃 | 被调用、返回格式正确的假结果 |
+| 内存观测 | 假常量不在内存中 | 假常量在运行时被写入特定地址 |
+| 交叉引用 | 无调用者 | 有真实的调用链（从 RASP 检测点触发） |
+
+这就是 Quarkslab 建议的"返回看似合理的错误结果"（§4.3 策略 5）的深度实现：**诱饵不再是一段死代码，而是一个完整运行的假功能模块**，静态-动态交叉验证无法区分它和真实模块。
+
+#### 第三轮：对抗审计 vs 审计注意力陷阱
+
+**攻击方改良**：Adversarial Auditor 在独立上下文中审视假设栈，专门找主分析的逻辑漏洞。因为它不受叙事污染，理论上能发现 Evidence Arbitrator 遗漏的问题。
+
+**防守方反制**：这是最精妙的一层——**在代码中故意放置"可疑但无害"的元素，消耗审计 Agent 的注意力预算**。
+
+```c
+// 审计注意力陷阱示例
+void suspicious_looking_function() {
+    // 故意使用 "可疑" 的模式让审计 Agent 报警
+    char encoded[] = {0x41, 0x45, 0x53, 0x00};  // "AES" - 看起来像硬编码密钥
+    volatile int check = getpid();                // 看起来像反调试
+    if (check > 0) {
+        memset(encoded, 0, sizeof(encoded));      // 看起来像安全擦除
+    }
+    // 实际上这个函数什么有意义的事都没做
+    // 但审计 Agent 会在这里花大量 token 分析
+}
+```
+
+原理：审计 Agent 的激励函数是"找到错误"，所以它会优先关注**看起来最可疑的地方**。如果防守方在代码中散布 10-20 个这样的"可疑函数"，审计 Agent 的上下文窗口和 token 预算会被大量消耗在假阳性上，**真正的保护逻辑反而被忽略，因为它"看起来太正常了"**。
+
+这与人类安全审计中的"security through obscurity"不同——不是隐藏保护逻辑，而是**让审计者的注意力淹没在噪声中**。对于有限上下文窗口的 LLM Agent 来说，注意力就是最稀缺的资源。
+
+### 8.4 实施路线图
+
+笔者计划分三个阶段在 re-agent 中实施这些改良：
+
+| 阶段 | 时间 | 目标 | 具体工作 | 依赖 |
+|------|------|------|---------|------|
+| **Phase 1** | 1-2 月 | Hypothesis Manager | 假设栈数据结构 + planner 集成 + 矛盾检测基础逻辑 | re-agent 现有 planner 席位 |
+| **Phase 2** | 2-3 月 | Evidence Arbitrator | D810G CLI 作为 MCP 工具接入 + Frida 动态 Evidence 接入 + 静态-动态比对逻辑 | Phase 1 + D810G headless 模式 |
+| **Phase 3** | 3-4 月 | Adversarial Auditor | 独立会话管理 + 跨模型调度 + 审计报告回注假设栈 | Phase 1 + Phase 2 |
+
+每个阶段完成后用挑战 SO（§九）做回归测试：
+
+- Phase 1 后：FLAG 4 的诱饵路径应该能被修订（当前 re-agent 做不到）
+- Phase 2 后：FLAG 2 的 MBA 等价式应该能通过 D810G 验证（当前需要人工）
+- Phase 3 后：FLAG 4 的"假成功"（返回 0x46414B45）应该能被审计 Agent 识别
+
+### 8.5 清醒的预期：改良的边界在哪
+
+最后需要泼一盆冷水。攻防共演的三轮推演揭示了一个本质规律：
+
+**Agent 每一轮架构改良，防守方只需让诱饵的复杂度跟上 Agent 的验证能力——而诱饵的构造成本远低于 Agent 的改良成本。**
+
+| 维度 | 攻击方成本 | 防守方成本 |
+|------|-----------|-----------|
+| 假设管理 | 重新设计 Agent 架构 | 多加一层诱饵函数 |
+| 交叉验证 | 集成多种工具 + 融合逻辑 | 让诱饵函数真正运行 |
+| 对抗审计 | 维护独立审计 Agent + 跨模型调度 | 散布 20 个可疑函数 |
+
+这意味着：
+
+1. **改良是值得做的**——它提高了 Agent 的下限，让简单的单层混淆确实不再有效
+2. **改良不会形成压倒性优势**——因为防守方的对应反制成本更低
+3. **真正的瓶颈仍然是组合混淆 + 运行时绑定**——这在四维框架中已经被论文证实（全军覆没的 5 级），Agent 架构改良不改变这一点
+
+用一句话总结这一章：**改良 Agent 架构是在"做得到但太贵"区间里提效，但无法突破"做不到"区间的边界——后者需要的不是更好的架构，而是数学和信息论上的根本性进步。**
+
+---
+
+## 九、挑战样例
 
 根据论文结论和 Quarkslab 的 Agent 缺陷发现，笔者构造了一个多层混淆 + anti-agent 陷阱的挑战 SO。前 3 关对应四维框架的不同维度，第 4 关专门针对 Agent 的三大架构缺陷。
 
@@ -1189,9 +1367,9 @@ cd challenges/llm-deobfuscation/
 
 ---
 
-## 九、讨论与防御建议
+## 十、讨论与防御建议
 
-### 9.1 各类混淆在 AI 时代的成本变化
+### 10.1 各类混淆在 AI 时代的成本变化
 
 | 保护手段 | 传统攻击成本 | 借助 LLM 后 | 成本降幅 | 结论 |
 |---------|-------------|-------------|------|---------|
@@ -1203,7 +1381,7 @@ cd challenges/llm-deobfuscation/
 | VMP 虚拟化 | 极高 | 未测试 | 未知 | 论文未覆盖 |
 | 服务端校验 | 无法攻击 | 无法攻击 | 0 | 不受 LLM 影响 |
 
-### 9.2 六条改进建议
+### 10.2 六条改进建议
 
 | 优先级 | 现状 | 建议 | 效果 | 成本 |
 |-------|---------|---------|------|------|
@@ -1214,7 +1392,7 @@ cd challenges/llm-deobfuscation/
 | P2 | 关键逻辑在客户端 | 核心校验迁移到服务端 | 根本解决，LLM 无法逆向服务端 | 高，需要架构调整 |
 | P3 | 混淆方案固定不变 | 支持在线更新混淆参数 | 每次更新都让之前的分析作废 | 高 |
 
-### 9.3 LLM 不是终结者，是放大器
+### 10.3 LLM 不是终结者，是放大器
 
 论文和 Quarkslab 的实验指向同一个结论：**LLM 不会消灭混淆，但会改变攻防的经济账。**
 
@@ -1228,7 +1406,7 @@ cd challenges/llm-deobfuscation/
 
 ---
 
-## 十、结论：能力边界在哪，攻防趋势往哪
+## 十一、结论：能力边界在哪，攻防趋势往哪
 
 回到标题提出的两个问题。
 
@@ -1238,7 +1416,7 @@ cd challenges/llm-deobfuscation/
 
 **裸模型层面**——Promon 四维框架 [1] 给出了量化刻度：CFF 已被多数模型攻破（0-2 级），BCF 中的简单谓词被 Claude 3.7 Sonnet 识破（0 级），但 IS 仍让所有模型停留在 4-5 级，组合混淆更是全军覆没（5 级）。**边界不在「推理深度」这一个维度上，而在四个维度的交叉区域。**
 
-**工具链层面**——REA（81K+ Star）[7] 通过 MCP 让 Agent 直接驱动 Ghidra/Hopper/IDA，用 Evidence Ledger 杜绝常量捏造，用 Provider 架构隔离不同工具的输出。它系统性地补强了裸模型在模式识别和噪声过滤上的短板，但在推理深度和上下文整合上的提升有限——IS 和组合混淆的壁垒不会因为工具链变丰富而消失。
+**工具链层面**——REA（192K+ Star）[7] 通过 MCP 让 Agent 直接驱动 Ghidra/Hopper/IDA，用 Evidence Ledger 杜绝常量捏造，用 Provider 架构隔离不同工具的输出。它系统性地补强了裸模型在模式识别和噪声过滤上的短板，但在推理深度和上下文整合上的提升有限——IS 和组合混淆的壁垒不会因为工具链变丰富而消失。
 
 **架构层面**——Quarkslab 的 Agent 实验 [2] 暴露了比模型能力更深层的问题：环境利用（权限沙箱缺失）、叙事固着（假设管理缺失）、产物伪造（执行校验缺失）。这三个缺陷在 Claude 5 级别的模型上依然存在，说明**当前 Agent 的天花板不是模型的推理能力，而是架构中缺少「关于思考的思考」的机制**——假设栈、执行验证层、对抗性自检，本质上都是在为 Agent 补上人类分析师的元认知习惯。
 
@@ -1267,7 +1445,7 @@ cd challenges/llm-deobfuscation/
 
 ### 给防守方（保护方案设计者）的建议
 
-§9.2 已经给出了 6 条技术层面的改进建议（P0-P3）。这里从 Agent 架构缺陷的角度补充 3 条**针对 AI Agent 的主动防御策略**：
+§10.2 已经给出了 6 条技术层面的改进建议（P0-P3）。这里从 Agent 架构缺陷的角度补充 3 条**针对 AI Agent 的主动防御策略**：
 
 | # | 策略 | 利用的 Agent 缺陷 | 实现方式 |
 |---|------|------------------|---------|
@@ -1317,7 +1495,7 @@ cd challenges/llm-deobfuscation/
 | 4 | Quarkslab, ["Deobfuscation: recovering an OLLVM-protected program"](https://blog.quarkslab.com/deobfuscation-recovering-an-ollvm-protected-program.html) (2017) | 技术博客 | OLLVM 去混淆基线方法 |
 | 5 | 笔者, [《所有分支都指向同一个 switch，然后呢》](https://overkazaf.github.io/blogs/posts/ollvm-deobfuscation-engineering/) (2026-06) | 本博客 | OLLVM 实战去混淆 + 工具对比 |
 | 6 | 笔者, [D810G](https://github.com/overkazaf/D810G) (2026-10) | 开源项目 | Ghidra 反混淆框架：6 组 96 条 MBA 规则（Z3 证明）、CFF/BCF/IS 还原、7-pass 流水线、独立 CLI、398 测试用例 |
-| 7 | morluto, [REA](https://github.com/morluto/rea) (2026) | 开源项目 | MCP 逆向工程服务器，81K+ Star，集成 Ghidra/Hopper/IDA |
+| 7 | morluto, [REA](https://github.com/morluto/rea) (2026) | 开源项目 | MCP 逆向工程服务器，192K+ Star，集成 Ghidra/Hopper/IDA |
 | 8 | lkimuk, [ReArk](https://github.com/lkimuk/ReArk) (2026) | 开源项目 | HarmonyOS/Android AI 逆向分析工具 |
 | 9 | 笔者, [Ponce4Ghidra](https://github.com/overkazaf/Ponce4Ghidra) (2026) | 开源项目 | Ghidra 交互式符号执行插件（angr + Z3）：4 种符号化方法、Veritesting、5 组解、支持 ELF/Mach-O/Android .so |
 | 10 | 笔者, [unpack](https://github.com/overkazaf/unpack) (2026) | 开源项目 | 自动化 Android 脱壳框架：24 家加固方案、Memory/Frida/eBPF 三引擎、7 步 DEX 修复、LLM 管道集成 |
