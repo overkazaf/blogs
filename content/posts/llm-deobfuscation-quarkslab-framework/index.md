@@ -2,7 +2,7 @@
 title: "当 AI Agent 拿起逆向工具链 — 能力边界、架构缺陷与攻防趋势"
 slug: "llm-deobfuscation-quarkslab-four-dimensional-framework"
 date: 2026-10-08T18:00:00+08:00
-lastmod: 2026-10-14T18:00:00+08:00
+lastmod: 2026-10-15T18:00:00+08:00
 draft: false
 tags: ["LLM", "deobfuscation", "OLLVM", "obfuscation", "Quarkslab", "GPT", "Claude", "DeepSeek", "reverse-engineering", "binary-analysis", "AI-security", "control-flow-flattening", "bogus-control-flow", "instruction-substitution", "D810G", "Ponce4Ghidra", "unpack", "cap", "re-agent", "REA", "MCP", "Ghidra", "AI-RE-tooling", "symbolic-execution", "angr", "Z3", "Android-unpacking", "MITM-proxy"]
 categories: ["reverse-engineering"]
@@ -11,7 +11,7 @@ toc: true
 math: false
 ---
 
-> **一句话结论：** LLM 已经能轻松拆掉单独使用的控制流平坦化，但对「指令替换」和「多种混淆叠加」仍然束手无策。混淆没有过时，只是需要换一种组合方式。
+> **一句话结论：** 截至 2025 年初 [1]，LLM 已能轻松拆掉单独使用的 CFF，但对 IS 和组合混淆仍全面失败；2026 年的 Agent 实验 [2] 进一步表明瓶颈不在模型推理力而在架构缺陷——笔者判断组合混淆的防线至今成立。混淆没有过时，只是需要换一种组合方式。
 >
 > **读完本文你会知道：**
 > - AI 逆向工具链（以 REA 为例）正在如何从「聊天式辅助」进化为「Agent 驱动的专业工具链」
@@ -80,8 +80,8 @@ math: false
 
 <div class="ev c-tool"><span class="dt">2026.H1</span><span class="tx">REA 达到 192K+ Star [7]，MCP 架构确立 <em>Phase 3.0</em></span></div>
 <div class="ev c-paper"><span class="dt">2026.04</span><span class="tx">BinDeObfBench 去混淆基准发布 [3] <em>arXiv:2604.08083</em></span></div>
-<div class="ev c-model"><span class="dt">2026.06</span><span class="tx">GPT-5 <em>~2T 参数</em></span></div>
 <div class="ev c-tool"><span class="dt">2026.06</span><span class="tx">笔者 OLLVM 去混淆实战博客 [5]</span></div>
+<div class="ev c-model"><span class="dt">2026.09</span><span class="tx">GPT-6 Astra <em>OpenAI 新旗舰，o 系列退役</em></span></div>
 
 <div class="ph p-defect">架构缺陷暴露</div>
 
@@ -497,19 +497,20 @@ unsigned int target_function(unsigned int n) {
 >
 > | 论文使用的模型 | 推测参数量级 | 论文测试时版本 | 截至 2026-10 最新版本 | 代际差距 |
 > |--------------|------------|-------------|-------------------|---------|
-> | GPT-4o | ~200B MoE | 2024-05 发布 | GPT-5（2026-06） | 2 代 |
-> | GPT-4.5 | ~200B+ MoE | 2025-02 预览 | GPT-5（2026-06） | 1 代 |
-> | GPT-Pro-o1 | ~300B MoE（推理链） | 2024-12 发布 | o3 / o4-mini（2025-04） | 1-2 代 |
-> | GPT-3o Mini | ~8B 蒸馏 | 2024-07 发布 | GPT-4o mini → o4-mini（2025-04） | 2+ 代 |
-> | DeepSeek R1 | 671B MoE（37B 激活） | 2025-01 发布 | DeepSeek R2（预期 2026 Q3-Q4） | 1 代 |
-> | Grok 3 | 未公开（推测 ~300B MoE） | 2025-02 发布 | Grok 3.5（2026） | 1 代 |
-> | Grok 2 | 未公开（推测 ~100B MoE） | 2024-08 发布 | Grok 3.5（2026） | 2 代 |
-> | Claude 3.7 Sonnet | 未公开 | 2025-02 发布 | Claude 5.5（Opus 5.5 / Sonnet 5.5，2026） | 2 代 |
+> | GPT-4o | ~200B MoE | 2024-05 发布 | GPT-6 Sol（2026-10） | 4+ 代 |
+> | GPT-4.5 | ~200B+ MoE | 2025-02 预览 | GPT-6 Sol（2026-10） | 3+ 代 |
+> | GPT-Pro-o1 | ~300B MoE（推理链） | 2024-12 发布 | GPT-6 Astra（2026-09），o 系列退役中 | 3+ 代 |
+> | GPT-3o Mini | ~8B 蒸馏 | 2024-07 发布 | GPT-6 Luna（2026-10） | 4+ 代 |
+> | DeepSeek R1 | 671B MoE（37B 激活） | 2025-01 发布 | R2 仍未发布；通用线升级至 V4.1-Flash（2026-09） | 1 代（通用线） |
+> | Grok 3 | 未公开（推测 ~300B MoE） | 2025-02 发布 | Grok 4.7（2026-09） | 3 代 |
+> | Grok 2 | 未公开（推测 ~100B MoE） | 2024-08 发布 | Grok 4.7（2026-09） | 4 代 |
+> | Claude 3.7 Sonnet | 未公开 | 2025-02 发布 | Fable 5.1 / Sonnet 5.5（2026-09） | 3+ 代 |
 >
 > **这意味着什么？**
 > - 论文中 CFF「全军覆没」的结论大概率仍然成立——CFF 在当时就已经被多数模型攻破，更新的模型只会更强
-> - **IS 的 4-5 级是否还成立是最大的悬念**：更新的推理模型（o3、Claude 5 系列）在数学推理上有显著提升，IS 的防线可能已经松动
+> - **IS 的 4-5 级是否还成立是最大的悬念**：GPT-6 Astra、Claude 5.5 系列在数学推理上有显著提升，IS 的防线可能已经松动
 > - 组合混淆的 5 级大概率仍然成立——它考验的是四个维度的交互复杂性，不是单一维度的推理能力
+> - DeepSeek R2 始终未发布（R1 仍为最新推理模型），OpenAI 的 o 系列推理模型已被 GPT-6 系列替代（o4-mini 于 2026-10-23 下线）
 > - **本文的趋势判断已经考虑了模型迭代因素**（见 §七），读者引用论文数据时应注明模型版本
 
 这张表可以按三个方向读：
@@ -776,7 +777,7 @@ Quarkslab 的实验本质上在问一个更深的问题：**Agent 能不能像�
 
 另一项研究更直接地解释了为什么同模型审计天然受限（arXiv:2606.05976，13 个模型-领域组合、7 个模型家族）：**当错误出现在模型自己的推理块中时，它几乎不纠正；当完全相同的错误被标记为来自外部来源（工具输出、用户消息、记忆条目），纠错率提升 23-93 个百分点**（10/13 组 p<0.001）。作者称之为「自纠错幻觉」——模型对自己的输出有隐式的信任偏差。
 
-笔者的建议：**主分析用最强模型（如 Opus 级别），审计用同级别但不同家族的模型（如 GPT-5 或 Gemini 级别）**，并且审计 Agent 的输入应该只包含 Evidence 数据，不包含主 Agent 的推理过程——这样既利用了跨模型的盲区互补（Jaccard 仅 41.2%），又避免了模型对自身输出的信任偏差。如果资源有限，退而求其次的方案是同一模型但**上下文完全隔离**（审计 Agent 在独立会话中运行，只接收结构化 Evidence），至少能绕过「自纠错幻觉」中的角色标签效应。
+笔者的建议：**主分析用最强模型（如 Opus 级别），审计用同级别但不同家族的模型（如 GPT-6 Astra 或 Gemini 4 Argon 级别）**，并且审计 Agent 的输入应该只包含 Evidence 数据，不包含主 Agent 的推理过程——这样既利用了跨模型的盲区互补（Jaccard 仅 41.2%），又避免了模型对自身输出的信任偏差。如果资源有限，退而求其次的方案是同一模型但**上下文完全隔离**（审计 Agent 在独立会话中运行，只接收结构化 Evidence），至少能绕过「自纠错幻觉」中的角色标签效应。
 
 这三个方向不是空想——它们分别对应了人类分析师的三种元认知习惯：记住自己的假设并愿意推翻、不相信自己没验证的结论、定期从旁观者视角审视自己的分析。**当前 Agent 架构的核心差距，不是缺少工具或推理能力，而是缺少这种「关于思考的思考」。**
 
